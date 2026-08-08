@@ -377,3 +377,36 @@ body {
 .statusbar-right {
   margin-left: auto;
 }
+
+.budget-button {
+  background: transparent;
+  border: none;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.budget-button:hover,
+.budget-button:focus-visible {
+  color: var(--soft);
+  outline: none;
+}
+
+.budget-button.budget-near {
+  color: var(--warn);
+}
+
+.budget-button.budget-over {
+  color: var(--err);
+}
+
+.budget-input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  font: inherit;
+  margin-left: 0.15rem;
+  width: 4.5rem;
+}

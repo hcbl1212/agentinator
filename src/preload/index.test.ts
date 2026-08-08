@@ -23,10 +23,20 @@ describe('preload bridge', () => {
     expect(mockContextBridge.exposeInMainWorld).toHaveBeenCalledWith('agentinator', bridge)
   })
 
-  it('routes events.count over IPC', async () => {
+  it('routes events.count and events.totalCost over IPC', async () => {
     await bridge.events.count()
+    await bridge.events.totalCost()
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:count')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:total-cost')
+  })
+
+  it('routes settings get/set over IPC', async () => {
+    await bridge.settings.getBudgetUsd()
+    await bridge.settings.setBudgetUsd(12)
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budget')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 12)
   })
 
   it('routes events.list over IPC with the given cursor', async () => {

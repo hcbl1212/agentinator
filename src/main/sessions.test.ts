@@ -187,11 +187,11 @@ describe('SessionManager', () => {
     expect(breach?.payload).toMatchObject({ usedUsd: 6, capUsd: 5 })
   })
 
-  it('applies the manager default budget when a session sets none', () => {
+  it('applies the manager default budget (read live) when a session sets none', () => {
     const store = new EventStore()
     const types: string[] = []
     const manager = new SessionManager(store, (event) => types.push(event.type), {
-      defaultBudgetUsd: 0.001,
+      getDefaultBudgetUsd: () => 0.001,
     })
     manager.register({
       ...instantProvider('cheap'),

@@ -28,6 +28,7 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByText('$0.0000')).toBeInTheDocument()
+    expect(screen.getByText('budget —')).toBeInTheDocument()
     expect(screen.getByText('v0.1.0')).toBeInTheDocument()
   })
 })

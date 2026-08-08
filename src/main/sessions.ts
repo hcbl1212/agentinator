@@ -27,16 +27,17 @@ export class SessionManager {
   #spentUsd = new Map<string, number>()
   readonly #store: EventStore
   readonly #onEvent: (event: StoredEvent) => void
-  readonly #defaultBudgetUsd: number
+  readonly #getDefaultBudgetUsd: () => number
 
   constructor(
     store: EventStore,
     onEvent: (event: StoredEvent) => void = () => undefined,
-    options: { defaultBudgetUsd?: number } = {},
+    options: { getDefaultBudgetUsd?: () => number } = {},
   ) {
     this.#store = store
     this.#onEvent = onEvent
-    this.#defaultBudgetUsd = options.defaultBudgetUsd ?? 5
+    // Read at start() time so a settings change takes effect on new sessions.
+    this.#getDefaultBudgetUsd = options.getDefaultBudgetUsd ?? (() => 5)
   }
 
   register(provider: AgentProvider): void {
@@ -60,7 +61,7 @@ export class SessionManager {
     const sessionId = createEntityId('session')
     const workspaceId = options.workspaceId ?? createEntityId('workspace')
     const agentId = options.agentId ?? createEntityId('agent')
-    const budgetUsd = options.budgetUsd ?? this.#defaultBudgetUsd
+    const budgetUsd = options.budgetUsd ?? this.#getDefaultBudgetUsd()
 
     const handle = provider.startSession(
       {

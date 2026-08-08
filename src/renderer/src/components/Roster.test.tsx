@@ -21,6 +21,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
         list: vi.fn(() => Promise.resolve([])),
         tail: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),
@@ -28,6 +29,10 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
           appended = listener
           return () => undefined
         }),
+      },
+      settings: {
+        getBudgetUsd: vi.fn(() => Promise.resolve(5)),
+        setBudgetUsd: vi.fn(() => Promise.resolve()),
       },
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),

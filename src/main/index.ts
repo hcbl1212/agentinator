@@ -7,6 +7,7 @@ import type { StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
 import { EventStore } from './eventStore'
+import { SettingsStore } from './settingsStore'
 import { createClaudeProvider } from './providers/claude'
 import type { ClaudeQuery } from './providers/claude'
 import { createMockProvider } from './providers/mock'
@@ -53,6 +54,7 @@ export function registerEventIpc(
   },
 ): void {
   handle('events:count', () => store.count())
+  handle('events:total-cost', () => store.totalCostUsd())
   handle('events:list', (_event, afterSeq) => store.list(afterSeq as number))
   handle('events:tail', (_event, limit, beforeSeq) =>
     store.tail(limit as number, beforeSeq as number | undefined),
@@ -75,6 +77,18 @@ export function registerAgentIpc(
     }),
   )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
+}
+
+export function registerSettingsIpc(
+  settings: SettingsStore,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('settings:get-budget', () => settings.budgetUsd())
+  handle('settings:set-budget', (_event, usd) => {
+    settings.setBudgetUsd(usd as number)
+  })
 }
 
 export function registerApprovalIpc(
@@ -113,23 +127,27 @@ export async function bootstrap(
   claudeQuery: ClaudeQuery = query as unknown as ClaudeQuery,
   env: Record<string, string | undefined> = process.env,
   replay: typeof replayFixture = replayFixture,
+  createSettings: (dbPath: string) => SettingsStore = (dbPath) => new SettingsStore(dbPath),
 ): Promise<EventStore> {
   await electronApp.whenReady()
 
   // Replay mode reviews UI against a recorded session with zero API spend —
   // an in-memory store keeps fixtures out of the real event log.
   const replayPath = env['AGENTINATOR_REPLAY']
-  const store =
-    replayPath === undefined
-      ? createStore(join(electronApp.getPath('userData'), 'agentinator.db'))
-      : createStore(':memory:')
+  const inMemory = replayPath !== undefined
+  const userData = electronApp.getPath('userData')
+  const store = createStore(inMemory ? ':memory:' : join(userData, 'agentinator.db'))
+  const settings = createSettings(inMemory ? ':memory:' : join(userData, 'agentinator-settings.db'))
   store.append('app.started', { version: electronApp.getVersion() })
   registerEventIpc(store)
+  registerSettingsIpc(settings)
 
   const broker = new PermissionBroker(makeEmitStored(store))
   const decide = broker.decide.bind(broker)
 
-  const manager = new SessionManager(store, broadcastEvent)
+  const manager = new SessionManager(store, broadcastEvent, {
+    getDefaultBudgetUsd: () => settings.budgetUsd(),
+  })
   manager.register(createMockProvider(undefined, undefined, decide))
   manager.register(createClaudeProvider(claudeQuery, decide))
   registerAgentIpc(manager)

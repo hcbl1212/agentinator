@@ -162,6 +162,29 @@ describe('EventStore', () => {
     expect(store.search('nothing-here', 10)).toEqual([])
   })
 
+  it('sums lifetime spend across cost events, ignoring non-cost events', () => {
+    const store = open()
+    expect(store.totalCostUsd()).toBe(0)
+
+    store.append('app.started', { version: '0.1.0' })
+    store.append('cost.usage', {
+      sessionId: 's',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      usd: 0.004,
+    })
+    store.append('cost.usage', {
+      sessionId: 's',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      usd: 0.006,
+    })
+
+    expect(store.totalCostUsd()).toBeCloseTo(0.01, 10)
+  })
+
   it('exposes no way to update or delete events', () => {
     const store = open()
 

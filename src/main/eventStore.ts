@@ -50,6 +50,7 @@ export class EventStore {
   #selectBySession: StatementSync
   #selectSearch: StatementSync
   #selectMaxSeq: StatementSync
+  #selectTotalCost: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -98,6 +99,9 @@ export class EventStore {
       'SELECT seq, ts, type, payload FROM events WHERE type LIKE ? OR payload LIKE ? ORDER BY seq DESC LIMIT ?',
     )
     this.#selectMaxSeq = this.#db.prepare('SELECT COALESCE(MAX(seq), 0) AS n FROM events')
+    this.#selectTotalCost = this.#db.prepare(
+      "SELECT COALESCE(SUM(json_extract(payload, '$.usd')), 0) AS usd FROM events WHERE type = 'cost.usage'",
+    )
   }
 
   append<T extends EventType>(type: T, payload: EventPayloads[T]): StoredEvent<T> {
@@ -148,6 +152,12 @@ export class EventStore {
     // MAX(seq) == COUNT(*) here: append-only, AUTOINCREMENT, never deleted.
     const row = this.#selectMaxSeq.get() as { n: number }
     return row.n
+  }
+
+  /** Lifetime spend across every session in the log. */
+  totalCostUsd(): number {
+    const row = this.#selectTotalCost.get() as { usd: number }
+    return row.usd
   }
 
   close(): void {

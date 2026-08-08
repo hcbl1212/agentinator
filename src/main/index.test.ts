@@ -62,8 +62,10 @@ import {
   registerAgentIpc,
   registerApprovalIpc,
   registerEventIpc,
+  registerSettingsIpc,
 } from './index'
 import type { SessionManager } from './sessions'
+import type { SettingsStore } from './settingsStore'
 
 // index.ts has no import-time side effects (see entry.ts), so this runs
 // before any code can open a store: every getPath call lands in a temp dir.
@@ -73,11 +75,20 @@ function fakeStore(): EventStore {
   return {
     append: vi.fn(),
     count: vi.fn(() => 42),
+    totalCostUsd: vi.fn(() => 1.5),
     list: vi.fn(() => []),
     tail: vi.fn(() => []),
     search: vi.fn(() => []),
     close: vi.fn(),
   } as unknown as EventStore
+}
+
+function fakeSettings(): SettingsStore {
+  return {
+    budgetUsd: vi.fn(() => 5),
+    setBudgetUsd: vi.fn(),
+    close: vi.fn(),
+  } as unknown as SettingsStore
 }
 
 beforeEach(() => {
@@ -136,6 +147,7 @@ describe('registerEventIpc', () => {
     })
 
     expect(handlers.get('events:count')?.(undefined)).toBe(42)
+    expect(handlers.get('events:total-cost')?.(undefined)).toBe(1.5)
     handlers.get('events:list')?.(undefined, 5)
     expect(store.list).toHaveBeenCalledWith(5)
     handlers.get('events:tail')?.(undefined, 100, 7)
@@ -148,7 +160,13 @@ describe('registerEventIpc', () => {
     registerEventIpc(fakeStore())
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['events:count', 'events:list', 'events:tail', 'events:search'])
+    expect(channels).toEqual([
+      'events:count',
+      'events:total-cost',
+      'events:list',
+      'events:tail',
+      'events:search',
+    ])
   })
 })
 
@@ -191,6 +209,28 @@ describe('registerAgentIpc', () => {
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
     expect(channels).toEqual(['agent:start-demo', 'agent:cancel'])
+  })
+})
+
+describe('registerSettingsIpc', () => {
+  it('serves and updates the session budget', () => {
+    const settings = { budgetUsd: vi.fn(() => 5), setBudgetUsd: vi.fn() }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerSettingsIpc(settings as unknown as SettingsStore, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('settings:get-budget')?.(undefined)).toBe(5)
+    handlers.get('settings:set-budget')?.(undefined, 12)
+    expect(settings.setBudgetUsd).toHaveBeenCalledWith(12)
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerSettingsIpc(fakeSettings())
+
+    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    expect(channels).toEqual(['settings:get-budget', 'settings:set-budget'])
   })
 })
 
@@ -257,22 +297,32 @@ describe('broadcastEvent', () => {
 })
 
 describe('bootstrap', () => {
-  it('opens the store in userData, records app.started, and serves IPC', async () => {
+  it('opens the store + settings in userData, records app.started, and serves IPC', async () => {
     const store = fakeStore()
     const createStore = vi.fn(() => store)
+    const createSettings = vi.fn(() => fakeSettings())
 
-    const returned = await bootstrap(mockApp as never, createStore)
+    const returned = await bootstrap(
+      mockApp as never,
+      createStore,
+      undefined,
+      undefined,
+      undefined,
+      createSettings,
+    )
 
     expect(createStore).toHaveBeenCalledWith(expect.stringContaining('agentinator.db'))
+    expect(createSettings).toHaveBeenCalledWith(expect.stringContaining('agentinator-settings.db'))
     expect(store.append).toHaveBeenCalledWith('app.started', { version: '0.1.0-test' })
     expect(mockIpcMain.handle).toHaveBeenCalledWith('events:count', expect.any(Function))
     expect(mockIpcMain.handle).toHaveBeenCalledWith('agent:start-demo', expect.any(Function))
     expect(mockIpcMain.handle).toHaveBeenCalledWith('approvals:pending', expect.any(Function))
+    expect(mockIpcMain.handle).toHaveBeenCalledWith('settings:get-budget', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
 
-  it('defaults to the real electron app and a file-backed store', async () => {
+  it('defaults to the real electron app and file-backed stores', async () => {
     const store = await bootstrap()
 
     try {
@@ -284,9 +334,10 @@ describe('bootstrap', () => {
     }
   })
 
-  it('replays a fixture into an in-memory store when AGENTINATOR_REPLAY is set', async () => {
+  it('replays a fixture into in-memory stores when AGENTINATOR_REPLAY is set', async () => {
     const store = fakeStore()
     const createStore = vi.fn(() => store)
+    const createSettings = vi.fn(() => fakeSettings())
     const replay = vi.fn(() => Promise.resolve())
 
     await bootstrap(
@@ -295,14 +346,41 @@ describe('bootstrap', () => {
       undefined,
       { AGENTINATOR_REPLAY: 'fixtures/demo.json' },
       replay,
+      createSettings,
     )
 
     expect(createStore).toHaveBeenCalledWith(':memory:')
+    expect(createSettings).toHaveBeenCalledWith(':memory:')
     expect(replay).toHaveBeenCalledWith('fixtures/demo.json', store, broadcastEvent)
   })
 
+  it('reads the session budget from settings when a demo session starts', async () => {
+    const settings = fakeSettings()
+    await bootstrap(
+      mockApp as never,
+      (path) => new EventStore(path),
+      undefined,
+      undefined,
+      undefined,
+      () => settings,
+    )
+
+    const startDemo = mockIpcMain.handle.mock.calls.find(
+      ([channel]) => channel === 'agent:start-demo',
+    )?.[1] as (event: unknown) => string
+    const cancel = mockIpcMain.handle.mock.calls.find(
+      ([channel]) => channel === 'agent:cancel',
+    )?.[1] as (event: unknown, sessionId: string) => Promise<void>
+
+    const sessionId = startDemo(undefined)
+    expect(settings.budgetUsd).toHaveBeenCalled()
+    await cancel(undefined, sessionId) // stop the scripted session's timers
+  })
+
   it('quits the app when the last window closes, on every platform', async () => {
-    await bootstrap(mockApp as never, fakeStore)
+    await bootstrap(mockApp as never, fakeStore, undefined, undefined, undefined, () =>
+      fakeSettings(),
+    )
 
     const call = mockApp.on.mock.calls.find(([event]) => event === 'window-all-closed')
     const handler = call?.[1] as () => void

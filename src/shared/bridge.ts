@@ -20,6 +20,8 @@ export interface PendingApproval {
 export interface AgentinatorBridge {
   events: {
     count(): Promise<number>
+    /** Lifetime spend across the whole log, for the status-bar readout. */
+    totalCost(): Promise<number>
     list(afterSeq?: number): Promise<StoredEvent[]>
     /** Newest `limit` events oldest-first; with beforeSeq, the page before it. */
     tail(limit: number, beforeSeq?: number): Promise<StoredEvent[]>
@@ -32,6 +34,11 @@ export interface AgentinatorBridge {
     /** Launch the scripted mock session — writes real events into the log. */
     startDemo(): Promise<string>
     cancel(sessionId: string): Promise<void>
+  }
+  settings: {
+    /** Per-session spend ceiling applied to new sessions. */
+    getBudgetUsd(): Promise<number>
+    setBudgetUsd(usd: number): Promise<void>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

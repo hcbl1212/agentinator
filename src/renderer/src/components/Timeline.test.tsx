@@ -39,6 +39,7 @@ function stubBridge(
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
         list: vi.fn(() => Promise.resolve([])),
         tail: tail as AgentinatorBridge['events']['tail'],
         search: search as AgentinatorBridge['events']['search'],
@@ -46,6 +47,10 @@ function stubBridge(
           appended = listener
           return unsubscribe as () => void
         }),
+      },
+      settings: {
+        getBudgetUsd: vi.fn(() => Promise.resolve(5)),
+        setBudgetUsd: vi.fn(() => Promise.resolve()),
       },
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
