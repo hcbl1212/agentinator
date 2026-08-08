@@ -175,8 +175,16 @@ describe('registerEventIpc', () => {
 })
 
 describe('registerAgentIpc', () => {
-  function fakeManager(): { start: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn> } {
-    return { start: vi.fn(() => 'session_new'), cancel: vi.fn(() => Promise.resolve()) }
+  function fakeManager(): {
+    start: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
+    cancel: ReturnType<typeof vi.fn>
+  } {
+    return {
+      start: vi.fn(() => 'session_new'),
+      send: vi.fn(() => Promise.resolve()),
+      cancel: vi.fn(() => Promise.resolve()),
+    }
   }
 
   it('starts the mock demo session in the current working directory', () => {
@@ -213,6 +221,18 @@ describe('registerAgentIpc', () => {
     })
   })
 
+  it('routes a follow-up message to the session manager', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    void handlers.get('agent:send')?.(undefined, 'session_7', 'keep going')
+
+    expect(manager.send).toHaveBeenCalledWith('session_7', 'keep going')
+  })
+
   it('routes cancellation to the session manager', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -229,7 +249,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(fakeManager() as unknown as SessionManager)
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['agent:start-demo', 'agent:start-task', 'agent:cancel'])
+    expect(channels).toEqual(['agent:start-demo', 'agent:start-task', 'agent:send', 'agent:cancel'])
   })
 })
 

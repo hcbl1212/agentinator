@@ -131,6 +131,43 @@ describe('SessionManager', () => {
     await expect(manager.cancel('session_missing')).resolves.toBeUndefined()
   })
 
+  it('forwards a follow-up message to the session handle and logs a user.message', async () => {
+    const send = vi.fn(() => Promise.resolve())
+    const provider: AgentProvider = {
+      ...instantProvider('chatty'),
+      id: 'chatty',
+      startSession(context, emit) {
+        emit('session.started', {
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          workspaceId: context.workspaceId,
+          title: context.title,
+        })
+        return { send, cancel: () => Promise.resolve() }
+      },
+    }
+    const store = new EventStore()
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+    manager.register(provider)
+
+    const sessionId = manager.start({ providerId: 'chatty', title: 'T', prompt: 'P', cwd: '/tmp' })
+    await manager.send(sessionId, 'keep going')
+
+    expect(send).toHaveBeenCalledWith('keep going')
+    const message = events.find((event) => event.type === 'user.message')
+    expect(message?.payload).toEqual({ sessionId, text: 'keep going' })
+  })
+
+  it('sending to an unknown session is a no-op', async () => {
+    const store = new EventStore()
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+
+    await expect(manager.send('session_missing', 'hi')).resolves.toBeUndefined()
+    expect(events.some((event) => event.type === 'user.message')).toBe(false)
+  })
+
   it('uses the default no-op onEvent when none is provided', () => {
     const manager = new SessionManager(new EventStore())
     manager.register(instantProvider('a'))

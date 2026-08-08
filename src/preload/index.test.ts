@@ -91,13 +91,15 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith('events:appended', wrapped)
   })
 
-  it('routes agent.startDemo, agent.startTask, and agent.cancel over IPC', async () => {
+  it('routes agent.startDemo, agent.startTask, agent.send, and agent.cancel over IPC', async () => {
     await bridge.agent.startDemo()
     await bridge.agent.startTask('do the thing')
+    await bridge.agent.send('session_9', 'keep going')
     await bridge.agent.cancel('session_9')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-demo')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-task', 'do the thing')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:send', 'session_9', 'keep going')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
   })
 

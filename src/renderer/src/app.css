@@ -515,6 +515,107 @@ body {
   outline: none;
 }
 
+.session-status {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.session-status-label {
+  color: var(--soft);
+  font-size: 0.85rem;
+}
+
+.status-dot {
+  border-radius: 50%;
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+.status-dot.running {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(53, 194, 165, 0.18);
+}
+
+.status-dot.idle {
+  background: #d8b34a;
+  box-shadow: 0 0 0 3px rgba(216, 179, 74, 0.18);
+}
+
+.new-task-button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  margin-left: auto;
+  padding: 0.2rem 0.5rem;
+}
+
+.new-task-button:hover,
+.new-task-button:focus-visible {
+  background: rgba(53, 194, 165, 0.12);
+  outline: none;
+}
+
+.question-card {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem;
+}
+
+.question-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.question-text {
+  color: var(--ink);
+  margin: 0;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.question-option {
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.3rem 0.6rem;
+}
+
+.question-option:hover,
+.question-option:focus-visible {
+  background: rgba(53, 194, 165, 0.16);
+  outline: none;
+}
+
+.question-reply {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.question-reply .task-input {
+  flex: 1;
+}
+
 .statusbar {
   border-top: 1px solid var(--line);
   color: var(--faint);

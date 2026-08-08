@@ -37,6 +37,8 @@ export interface AgentinatorBridge {
     startDemo(): Promise<string>
     /** Launch a real Claude agent on the workspace repo with a task prompt. */
     startTask(prompt: string): Promise<string>
+    /** Send a follow-up message into an ongoing session (reply / steer). */
+    send(sessionId: string, text: string): Promise<void>
     cancel(sessionId: string): Promise<void>
   }
   settings: {

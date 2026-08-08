@@ -20,6 +20,16 @@ export interface EventPayloads {
   'session.ended': { sessionId: string; outcome: 'completed' | 'cancelled' | 'failed' }
   'agent.text': { sessionId: string; text: string }
   'agent.thinking': { sessionId: string; summary: string }
+  /** A turn finished; the session is alive and awaiting a follow-up message. */
+  'session.idle': { sessionId: string }
+  /** The agent is asking the user to choose — answered via a follow-up. */
+  'agent.question': {
+    sessionId: string
+    requestId: string
+    questions: Array<{ question: string; options: string[] }>
+  }
+  /** A user message sent into an ongoing session (steering / reply). */
+  'user.message': { sessionId: string; text: string }
   'tool.called': { sessionId: string; callId: string; tool: string; input: unknown }
   'tool.resulted': { sessionId: string; callId: string; ok: boolean; output: string }
   'file.diffed': {

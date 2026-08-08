@@ -182,6 +182,15 @@ export class SessionManager {
     return sessionId
   }
 
+  /** Send a follow-up message into an ongoing session (steering / reply). */
+  async send(sessionId: string, text: string): Promise<void> {
+    const handle = this.#handles.get(sessionId)
+    if (handle !== undefined) {
+      this.#emit(this.#store.append('user.message', { sessionId, text }))
+      await handle.send(text)
+    }
+  }
+
   async cancel(sessionId: string): Promise<void> {
     const handle = this.#handles.get(sessionId)
     if (handle !== undefined) {

@@ -52,6 +52,22 @@ export function describeEvent(event: StoredEvent): TimelineLine {
       const payload = event.payload as EventPayloads['agent.thinking']
       return { marker: '…', text: `thinking · ${payload.summary}`, tone: 'soft' }
     }
+    case 'session.idle': {
+      return { marker: '⏸', text: 'awaiting your reply', tone: 'warn' }
+    }
+    case 'agent.question': {
+      const payload = event.payload as EventPayloads['agent.question']
+      const first = payload.questions[0]
+      return {
+        marker: '?',
+        text: `asking · ${first === undefined ? 'a question' : first.question}`,
+        tone: 'warn',
+      }
+    }
+    case 'user.message': {
+      const payload = event.payload as EventPayloads['user.message']
+      return { marker: '›', text: payload.text, tone: 'accent' }
+    }
     case 'tool.called': {
       const payload = event.payload as EventPayloads['tool.called']
       return { marker: '▸', text: `${payload.tool} ${compactInput(payload.input)}`, tone: 'soft' }

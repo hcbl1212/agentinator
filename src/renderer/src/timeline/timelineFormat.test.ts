@@ -45,6 +45,32 @@ describe('describeEvent', () => {
     ).toMatchObject({ text: 'thinking · Planning.', tone: 'soft' })
   })
 
+  it('renders idle turns, agent questions, and user replies', () => {
+    expect(describeEvent(stored('session.idle', { sessionId: 's' }))).toMatchObject({
+      marker: '⏸',
+      text: 'awaiting your reply',
+      tone: 'warn',
+    })
+    expect(
+      describeEvent(
+        stored('agent.question', {
+          sessionId: 's',
+          requestId: 'approval_q',
+          questions: [{ question: 'Which approach?', options: ['a', 'b'] }],
+        }),
+      ),
+    ).toMatchObject({ text: 'asking · Which approach?', tone: 'warn' })
+    // An empty question set still renders without crashing.
+    expect(
+      describeEvent(
+        stored('agent.question', { sessionId: 's', requestId: 'approval_q', questions: [] }),
+      ),
+    ).toMatchObject({ text: 'asking · a question' })
+    expect(
+      describeEvent(stored('user.message', { sessionId: 's', text: 'keep going' })),
+    ).toMatchObject({ marker: '›', text: 'keep going', tone: 'accent' })
+  })
+
   it('compacts tool inputs: command, path, then truncated JSON', () => {
     expect(
       describeEvent(

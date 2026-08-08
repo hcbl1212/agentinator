@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EventPayloads, EventType } from '../../shared/events'
 import { createClaudeProvider } from './claude'
-import type { ClaudeQuery } from './claude'
+import type { ClaudeQuery, SdkUserMessage } from './claude'
 import type { SessionContext } from './types'
 
 const context: SessionContext = {
@@ -20,6 +20,12 @@ interface Recorded {
   payload: EventPayloads[EventType]
 }
 
+/**
+ * A stream that yields the given messages and then ENDS — the test analogue of
+ * a conversation the user closed. In production the SDK stream stays open
+ * awaiting input; a stream that returns is what cancel/close looks like, so
+ * these fixtures end with a completed session after their last message.
+ */
 function streamOf(messages: unknown[], interrupt?: () => Promise<void>): ReturnType<ClaudeQuery> {
   const iterable = (async function* () {
     for (const message of messages) {
@@ -50,6 +56,14 @@ async function runSession(
   return { events, queryArgs: queryArgs as Parameters<ClaudeQuery>[0] }
 }
 
+async function firstPromptMessage(
+  prompt: Parameters<ClaudeQuery>[0]['prompt'],
+): Promise<SdkUserMessage> {
+  const iterator = (prompt as AsyncIterable<SdkUserMessage>)[Symbol.asyncIterator]()
+  const { value } = await iterator.next()
+  return value as SdkUserMessage
+}
+
 const successResult = {
   type: 'result',
   subtype: 'success',
@@ -70,19 +84,28 @@ describe('createClaudeProvider', () => {
     })
   })
 
-  it('passes prompt, cwd, model, and a stable system prompt to the SDK', async () => {
+  it('seeds the streaming input with the prompt and passes cwd, model, system prompt', async () => {
     const { queryArgs } = await runSession([successResult])
 
-    expect(queryArgs.prompt).toBe('Do the task.')
+    const first = await firstPromptMessage(queryArgs.prompt)
+    expect(first).toMatchObject({
+      type: 'user',
+      message: { role: 'user', content: 'Do the task.' },
+    })
     expect(queryArgs.options.cwd).toBe('/repo')
     expect(queryArgs.options.model).toBe('claude-sonnet-5')
     expect(queryArgs.options.systemPrompt).toContain('Agentinator agent')
   })
 
-  it('omits canUseTool when no permission decider is wired', async () => {
+  it('always wires canUseTool but allows every tool when no decider is set', async () => {
     const { queryArgs } = await runSession([successResult])
 
-    expect(queryArgs.options.canUseTool).toBeUndefined()
+    const canUseTool = queryArgs.options.canUseTool
+    expect(canUseTool).toBeDefined()
+    await expect(canUseTool?.('read', { path: 'a.ts' })).resolves.toEqual({
+      behavior: 'allow',
+      updatedInput: { path: 'a.ts' },
+    })
   })
 
   it('maps the permission decider onto the SDK canUseTool contract', async () => {
@@ -112,6 +135,79 @@ describe('createClaudeProvider', () => {
       message: 'Denied from an Agentinator approval card.',
     })
     expect(decide).toHaveBeenCalledWith('session_c', 'read', { path: 'a.ts' })
+  })
+
+  it('surfaces AskUserQuestion as an answerable question event, not a permission ask', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    const decide = vi.fn(() => Promise.resolve(true))
+    const provider = createClaudeProvider(query, decide)
+    const events: Recorded[] = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+
+    const result = await queryArgs?.options.canUseTool?.('AskUserQuestion', {
+      questions: [
+        {
+          question: 'Which approach?',
+          options: [{ label: 'Continue' }, { label: 'Restart' }],
+        },
+        { question: 'Bare strings?', options: ['a', 'b'] },
+      ],
+    })
+    expect(result).toMatchObject({ behavior: 'deny' })
+    expect(decide).not.toHaveBeenCalled()
+
+    const question = events.find((event) => event.type === 'agent.question')
+    expect(question?.payload).toMatchObject({
+      sessionId: 'session_c',
+      questions: [
+        { question: 'Which approach?', options: ['Continue', 'Restart'] },
+        { question: 'Bare strings?', options: ['a', 'b'] },
+      ],
+    })
+    expect((question?.payload as { requestId: string }).requestId).toMatch(/^approval_/)
+  })
+
+  it('defaults a malformed AskUserQuestion input to an empty question set', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+
+    // No questions field at all → an empty set rather than a throw.
+    await queryArgs?.options.canUseTool?.('AskUserQuestion', {})
+    // A non-record entry, a record with a non-array options field, and an
+    // option record missing its label all collapse to empty defaults.
+    await queryArgs?.options.canUseTool?.('AskUserQuestion', {
+      questions: [
+        'not-a-record',
+        { options: 'not-an-array' },
+        { question: 'Pick', options: [{}, { label: 'B' }] },
+      ],
+    })
+
+    const questions = events.filter((event) => event.type === 'agent.question')
+    expect((questions[0]?.payload as EventPayloads['agent.question']).questions).toEqual([])
+    expect((questions[1]?.payload as EventPayloads['agent.question']).questions).toEqual([
+      { question: '', options: [] },
+      { question: '', options: [] },
+      { question: 'Pick', options: ['', 'B'] },
+    ])
   })
 
   it('emits session.started immediately with the context identity', async () => {
@@ -151,6 +247,7 @@ describe('createClaudeProvider', () => {
       'agent.text',
       'tool.called',
       'cost.usage',
+      'session.idle',
       'session.ended',
     ])
     expect(events[3]?.payload).toMatchObject({ callId: 'toolu_1', tool: 'bash' })
@@ -184,34 +281,39 @@ describe('createClaudeProvider', () => {
     })
   })
 
-  it('maps the result message to cost.usage and a completed ending', async () => {
+  it('maps a result to cost.usage then session.idle — the turn ends, the session lives', async () => {
     const { events } = await runSession([successResult])
 
-    expect(events.at(-2)).toEqual({
-      type: 'cost.usage',
-      payload: {
-        sessionId: 'session_c',
-        inputTokens: 100,
-        outputTokens: 40,
-        cacheReadInputTokens: 80,
-        usd: 0.12,
-      },
+    expect(events.map((event) => event.type)).toEqual([
+      'session.started',
+      'cost.usage',
+      'session.idle',
+      'session.ended',
+    ])
+    const cost = events.find((event) => event.type === 'cost.usage')
+    expect(cost?.payload).toEqual({
+      sessionId: 'session_c',
+      inputTokens: 100,
+      outputTokens: 40,
+      cacheReadInputTokens: 80,
+      usd: 0.12,
     })
-    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'completed' })
+    const idle = events.find((event) => event.type === 'session.idle')
+    expect(idle?.payload).toEqual({ sessionId: 'session_c' })
   })
 
-  it('treats a non-success result with partial usage as failed, defaulting counts to zero', async () => {
+  it('defaults missing usage counts to zero on the cost event', async () => {
     const { events } = await runSession([
       { type: 'result', subtype: 'error_during_execution', usage: { input_tokens: 5 } },
     ])
 
-    expect(events.at(-2)?.payload).toMatchObject({
+    const cost = events.find((event) => event.type === 'cost.usage')
+    expect(cost?.payload).toMatchObject({
       inputTokens: 5,
       outputTokens: 0,
       cacheReadInputTokens: 0,
       usd: 0,
     })
-    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'failed' })
   })
 
   it('tolerates malformed and unknown messages without emitting', async () => {
@@ -226,8 +328,45 @@ describe('createClaudeProvider', () => {
     expect(events.map((event) => event.type)).toEqual([
       'session.started',
       'cost.usage',
+      'session.idle',
       'session.ended',
     ])
+  })
+
+  it('drives a second turn when a follow-up message is sent', async () => {
+    // A conversational mock: it reads the input stream and answers each user
+    // message with one assistant turn + result, staying open for the next.
+    const query: ClaudeQuery = (args) => {
+      const prompt = args.prompt as AsyncIterable<SdkUserMessage>
+      return (async function* () {
+        for await (const message of prompt) {
+          yield {
+            type: 'assistant',
+            message: { content: [{ type: 'text', text: `echo: ${message.message.content}` }] },
+          }
+          yield { ...successResult }
+        }
+      })() as ReturnType<ClaudeQuery>
+    }
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+
+    const handle = provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.filter((event) => event.type === 'session.idle')).toHaveLength(1)
+    })
+
+    await handle.send('follow up')
+    await vi.waitFor(() => {
+      expect(events.filter((event) => event.type === 'session.idle')).toHaveLength(2)
+    })
+
+    const texts = events
+      .filter((event) => event.type === 'agent.text')
+      .map((event) => (event.payload as { text: string }).text)
+    expect(texts).toEqual(['echo: Do the task.', 'echo: follow up'])
+
+    await handle.cancel()
   })
 
   it('ends failed when the stream errors', async () => {
@@ -247,15 +386,7 @@ describe('createClaudeProvider', () => {
     expect(events.at(-1)?.payload).toMatchObject({ outcome: 'failed' })
   })
 
-  it('ends failed when the stream finishes without a result message', async () => {
-    const { events } = await runSession([
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'partial' }] } },
-    ])
-
-    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'failed' })
-  })
-
-  it('cancel interrupts the SDK stream and marks the ending cancelled', async () => {
+  it('cancel closes the input, interrupts the stream, and marks the ending cancelled', async () => {
     const interrupt = vi.fn(() => Promise.resolve())
     let releaseResult: () => void = () => undefined
     const gate = new Promise<void>((resolve) => {
@@ -281,30 +412,8 @@ describe('createClaudeProvider', () => {
 
     expect(interrupt).toHaveBeenCalledOnce()
     expect(events.at(-1)?.payload).toMatchObject({ outcome: 'cancelled' })
-  })
-
-  it('ends cancelled when the interrupted stream closes without a result', async () => {
-    let release: () => void = () => undefined
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const query: ClaudeQuery = () =>
-      (async function* () {
-        await gate
-        // An interrupt can close the stream with no result message at all.
-        yield* []
-      })() as ReturnType<ClaudeQuery>
-    const provider = createClaudeProvider(query)
-    const events: Recorded[] = []
-
-    const handle = provider.startSession(context, (type, payload) => events.push({ type, payload }))
-    await handle.cancel()
-    release()
-    await vi.waitFor(() => {
-      expect(events.at(-1)?.type).toBe('session.ended')
-    })
-
-    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'cancelled' })
+    // The late result arrived after cancel — it must not have been mapped.
+    expect(events.some((event) => event.type === 'cost.usage')).toBe(false)
   })
 
   it('cancel is safe when the stream exposes no interrupt', async () => {
@@ -317,12 +426,5 @@ describe('createClaudeProvider', () => {
     await vi.waitFor(() => {
       expect(events.at(-1)?.type).toBe('session.ended')
     })
-  })
-
-  it('rejects steering for now', async () => {
-    const provider = createClaudeProvider(() => streamOf([successResult]))
-    const handle = provider.startSession(context, () => undefined)
-
-    await expect(handle.send('new direction')).rejects.toThrow(/not supported yet/)
   })
 })

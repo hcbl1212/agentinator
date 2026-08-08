@@ -1,3 +1,4 @@
+import { createEntityId } from '../../shared/events'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
   AgentProvider,
@@ -13,6 +14,11 @@ import type {
  * against synthetic streams with no API key and no network. SDK message
  * shapes are narrowed structurally (isRecord + field checks) rather than
  * typed against the SDK, so vendor type drift cannot leak past this file.
+ *
+ * Sessions are multi-turn conversations: the prompt is a streaming input the
+ * adapter pushes follow-up messages into (send), so context carries across
+ * turns. Each turn ends with a `result` → session.idle (alive, awaiting
+ * input); the session ends only on cancel.
  */
 export type CanUseTool = (
   toolName: string,
@@ -22,8 +28,15 @@ export type CanUseTool = (
   | { behavior: 'deny'; message: string }
 >
 
+export type SdkUserMessage = {
+  type: 'user'
+  message: { role: 'user'; content: string }
+  parent_tool_use_id: null
+  session_id: string
+}
+
 export interface ClaudeQueryArgs {
-  prompt: string
+  prompt: string | AsyncIterable<SdkUserMessage>
   options: {
     cwd: string
     model?: string
@@ -46,6 +59,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toNumber(value: unknown): number {
   return typeof value === 'number' ? value : 0
+}
+
+function userMessage(text: string): SdkUserMessage {
+  return {
+    type: 'user',
+    message: { role: 'user', content: text },
+    parent_tool_use_id: null,
+    session_id: '',
+  }
+}
+
+/** A queue an async-iterable input reads from — push adds a turn, end closes. */
+function createInputStream(): {
+  iterable: AsyncIterable<SdkUserMessage>
+  push: (message: SdkUserMessage) => void
+  end: () => void
+} {
+  const queue: SdkUserMessage[] = []
+  let wake: (() => void) | null = null
+  let ended = false
+  const wait = (): Promise<void> =>
+    new Promise((resolve) => {
+      wake = resolve
+    })
+  return {
+    push: (message) => {
+      queue.push(message)
+      wake?.()
+      wake = null
+    },
+    end: () => {
+      ended = true
+      wake?.()
+      wake = null
+    },
+    iterable: {
+      async *[Symbol.asyncIterator]() {
+        while (true) {
+          const next = queue.shift()
+          if (next !== undefined) {
+            yield next
+            continue
+          }
+          if (ended) {
+            return
+          }
+          await wait()
+        }
+      },
+    },
+  }
 }
 
 function mapAssistantBlock(block: unknown, sessionId: string, emit: EmitEvent): void {
@@ -82,11 +146,10 @@ function mapUserBlock(block: unknown, sessionId: string, emit: EmitEvent): void 
 interface MapContext {
   sessionId: string
   emit: EmitEvent
-  isCancelled: () => boolean
 }
 
-/** Returns true when the message ended the session (a `result` message). */
-function mapSdkMessage(message: unknown, { sessionId, emit, isCancelled }: MapContext): boolean {
+/** Maps one SDK message; returns true on a turn boundary (a `result`). */
+function mapSdkMessage(message: unknown, { sessionId, emit }: MapContext): boolean {
   if (!isRecord(message)) {
     return false
   }
@@ -112,15 +175,28 @@ function mapSdkMessage(message: unknown, { sessionId, emit, isCancelled }: MapCo
       cacheReadInputTokens: toNumber(usage['cache_read_input_tokens']),
       usd: toNumber(message['total_cost_usd']),
     })
-    const outcome = isCancelled()
-      ? 'cancelled'
-      : message['subtype'] === 'success'
-        ? 'completed'
-        : 'failed'
-    emit('session.ended', { sessionId, outcome })
+    emit('session.idle', { sessionId })
     return true
   }
   return false
+}
+
+/** Parses an AskUserQuestion tool input into normalized questions. */
+function parseQuestions(input: Record<string, unknown>): Array<{
+  question: string
+  options: string[]
+}> {
+  const raw = Array.isArray(input['questions']) ? input['questions'] : []
+  return raw.map((entry) => {
+    const record = isRecord(entry) ? entry : {}
+    const options = Array.isArray(record['options']) ? record['options'] : []
+    return {
+      question: String(record['question'] ?? ''),
+      options: options.map((option) =>
+        isRecord(option) ? String(option['label'] ?? '') : String(option),
+      ),
+    }
+  })
 }
 
 export function createClaudeProvider(
@@ -140,21 +216,35 @@ export function createClaudeProvider(
       contextWindowTokens: 1_000_000,
     },
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {
-      let cancelled = false
       const { sessionId } = context
+      const input = createInputStream()
+      input.push(userMessage(context.prompt))
 
-      // The SDK asks before side-effecting tools; the broker's answer may
-      // wait on a human clicking an approval card.
-      const canUseTool: CanUseTool | undefined =
-        decide === undefined
-          ? undefined
-          : async (toolName, input) =>
-              (await decide(sessionId, toolName, input))
-                ? { behavior: 'allow', updatedInput: input }
-                : { behavior: 'deny', message: 'Denied from an Agentinator approval card.' }
+      const canUseTool: CanUseTool = async (toolName, toolInput) => {
+        // The agent's own questions are not permission requests — surface them
+        // as an answerable card and have the agent wait for a follow-up.
+        if (toolName === 'AskUserQuestion') {
+          emit('agent.question', {
+            sessionId,
+            requestId: createEntityId('approval'),
+            questions: parseQuestions(toolInput),
+          })
+          return {
+            behavior: 'deny',
+            message:
+              "Do not call AskUserQuestion. The user's answer will arrive as their next message — end your turn and wait for it.",
+          }
+        }
+        if (decide === undefined) {
+          return { behavior: 'allow', updatedInput: toolInput }
+        }
+        return (await decide(sessionId, toolName, toolInput))
+          ? { behavior: 'allow', updatedInput: toolInput }
+          : { behavior: 'deny', message: 'Denied from an Agentinator approval card.' }
+      }
 
       const stream = query({
-        prompt: context.prompt,
+        prompt: input.iterable,
         options: {
           cwd: context.cwd,
           model: context.model,
@@ -172,33 +262,43 @@ export function createClaudeProvider(
         title: context.title,
       })
 
+      let ended = false
+      const endOnce = (outcome: 'completed' | 'cancelled' | 'failed'): void => {
+        if (!ended) {
+          ended = true
+          emit('session.ended', { sessionId, outcome })
+        }
+      }
+
       const run = async (): Promise<void> => {
-        let ended = false
         try {
           for await (const message of stream) {
-            ended =
-              mapSdkMessage(message, { sessionId, emit, isCancelled: () => cancelled }) || ended
+            // A cancel already closed the session — stop mapping late messages.
+            if (ended) {
+              break
+            }
+            mapSdkMessage(message, { sessionId, emit })
           }
         } catch {
-          emit('session.ended', { sessionId, outcome: 'failed' })
+          endOnce('failed')
           return
         }
-        if (!ended) {
-          emit('session.ended', { sessionId, outcome: cancelled ? 'cancelled' : 'failed' })
-        }
+        // The stream ends only after input is closed (cancel/completion).
+        endOnce('completed')
       }
       void run()
 
       return {
-        send: () =>
-          Promise.reject(
-            new Error('Steering the Claude session is not supported yet (arrives with pipelines).'),
-          ),
+        send: (text) => {
+          input.push(userMessage(text))
+          return Promise.resolve()
+        },
         cancel: async () => {
-          cancelled = true
+          input.end()
           if (typeof stream.interrupt === 'function') {
             await stream.interrupt()
           }
+          endOnce('cancelled')
         },
       }
     },

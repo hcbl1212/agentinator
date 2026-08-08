@@ -23,9 +23,11 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('dogfood (live)', () 
     const done = new Promise<void>((resolve) => {
       finish = resolve
     })
+    // A turn ending is now session.idle (the session stays alive for a reply),
+    // so wait for the first idle turn rather than a session ending.
     const manager = new SessionManager(store, (event) => {
       types.push(event.type)
-      if (event.type === 'session.ended') {
+      if (event.type === 'session.idle') {
         finish()
       }
     })
@@ -35,7 +37,7 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('dogfood (live)', () 
       createClaudeProvider(query as unknown as ClaudeQuery, () => Promise.resolve(true)),
     )
 
-    manager.start({
+    const sessionId = manager.start({
       providerId: 'claude',
       title: 'Dogfood: count source files',
       prompt:
@@ -43,13 +45,14 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('dogfood (live)', () 
       cwd: process.cwd(),
     })
     await done
+    // Close the conversation — the session only ends on cancel now.
+    await manager.cancel(sessionId)
 
     console.log('event stream:', types.join(' → '))
 
-    const ended = store.list().at(-1)
-    expect(ended?.type).toBe('session.ended')
-    expect((ended?.payload as { outcome: string }).outcome).toBe('completed')
     expect(types).toContain('cost.usage')
+    expect(types).toContain('session.idle')
+    expect(types).toContain('session.ended')
     store.close()
   })
 })

@@ -46,6 +46,7 @@ function stubBridge(
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         startTask: vi.fn(() => Promise.resolve('s')),
+        send: vi.fn(() => Promise.resolve()),
         cancel: vi.fn(() => Promise.resolve()),
       },
       approvals: {

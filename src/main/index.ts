@@ -88,6 +88,9 @@ export function registerAgentIpc(
       cwd: process.cwd(),
     }),
   )
+  handle('agent:send', (_event, sessionId, text) =>
+    manager.send(sessionId as string, text as string),
+  )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
 }
 

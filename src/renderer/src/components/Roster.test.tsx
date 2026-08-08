@@ -12,15 +12,21 @@ interface BridgeStub {
   emit: (event: StoredEvent) => void
   resolve: ReturnType<typeof vi.fn>
   startTask: ReturnType<typeof vi.fn>
+  send: ReturnType<typeof vi.fn>
+  cancel: ReturnType<typeof vi.fn>
 }
 
 function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   let appended: ((event: StoredEvent) => void) | undefined
   const resolve = vi.fn(() => Promise.resolve())
   const startTask = vi.fn(() => Promise.resolve('session_task'))
+  const send = vi.fn(() => Promise.resolve())
+  const cancel = vi.fn(() => Promise.resolve())
   return {
     resolve,
     startTask,
+    send,
+    cancel,
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
@@ -43,7 +49,8 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         startTask: startTask as AgentinatorBridge['agent']['startTask'],
-        cancel: vi.fn(() => Promise.resolve()),
+        send: send as AgentinatorBridge['agent']['send'],
+        cancel: cancel as AgentinatorBridge['agent']['cancel'],
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),
@@ -62,6 +69,17 @@ function requestedEvent(requestId: string, seq: number): StoredEvent {
     type: 'approval.requested',
     payload: { sessionId: 's', requestId, tool: 'bash', input: { command: 'git push' } },
   } as StoredEvent
+}
+
+function sessionEvent(type: StoredEvent['type'], payload: object): StoredEvent {
+  return { seq: 1, ts: 't', type, payload } as StoredEvent
+}
+
+/** Launch a task and settle into reply mode on the returned session id. */
+async function launchTask(): Promise<void> {
+  await userEvent.type(screen.getByRole('textbox', { name: 'Task for Claude' }), 'Do it')
+  await userEvent.click(screen.getByRole('button', { name: /Run task/ }))
+  await screen.findByRole('textbox', { name: 'Reply to Claude' })
 }
 
 afterEach(() => {
@@ -205,6 +223,112 @@ describe('Roster', () => {
     })
 
     expect(screen.queryByText(/Needs approval/)).not.toBeInTheDocument()
+  })
+
+  it('enters reply mode after a task launches and sends a follow-up to that session', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+
+    // The one-shot task launcher is gone; the demo button hides in a conversation.
+    expect(screen.queryByRole('button', { name: /Run demo/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Working…')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Reply to Claude' }), 'also add tests')
+    await userEvent.click(screen.getByRole('button', { name: /Send reply/ }))
+
+    expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests')
+  })
+
+  it('marks the session idle when its turn ends', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+    act(() => {
+      stub.emit(sessionEvent('session.idle', { sessionId: 'session_task' }))
+    })
+
+    expect(screen.getByText('Awaiting your reply')).toBeInTheDocument()
+  })
+
+  it('renders an agent question as an answerable card and answers via a follow-up', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+    act(() => {
+      stub.emit(
+        sessionEvent('agent.question', {
+          sessionId: 'session_task',
+          requestId: 'approval_q',
+          questions: [{ question: 'Which approach?', options: ['Continue', 'Restart'] }],
+        }),
+      )
+    })
+
+    expect(screen.getByLabelText('Agent question')).toBeInTheDocument()
+    expect(screen.getByText('Which approach?')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(stub.send).toHaveBeenCalledWith('session_task', 'Continue')
+    // Answering dismisses the card.
+    expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
+  })
+
+  it('New task cancels the active session and returns to the task launcher', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+    await userEvent.click(screen.getByRole('button', { name: 'New task' }))
+
+    expect(stub.cancel).toHaveBeenCalledWith('session_task')
+    expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Run demo/ })).toBeInTheDocument()
+  })
+
+  it('clears the active session and returns to the launcher when the session ends', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+    act(() => {
+      stub.emit(sessionEvent('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
+    })
+
+    expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
+  })
+
+  it('ignores session idle, question, and ended events for other sessions', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Roster />)
+    await launchTask()
+    act(() => {
+      stub.emit(sessionEvent('session.idle', { sessionId: 'other' }))
+      stub.emit(
+        sessionEvent('agent.question', {
+          sessionId: 'other',
+          requestId: 'approval_x',
+          questions: [{ question: 'ignored?', options: [] }],
+        }),
+      )
+      stub.emit(sessionEvent('session.ended', { sessionId: 'other', outcome: 'completed' }))
+    })
+
+    // The active session is untouched: still running, still in reply mode.
+    expect(screen.getByText('Working…')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Reply to Claude' })).toBeInTheDocument()
   })
 
   it('ignores a pending list that resolves after unmount', async () => {

@@ -47,6 +47,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
       agent: {
         startDemo: vi.fn(() => Promise.resolve('s')),
         startTask: vi.fn(() => Promise.resolve('s')),
+        send: vi.fn(() => Promise.resolve()),
         cancel: vi.fn(() => Promise.resolve()),
       },
       approvals: {
