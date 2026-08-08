@@ -76,6 +76,7 @@ function fakeStore(): EventStore {
     append: vi.fn(),
     count: vi.fn(() => 42),
     totalCostUsd: vi.fn(() => 1.5),
+    latestDiffs: vi.fn(() => []),
     list: vi.fn(() => []),
     tail: vi.fn(() => []),
     search: vi.fn(() => []),
@@ -148,6 +149,7 @@ describe('registerEventIpc', () => {
 
     expect(handlers.get('events:count')?.(undefined)).toBe(42)
     expect(handlers.get('events:total-cost')?.(undefined)).toBe(1.5)
+    expect(handlers.get('events:diffs')?.(undefined)).toEqual([])
     handlers.get('events:list')?.(undefined, 5)
     expect(store.list).toHaveBeenCalledWith(5)
     handlers.get('events:tail')?.(undefined, 100, 7)
@@ -163,6 +165,7 @@ describe('registerEventIpc', () => {
     expect(channels).toEqual([
       'events:count',
       'events:total-cost',
+      'events:diffs',
       'events:list',
       'events:tail',
       'events:search',

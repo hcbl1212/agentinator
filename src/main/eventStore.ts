@@ -52,6 +52,7 @@ export class EventStore {
   #selectMaxSeq: StatementSync
   #selectTotalCost: StatementSync
   #selectCostSince: StatementSync
+  #selectLatestDiffs: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -105,6 +106,11 @@ export class EventStore {
     )
     this.#selectCostSince = this.#db.prepare(
       "SELECT COALESCE(SUM(json_extract(payload, '$.usd')), 0) AS usd FROM events WHERE type = 'cost.usage' AND ts >= ?",
+    )
+    // One row per file — the newest file.diffed for each path. SQLite returns
+    // the columns from the MAX(seq) row (bare-column-from-aggregate rule).
+    this.#selectLatestDiffs = this.#db.prepare(
+      "SELECT seq, ts, type, payload, MAX(seq) AS _m FROM events WHERE type = 'file.diffed' GROUP BY json_extract(payload, '$.path') ORDER BY seq",
     )
   }
 
@@ -168,6 +174,12 @@ export class EventStore {
   costSinceUsd(sinceIso: string): number {
     const row = this.#selectCostSince.get(sinceIso) as { usd: number }
     return row.usd
+  }
+
+  /** The current cumulative diff per file — newest file.diffed for each path. */
+  latestDiffs(): StoredEvent[] {
+    const rows = this.#selectLatestDiffs.all() as unknown as EventRow[]
+    return rows.map((row) => this.#toEvent(row))
   }
 
   close(): void {

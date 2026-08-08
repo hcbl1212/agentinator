@@ -74,6 +74,55 @@ body {
   border-right: none;
 }
 
+/* The center pane is a tabbed workspace; its child panes fill it and scroll. */
+.workspace {
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.workspace-tabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex: none;
+  gap: 0.25rem;
+  padding: 0.35rem 0.9rem 0;
+}
+
+.workspace-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.5rem 0.35rem;
+}
+
+.workspace-tab:hover,
+.workspace-tab:focus-visible {
+  color: var(--soft);
+  outline: none;
+}
+
+.workspace-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.workspace-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-body .pane {
+  border-right: none;
+  flex: 1;
+}
+
 .pane-label {
   color: var(--faint);
   font-size: 0.7rem;
@@ -347,6 +396,58 @@ body {
 
 .tone-err {
   color: var(--err);
+}
+
+.diff-file {
+  margin-bottom: 1rem;
+}
+
+.diff-file-head {
+  align-items: baseline;
+  color: var(--ink);
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.diff-file-stat {
+  font-size: 0.72rem;
+}
+
+.diff-body {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.4rem 0;
+}
+
+.diff-line {
+  display: block;
+  padding: 0 0.6rem;
+  white-space: pre;
+}
+
+.diff-add {
+  background: rgba(71, 184, 129, 0.1);
+  color: var(--ok);
+}
+
+.diff-del {
+  background: rgba(224, 101, 85, 0.1);
+  color: var(--err);
+}
+
+.diff-hunk {
+  color: var(--accent);
+}
+
+.diff-meta {
+  color: var(--faint);
+}
+
+.diff-context {
+  color: var(--soft);
 }
 
 .demo-button {

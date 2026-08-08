@@ -208,6 +208,47 @@ describe('EventStore', () => {
     expect(store.costSinceUsd('2999-01-01T00:00:00.000Z')).toBe(0)
   })
 
+  it('returns the newest diff per file for the cumulative view', () => {
+    const store = open()
+    store.append('file.diffed', {
+      sessionId: 's',
+      path: 'a.ts',
+      additions: 1,
+      deletions: 0,
+      patch: 'v1',
+    })
+    store.append('file.diffed', {
+      sessionId: 's',
+      path: 'b.ts',
+      additions: 2,
+      deletions: 1,
+      patch: 'b',
+    })
+    store.append('file.diffed', {
+      sessionId: 's',
+      path: 'a.ts',
+      additions: 3,
+      deletions: 0,
+      patch: 'v2',
+    })
+
+    const diffs = store.latestDiffs()
+
+    expect(diffs).toHaveLength(2)
+    const byPath = Object.fromEntries(
+      diffs.map((event) => [
+        (event.payload as { path: string }).path,
+        event.payload as { patch: string; additions: number },
+      ]),
+    )
+    expect(byPath['a.ts']).toMatchObject({ patch: 'v2', additions: 3 })
+    expect(byPath['b.ts']).toMatchObject({ patch: 'b' })
+  })
+
+  it('returns no diffs when none exist', () => {
+    expect(open().latestDiffs()).toEqual([])
+  })
+
   it('exposes no way to update or delete events', () => {
     const store = open()
 

@@ -40,6 +40,7 @@ function stubBridge(
       events: {
         count: vi.fn(() => Promise.resolve(0)),
         totalCost: vi.fn(() => Promise.resolve(0)),
+        diffs: vi.fn(() => Promise.resolve([])),
         list: vi.fn(() => Promise.resolve([])),
         tail: tail as AgentinatorBridge['events']['tail'],
         search: search as AgentinatorBridge['events']['search'],

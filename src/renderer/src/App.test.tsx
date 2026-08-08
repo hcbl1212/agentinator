@@ -11,6 +11,7 @@ describe('App', () => {
     expect(screen.getByText('Agentinator')).toBeInTheDocument()
     expect(screen.getByText('no workspace open')).toBeInTheDocument()
     expect(screen.getByRole('complementary', { name: 'Agent roster' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Workspace' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'App preview' })).toBeInTheDocument()
     expect(screen.getByRole('contentinfo', { name: 'Status bar' })).toBeInTheDocument()

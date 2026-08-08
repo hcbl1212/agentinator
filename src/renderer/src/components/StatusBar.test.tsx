@@ -30,6 +30,7 @@ function stubBridge(
       events: {
         count: vi.fn(() => Promise.resolve(options.count ?? 0)),
         totalCost: vi.fn(() => Promise.resolve(options.total ?? 0)),
+        diffs: vi.fn(() => Promise.resolve([])),
         list: vi.fn(() => Promise.resolve([])),
         tail: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),

@@ -1,6 +1,6 @@
 import { Roster } from './components/Roster'
 import { StatusBar } from './components/StatusBar'
-import { Timeline } from './components/Timeline'
+import { Workspace } from './components/Workspace'
 import { Preview } from './components/Preview'
 import { SelectionProvider } from './state/selection'
 
@@ -21,7 +21,7 @@ function AppShell(): React.JSX.Element {
       </header>
       <div className="panes">
         <Roster />
-        <Timeline />
+        <Workspace />
         <Preview />
       </div>
       <StatusBar />
