@@ -32,27 +32,15 @@ export function createWindow(): BrowserWindow {
   return window
 }
 
-export function handleActivate(): void {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
-  }
-}
-
-export function handleWindowAllClosed(
-  quit: () => void,
-  platform: NodeJS.Platform = process.platform,
-): void {
-  if (platform !== 'darwin') {
-    quit()
-  }
-}
-
 export async function bootstrap(electronApp = app): Promise<void> {
   await electronApp.whenReady()
   createWindow()
-  electronApp.on('activate', handleActivate)
+  // Quit on last window close on every platform, including macOS. The harness
+  // has no background work yet, so a closed window leaving the process (and
+  // `npm run dev`) alive is a trap. Revisit as a tray/dock mode once agents
+  // run in the main process and must outlive the window.
   electronApp.on('window-all-closed', () => {
-    handleWindowAllClosed(() => electronApp.quit())
+    electronApp.quit()
   })
 }
 

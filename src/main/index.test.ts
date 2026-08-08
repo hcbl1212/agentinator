@@ -39,7 +39,7 @@ vi.mock('electron', () => ({
   shell: mockShell,
 }))
 
-import { bootstrap, createWindow, handleActivate, handleWindowAllClosed } from './index'
+import { bootstrap, createWindow } from './index'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -88,67 +88,22 @@ describe('createWindow', () => {
   })
 })
 
-describe('handleActivate', () => {
-  it('creates a window when none are open', () => {
-    MockBrowserWindow.getAllWindows.mockReturnValue([])
-
-    handleActivate()
-
-    expect(MockBrowserWindow.instances).toHaveLength(1)
-  })
-
-  it('does nothing when a window is already open', () => {
-    MockBrowserWindow.getAllWindows.mockReturnValue([new MockBrowserWindow({}) as unknown as never])
-    MockBrowserWindow.instances = []
-
-    handleActivate()
-
-    expect(MockBrowserWindow.instances).toHaveLength(0)
-  })
-})
-
-describe('handleWindowAllClosed', () => {
-  it('quits on non-mac platforms', () => {
-    const quit = vi.fn()
-
-    handleWindowAllClosed(quit, 'linux')
-
-    expect(quit).toHaveBeenCalledOnce()
-  })
-
-  it('stays running on macOS', () => {
-    const quit = vi.fn()
-
-    handleWindowAllClosed(quit, 'darwin')
-
-    expect(quit).not.toHaveBeenCalled()
-  })
-})
-
 describe('bootstrap', () => {
-  it('waits for readiness, opens the first window, and registers lifecycle handlers', async () => {
+  it('waits for readiness, opens the first window, and registers the close handler', async () => {
     await bootstrap()
 
     expect(mockApp.whenReady).toHaveBeenCalledOnce()
     expect(MockBrowserWindow.instances).toHaveLength(1)
-    expect(mockApp.on).toHaveBeenCalledWith('activate', handleActivate)
     expect(mockApp.on).toHaveBeenCalledWith('window-all-closed', expect.any(Function))
   })
 
-  it('quits via the app when the registered window-all-closed handler fires off-mac', async () => {
-    const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'linux' })
+  it('quits the app when the last window closes, on every platform', async () => {
+    await bootstrap()
 
-    try {
-      await bootstrap()
+    const call = mockApp.on.mock.calls.find(([event]) => event === 'window-all-closed')
+    const handler = call?.[1] as () => void
+    handler()
 
-      const call = mockApp.on.mock.calls.find(([event]) => event === 'window-all-closed')
-      const handler = call?.[1] as () => void
-      handler()
-
-      expect(mockApp.quit).toHaveBeenCalledOnce()
-    } finally {
-      Object.defineProperty(process, 'platform', realPlatform as PropertyDescriptor)
-    }
+    expect(mockApp.quit).toHaveBeenCalledOnce()
   })
 })
