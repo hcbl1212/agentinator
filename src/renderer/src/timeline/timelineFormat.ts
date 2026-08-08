@@ -86,6 +86,19 @@ export function describeEvent(event: StoredEvent): TimelineLine {
   return { marker: '·', text: String(event.type), tone: 'faint' }
 }
 
+/**
+ * Client-side twin of EventStore.search's LIKE match, applied to live
+ * appends while a search is active — same semantics: type or raw payload,
+ * case-insensitive substring.
+ */
+export function matchesQuery(event: StoredEvent, query: string): boolean {
+  const needle = query.toLowerCase()
+  return (
+    event.type.toLowerCase().includes(needle) ||
+    JSON.stringify(event.payload).toLowerCase().includes(needle)
+  )
+}
+
 /** Merge two seq-ordered slices of the log, deduplicating by seq. */
 export function mergeBySeq(base: StoredEvent[], extra: StoredEvent[]): StoredEvent[] {
   const seen = new Map<number, StoredEvent>()

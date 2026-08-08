@@ -89,6 +89,20 @@ export class EventStore {
     return rows.map((row) => this.#toEvent(row))
   }
 
+  /**
+   * Case-insensitive substring search over type and raw payload across the
+   * WHOLE log, newest matches first (returned oldest-first, capped at limit).
+   */
+  search(query: string, limit: number): StoredEvent[] {
+    const like = `%${query}%`
+    const rows = this.#db
+      .prepare(
+        'SELECT seq, ts, type, payload FROM events WHERE type LIKE ? OR payload LIKE ? ORDER BY seq DESC LIMIT ?',
+      )
+      .all(like, like, limit) as unknown as EventRow[]
+    return rows.reverse().map((row) => this.#toEvent(row))
+  }
+
   count(): number {
     const row = this.#db.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number }
     return row.n

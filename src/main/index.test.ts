@@ -73,6 +73,7 @@ function fakeStore(): EventStore {
     count: vi.fn(() => 42),
     list: vi.fn(() => []),
     tail: vi.fn(() => []),
+    search: vi.fn(() => []),
     close: vi.fn(),
   } as unknown as EventStore
 }
@@ -137,13 +138,15 @@ describe('registerEventIpc', () => {
     expect(store.list).toHaveBeenCalledWith(5)
     handlers.get('events:tail')?.(undefined, 100, 7)
     expect(store.tail).toHaveBeenCalledWith(100, 7)
+    handlers.get('events:search')?.(undefined, 'greet', 100)
+    expect(store.search).toHaveBeenCalledWith('greet', 100)
   })
 
   it('registers on ipcMain by default', () => {
     registerEventIpc(fakeStore())
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['events:count', 'events:list', 'events:tail'])
+    expect(channels).toEqual(['events:count', 'events:list', 'events:tail', 'events:search'])
   })
 })
 

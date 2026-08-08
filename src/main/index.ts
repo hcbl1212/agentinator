@@ -55,6 +55,7 @@ export function registerEventIpc(
   handle('events:tail', (_event, limit, beforeSeq) =>
     store.tail(limit as number, beforeSeq as number | undefined),
   )
+  handle('events:search', (_event, query, limit) => store.search(query as string, limit as number))
 }
 
 export function registerAgentIpc(

@@ -149,6 +149,19 @@ describe('EventStore', () => {
     expect(store.listBySession('session_old')).toHaveLength(2)
   })
 
+  it('searches the whole log by type and payload, case-insensitively, capped and ordered', () => {
+    const store = open()
+    store.append('app.started', { version: '0.1.0' })
+    store.append('agent.text', { sessionId: 'session_1', text: 'Adding the GREET util' })
+    store.append('agent.text', { sessionId: 'session_1', text: 'unrelated' })
+    store.append('tool.called', { sessionId: 'session_1', callId: 'c', tool: 'bash', input: {} })
+
+    expect(store.search('greet', 10).map((event) => event.seq)).toEqual([2])
+    expect(store.search('tool.', 10).map((event) => event.seq)).toEqual([4])
+    expect(store.search('session_1', 2).map((event) => event.seq)).toEqual([3, 4])
+    expect(store.search('nothing-here', 10)).toEqual([])
+  })
+
   it('exposes no way to update or delete events', () => {
     const store = open()
 

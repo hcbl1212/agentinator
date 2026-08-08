@@ -12,6 +12,7 @@ function stubBridge(): AgentinatorBridge {
       count: vi.fn(() => Promise.resolve(0)),
       list: vi.fn(() => Promise.resolve([])),
       tail: vi.fn(() => Promise.resolve([])),
+      search: vi.fn(() => Promise.resolve([])),
       onAppended: vi.fn(() => () => undefined),
     },
     agent: {

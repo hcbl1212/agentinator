@@ -18,23 +18,30 @@ function text(seq: number, body: string): StoredEvent {
 interface BridgeStub {
   bridge: AgentinatorBridge
   tail: ReturnType<typeof vi.fn>
+  search: ReturnType<typeof vi.fn>
   emit: (event: StoredEvent) => void
   unsubscribe: ReturnType<typeof vi.fn>
 }
 
-function stubBridge(pages: (limit: number, beforeSeq?: number) => StoredEvent[]): BridgeStub {
+function stubBridge(
+  pages: (limit: number, beforeSeq?: number) => StoredEvent[],
+  found: (query: string) => StoredEvent[] = () => [],
+): BridgeStub {
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
   const tail = vi.fn((limit: number, beforeSeq?: number) =>
     Promise.resolve(pages(limit, beforeSeq)),
   )
+  const search = vi.fn((query: string) => Promise.resolve(found(query)))
   return {
     tail,
+    search,
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
         list: vi.fn(() => Promise.resolve([])),
         tail: tail as AgentinatorBridge['events']['tail'],
+        search: search as AgentinatorBridge['events']['search'],
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
           appended = listener
           return unsubscribe as () => void
@@ -59,6 +66,15 @@ describe('Timeline', () => {
     render(<Timeline />)
 
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
+  })
+
+  it('search is inert without a bridge', async () => {
+    const user = userEvent.setup()
+
+    render(<Timeline />)
+    await user.type(screen.getByRole('searchbox', { name: 'Search events' }), 'x')
+
+    expect(screen.getByText(/No matches for “x”/)).toBeInTheDocument()
   })
 
   it('fetches only the newest window, not the whole log', async () => {
@@ -151,6 +167,122 @@ describe('Timeline', () => {
     } finally {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
     }
+  })
+
+  it('searches the whole log and shows matches, hiding paging and clear', async () => {
+    const stub = stubBridge(
+      () => [text(9, 'window line')],
+      (query) => (query === 'greet' ? [text(2, 'greet match')] : []),
+    )
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline pageSize={5} />)
+    await waitFor(() => {
+      expect(screen.getByText('window line')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search events' }), 'greet')
+
+    await waitFor(() => {
+      expect(screen.getByText('greet match')).toBeInTheDocument()
+    })
+    expect(stub.search).toHaveBeenLastCalledWith('greet', 5)
+    expect(screen.queryByText('window line')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+  })
+
+  it('shows a no-matches empty state and folds matching live appends into results', async () => {
+    const stub = stubBridge(
+      () => [],
+      () => [],
+    )
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline />)
+    await user.type(screen.getByRole('searchbox', { name: 'Search events' }), 'greet')
+    await waitFor(() => {
+      expect(screen.getByText(/No matches for “greet”/)).toBeInTheDocument()
+    })
+
+    act(() => {
+      stub.emit(text(4, 'a live greet event'))
+      stub.emit(text(5, 'unrelated'))
+    })
+
+    expect(screen.getByText('a live greet event')).toBeInTheDocument()
+    expect(screen.queryByText('unrelated')).not.toBeInTheDocument()
+
+    await user.clear(screen.getByRole('searchbox', { name: 'Search events' }))
+    await waitFor(() => {
+      expect(screen.getByText('unrelated')).toBeInTheDocument()
+    })
+  })
+
+  it('clears the view only — history restores via Load earlier', async () => {
+    const stub = stubBridge((_limit, beforeSeq) =>
+      beforeSeq === undefined ? [text(4, 'visible line')] : [text(3, 'restored line')],
+    )
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline pageSize={2} />)
+    await waitFor(() => {
+      expect(screen.getByText('visible line')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(screen.getByText(/View cleared/)).toBeInTheDocument()
+    expect(screen.queryByText('visible line')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Load earlier/ }))
+    await waitFor(() => {
+      expect(screen.getByText('restored line')).toBeInTheDocument()
+    })
+    expect(stub.tail).toHaveBeenLastCalledWith(2, 5)
+
+    act(() => {
+      stub.emit(text(6, 'fresh after clear'))
+    })
+    expect(screen.getByText('fresh after clear')).toBeInTheDocument()
+  })
+
+  it('clearing an empty view keeps the default empty state', async () => {
+    const stub = stubBridge(() => [text(1, 'only line')])
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline />)
+    await waitFor(() => {
+      expect(screen.getByText('only line')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(screen.getByText(/View cleared/)).toBeInTheDocument()
+  })
+
+  it('ignores search results that resolve after unmount', async () => {
+    let resolveSearch: (results: StoredEvent[]) => void = () => undefined
+    const stub = stubBridge(() => [])
+    stub.search.mockReturnValue(
+      new Promise<StoredEvent[]>((resolve) => {
+        resolveSearch = resolve
+      }),
+    )
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    const { unmount } = render(<Timeline />)
+    await user.type(screen.getByRole('searchbox', { name: 'Search events' }), 'g')
+    unmount()
+    resolveSearch([text(1, 'stale result')])
+    await Promise.resolve()
+
+    expect(screen.queryByText('stale result')).not.toBeInTheDocument()
   })
 
   it('unsubscribes on unmount and ignores a late window', async () => {

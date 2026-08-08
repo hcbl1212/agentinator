@@ -49,6 +49,12 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:tail', 50, undefined)
   })
 
+  it('routes events.search over IPC', async () => {
+    await bridge.events.search('greet', 100)
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:search', 'greet', 100)
+  })
+
   it('subscribes to appended events and unwraps the IPC envelope', () => {
     const listener = vi.fn()
 

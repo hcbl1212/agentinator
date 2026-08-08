@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
-import { describeEvent, mergeBySeq } from './timelineFormat'
+import { describeEvent, matchesQuery, mergeBySeq } from './timelineFormat'
 
 function stored<T extends EventType>(type: T, payload: EventPayloads[T], seq = 1): StoredEvent {
   return { seq, ts: '2026-08-08T00:00:00.000Z', type, payload } as StoredEvent
@@ -148,6 +148,16 @@ describe('describeEvent', () => {
       text: 'holograms.rendered',
       tone: 'faint',
     })
+  })
+})
+
+describe('matchesQuery', () => {
+  it('matches on event type and on payload content, case-insensitively', () => {
+    const event = stored('agent.text', { sessionId: 's', text: 'Adding the greet util' })
+
+    expect(matchesQuery(event, 'GREET')).toBe(true)
+    expect(matchesQuery(event, 'agent.text')).toBe(true)
+    expect(matchesQuery(event, 'nothing-here')).toBe(false)
   })
 })
 

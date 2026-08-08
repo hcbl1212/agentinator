@@ -11,6 +11,8 @@ export interface AgentinatorBridge {
     list(afterSeq?: number): Promise<StoredEvent[]>
     /** Newest `limit` events oldest-first; with beforeSeq, the page before it. */
     tail(limit: number, beforeSeq?: number): Promise<StoredEvent[]>
+    /** Whole-log substring search over type + payload, newest matches first. */
+    search(query: string, limit: number): Promise<StoredEvent[]>
     /** Subscribe to live appends; returns an unsubscribe function. */
     onAppended(listener: (event: StoredEvent) => void): () => void
   }

@@ -89,6 +89,54 @@ body {
   --err: #e06555;
 }
 
+.timeline-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.timeline-toolbar .pane-label {
+  margin-bottom: 0;
+}
+
+.timeline-search {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+}
+
+.timeline-search::placeholder {
+  color: var(--faint);
+}
+
+.timeline-search:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.timeline-clear {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.6rem;
+}
+
+.timeline-clear:hover,
+.timeline-clear:focus-visible {
+  border-color: var(--soft);
+  color: var(--soft);
+  outline: none;
+}
+
 .load-earlier {
   background: transparent;
   border: 1px dashed var(--line);
