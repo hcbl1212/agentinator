@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -263,6 +263,55 @@ describe('Timeline', () => {
     await user.click(screen.getByRole('button', { name: 'Clear' }))
 
     expect(screen.getByText(/View cleared/)).toBeInTheDocument()
+  })
+
+  it('pauses autoscroll while reading history and re-pins via Latest', async () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      value: scrollIntoView,
+      configurable: true,
+    })
+    try {
+      const stub = stubBridge(() => [text(1, 'a line')])
+      window.agentinator = stub.bridge
+
+      render(<Timeline />)
+      await waitFor(() => {
+        expect(screen.getByText('a line')).toBeInTheDocument()
+      })
+
+      const pane = screen.getByRole('region', { name: 'Activity timeline' })
+      Object.defineProperty(pane, 'scrollHeight', { value: 1000, configurable: true })
+      Object.defineProperty(pane, 'clientHeight', { value: 200, configurable: true })
+      pane.scrollTop = 100
+      fireEvent.scroll(pane)
+
+      expect(pane.className).toContain('is-scrolled')
+      const callsWhileUnpinned = scrollIntoView.mock.calls.length
+
+      act(() => {
+        stub.emit(text(2, 'new while reading'))
+      })
+      expect(scrollIntoView.mock.calls.length).toBe(callsWhileUnpinned)
+      expect(screen.getByText('new while reading')).toBeInTheDocument()
+
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: '↓ Latest' }))
+
+      expect(scrollIntoView.mock.calls.length).toBeGreaterThan(callsWhileUnpinned)
+      expect(screen.queryByRole('button', { name: '↓ Latest' })).not.toBeInTheDocument()
+
+      pane.scrollTop = 960
+      fireEvent.scroll(pane)
+      expect(pane.className).toContain('is-scrolled')
+      expect(screen.queryByRole('button', { name: '↓ Latest' })).not.toBeInTheDocument()
+
+      pane.scrollTop = 0
+      fireEvent.scroll(pane)
+      expect(pane.className).not.toContain('is-scrolled')
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
   })
 
   it('ignores search results that resolve after unmount', async () => {

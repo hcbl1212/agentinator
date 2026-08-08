@@ -9,13 +9,17 @@ import { describeEvent, matchesQuery, mergeBySeq } from '../timeline/timelineFor
  * full log stays in SQLite — never in renderer memory.
  *
  * Search queries the whole log store-side; Clear empties the VIEW only
- * (events are immutable — Load earlier brings history back).
+ * (events are immutable — Load earlier brings history back). Autoscroll is
+ * pinned-to-bottom semantics: reading history never gets yanked by a live
+ * append; “↓ Latest” re-pins.
  */
 export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.Element {
   const [windowEvents, setWindowEvents] = useState<StoredEvent[]>([])
   const [searchResults, setSearchResults] = useState<StoredEvent[]>([])
   const [query, setQuery] = useState('')
   const [floorSeq, setFloorSeq] = useState(0)
+  const [scrolled, setScrolled] = useState(false)
+  const [pinned, setPinned] = useState(true)
   const queryRef = useRef('')
   queryRef.current = query
   const endRef = useRef<HTMLDivElement>(null)
@@ -63,13 +67,25 @@ export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.E
   const searching = query !== ''
   const visible = searching ? searchResults : windowEvents
 
-  useEffect(() => {
+  const scrollToEnd = (): void => {
     const end = endRef.current
     // jsdom has no scrollIntoView; the guard keeps tests honest.
     if (end !== null && typeof end.scrollIntoView === 'function') {
       end.scrollIntoView({ block: 'end' })
     }
-  }, [visible])
+  }
+
+  useEffect(() => {
+    if (pinned) {
+      scrollToEnd()
+    }
+  }, [visible, pinned])
+
+  const handleScroll = (scrollEvent: React.UIEvent<HTMLElement>): void => {
+    const pane = scrollEvent.currentTarget
+    setScrolled(pane.scrollTop > 0)
+    setPinned(pane.scrollHeight - pane.scrollTop - pane.clientHeight < 40)
+  }
 
   const earliestCursor = windowEvents[0]?.seq ?? floorSeq + 1
   const hasEarlier = !searching && earliestCursor > 1
@@ -102,7 +118,11 @@ export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.E
   }
 
   return (
-    <section className="pane timeline" aria-label="Activity timeline">
+    <section
+      className={`pane timeline${scrolled ? ' is-scrolled' : ''}`}
+      aria-label="Activity timeline"
+      onScroll={handleScroll}
+    >
       <div className="timeline-toolbar">
         <h2 className="pane-label">Timeline</h2>
         <input
@@ -145,6 +165,18 @@ export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.E
             )
           })}
         </ol>
+      )}
+      {!pinned && (
+        <button
+          type="button"
+          className="jump-latest"
+          onClick={() => {
+            setPinned(true)
+            scrollToEnd()
+          }}
+        >
+          ↓ Latest
+        </button>
       )}
       <div ref={endRef} />
     </section>
