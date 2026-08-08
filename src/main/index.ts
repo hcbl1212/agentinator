@@ -68,5 +68,3 @@ export async function bootstrap(
 
   return store
 }
-
-void bootstrap()

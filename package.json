@@ -8,7 +8,7 @@
     "url": "git+https://github.com/hcbl1212/agentinator.git"
   },
   "type": "module",
-  "main": "./out/main/index.js",
+  "main": "./out/main/entry.js",
   "scripts": {
     "postinstall": "node scripts/ensure-electron.mjs",
     "dev": "electron-vite dev",

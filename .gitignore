@@ -3,6 +3,9 @@ out/
 dist/
 coverage/
 *.log
+*.db
+*.db-shm
+*.db-wal
 .DS_Store
 .env
 *.local

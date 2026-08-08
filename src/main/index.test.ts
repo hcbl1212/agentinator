@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { EventStore } from './eventStore'
+import { EventStore } from './eventStore'
 
-const { mockApp, MockBrowserWindow, mockShell, mockIpcMain, userData } = vi.hoisted(() => {
+const { mockApp, MockBrowserWindow, mockShell, mockIpcMain } = vi.hoisted(() => {
   type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
 
   class MockBrowserWindow {
@@ -28,20 +28,13 @@ const { mockApp, MockBrowserWindow, mockShell, mockIpcMain, userData } = vi.hois
     }
   }
 
-  // The import-time bootstrap() writes a real event-log file. getPath reads
-  // this holder lazily — the test module body fills it with a temp dir before
-  // bootstrap's post-whenReady continuation runs (module evaluation finishes
-  // ahead of microtasks), so tests never touch a real userData directory.
-  const userData = { dir: '' }
-
   return {
-    userData,
     MockBrowserWindow,
     mockApp: {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
-      getPath: vi.fn(() => userData.dir),
+      getPath: vi.fn(),
       getVersion: vi.fn(() => '0.1.0-test'),
     },
     mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
@@ -56,9 +49,11 @@ vi.mock('electron', () => ({
   ipcMain: mockIpcMain,
 }))
 
-userData.dir = mkdtempSync(join(tmpdir(), 'agentinator-test-'))
-
 import { bootstrap, createWindow, registerEventIpc } from './index'
+
+// index.ts has no import-time side effects (see entry.ts), so this runs
+// before any code can open a store: every getPath call lands in a temp dir.
+mockApp.getPath.mockReturnValue(mkdtempSync(join(tmpdir(), 'agentinator-test-')))
 
 function fakeStore(): EventStore {
   return {
@@ -149,6 +144,18 @@ describe('bootstrap', () => {
     expect(mockIpcMain.handle).toHaveBeenCalledWith('events:count', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
+  })
+
+  it('defaults to the real electron app and a file-backed store', async () => {
+    const store = await bootstrap()
+
+    try {
+      expect(store).toBeInstanceOf(EventStore)
+      expect(store.count()).toBe(1)
+      expect(store.list()[0]?.type).toBe('app.started')
+    } finally {
+      store.close()
+    }
   })
 
   it('quits the app when the last window closes, on every platform', async () => {
