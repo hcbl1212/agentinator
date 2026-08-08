@@ -24,11 +24,10 @@ describe('App', () => {
     expect(screen.getByText(/target app renders here/)).toBeInTheDocument()
   })
 
-  it('shows zeroed cost and agent counters in the status bar', () => {
+  it('shows a zeroed cost readout and version in the status bar', () => {
     render(<App />)
 
-    expect(screen.getByText('0 agents')).toBeInTheDocument()
-    expect(screen.getByText('$0.00 today')).toBeInTheDocument()
+    expect(screen.getByText('$0.0000')).toBeInTheDocument()
     expect(screen.getByText('v0.1.0')).toBeInTheDocument()
   })
 })

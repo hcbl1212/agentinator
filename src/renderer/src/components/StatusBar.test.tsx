@@ -50,10 +50,48 @@ afterEach(() => {
 })
 
 describe('StatusBar', () => {
-  it('shows a placeholder when no bridge is available (plain browser/test)', () => {
+  it('shows placeholders when no bridge is available (plain browser/test)', () => {
     render(<StatusBar />)
 
     expect(screen.getByText('log —')).toBeInTheDocument()
+    expect(screen.getByText('$0.0000')).toBeInTheDocument()
+    expect(screen.getByText('cache —')).toBeInTheDocument()
+  })
+
+  it('accumulates spend live from cost events', async () => {
+    const stub = stubBridge(Promise.resolve(1))
+    window.agentinator = stub.bridge
+
+    render(<StatusBar />)
+
+    act(() => {
+      stub.emit({
+        seq: 2,
+        ts: 't',
+        type: 'cost.usage',
+        payload: {
+          sessionId: 's',
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheReadInputTokens: 50,
+          usd: 0.0042,
+        },
+      } as StoredEvent)
+      stub.emit({
+        seq: 3,
+        ts: 't',
+        type: 'cost.usage',
+        payload: {
+          sessionId: 's',
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheReadInputTokens: 50,
+          usd: 0.001,
+        },
+      } as StoredEvent)
+    })
+
+    expect(screen.getByText('$0.0052')).toBeInTheDocument()
   })
 
   it('shows the event-log count fetched over the bridge', async () => {

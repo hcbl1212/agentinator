@@ -5,6 +5,7 @@ import type { EventPayloads } from '../../../shared/events'
 export function StatusBar(): React.JSX.Element {
   const [eventCount, setEventCount] = useState<number | null>(null)
   const [tokens, setTokens] = useState({ input: 0, cacheRead: 0 })
+  const [spentUsd, setSpentUsd] = useState(0)
 
   useEffect(() => {
     const bridge = window.agentinator
@@ -27,6 +28,7 @@ export function StatusBar(): React.JSX.Element {
           input: previous.input + payload.inputTokens,
           cacheRead: previous.cacheRead + payload.cacheReadInputTokens,
         }))
+        setSpentUsd((previous) => previous + payload.usd)
       }
     })
     return () => {
@@ -41,8 +43,7 @@ export function StatusBar(): React.JSX.Element {
 
   return (
     <footer className="statusbar" aria-label="Status bar">
-      <span>0 agents</span>
-      <span>$0.00 today</span>
+      <span title="Spend observed live this session">${spentUsd.toFixed(4)}</span>
       <span>{eventCount === null ? 'log —' : `log ${eventCount} events`}</span>
       <span title="Share of input tokens served from the prompt cache this session">
         {cacheHealth}
