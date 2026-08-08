@@ -17,12 +17,34 @@ Requires Node 22+.
 
 ```sh
 npm install
-npm run dev        # launch the app with hot reload
-npm test           # unit tests + 100% coverage gate
-npm run lint       # eslint
-npm run typecheck  # tsc --noEmit
-npm run build      # production build to out/
+npm run dev           # launch the app with hot reload
+npm test              # unit tests + 100% coverage gate (no network, no API key)
+npm run lint          # eslint
+npm run typecheck     # tsc --noEmit
+npm run build         # production build to out/
+npm run smoke:claude  # opt-in: run the Claude adapter against real Claude (see below)
 ```
+
+## Connecting Claude
+
+Agentinator talks to Claude through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk),
+which runs the Claude Code runtime under the hood. Credentials resolve in this order:
+
+1. `ANTHROPIC_API_KEY` — a Claude Console API key (usage-billed)
+2. `CLAUDE_CODE_OAUTH_TOKEN` — a long-lived token minted from a subscription
+3. **The Claude Code login already on your machine** — if you use Claude Code with a
+   claude.ai Pro/Max subscription, Agentinator works with no configuration at all
+
+So a subscription is enough: sessions count against your subscription's usage limits, and the
+dollar figures in cost events are notional (nothing is billed beyond the subscription).
+
+- **Verify your setup**: `npm run smoke:claude` runs one real session end to end through the
+  adapter and asserts the normalized event stream. It is gated behind `CLAUDE_SMOKE=1` — CI
+  and normal `npm test` runs never make a network call.
+- **Headless environments** (CI, servers): run `claude setup-token` once on a logged-in
+  machine and export the result as `CLAUDE_CODE_OAUTH_TOKEN`.
+- **The test suite never needs credentials.** All unit tests run against the mock provider;
+  the live smoke test is the only opt-in exception.
 
 ### Troubleshooting
 
