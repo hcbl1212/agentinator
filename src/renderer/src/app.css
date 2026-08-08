@@ -54,8 +54,24 @@ body {
 .panes {
   display: grid;
   flex: 1;
-  grid-template-columns: 52px 1fr 380px;
+  /* grid-template-columns is set inline (rail · gutter · stream · gutter ·
+     inspector) so the widths can be dragged; this is the default fallback. */
+  grid-template-columns: 52px 6px 1fr 6px 380px;
   min-height: 0;
+}
+
+/* draggable separators between panes */
+.pane-gutter {
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.pane-gutter:hover,
+.pane-gutter:focus-visible,
+.pane-gutter.is-dragging {
+  background: var(--accent);
+  outline: none;
 }
 
 /* the unified conversation ∪ timeline: log fills, composer docks at the foot */

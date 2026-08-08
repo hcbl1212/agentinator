@@ -1,7 +1,5 @@
-import { AgentRail } from './components/AgentRail'
-import { Inspector } from './components/Inspector'
+import { Panes } from './components/Panes'
 import { StatusBar } from './components/StatusBar'
-import { Stream } from './components/Stream'
 import { SelectionProvider } from './state/selection'
 
 export function App(): React.JSX.Element {
@@ -19,11 +17,7 @@ function AppShell(): React.JSX.Element {
         <span className="titlebar-name">Agentinator</span>
         <span className="titlebar-context">no workspace open</span>
       </header>
-      <div className="panes">
-        <AgentRail />
-        <Stream />
-        <Inspector />
-      </div>
+      <Panes />
       <StatusBar />
     </div>
   )
