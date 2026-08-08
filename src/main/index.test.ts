@@ -179,13 +179,35 @@ describe('registerAgentIpc', () => {
     start: ReturnType<typeof vi.fn>
     send: ReturnType<typeof vi.fn>
     cancel: ReturnType<typeof vi.fn>
+    describeProvider: ReturnType<typeof vi.fn>
   } {
     return {
       start: vi.fn(() => 'session_new'),
       send: vi.fn(() => Promise.resolve()),
       cancel: vi.fn(() => Promise.resolve()),
+      describeProvider: vi.fn(() => ({ providerId: 'claude', label: 'Claude' })),
     }
   }
+
+  it('reports the current task agent, falling back when the provider is unknown', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('agent:current')?.(undefined)).toEqual({
+      providerId: 'claude',
+      label: 'Claude',
+    })
+
+    manager.describeProvider.mockReturnValueOnce(undefined)
+    expect(handlers.get('agent:current')?.(undefined)).toEqual({
+      providerId: 'claude',
+      label: 'claude',
+    })
+  })
 
   it('starts the mock demo session in the current working directory', () => {
     const manager = fakeManager()
@@ -249,7 +271,13 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(fakeManager() as unknown as SessionManager)
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['agent:start-demo', 'agent:start-task', 'agent:send', 'agent:cancel'])
+    expect(channels).toEqual([
+      'agent:current',
+      'agent:start-demo',
+      'agent:start-task',
+      'agent:send',
+      'agent:cancel',
+    ])
   })
 })
 

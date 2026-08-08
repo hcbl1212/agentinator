@@ -801,6 +801,11 @@ body {
   user-select: none;
 }
 
+.console-agent {
+  color: var(--soft);
+  font-weight: 400;
+}
+
 .console-input {
   background: transparent;
   border: none;

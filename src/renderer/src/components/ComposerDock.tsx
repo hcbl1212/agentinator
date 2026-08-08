@@ -21,6 +21,8 @@ export function ComposerDock(): React.JSX.Element {
   const activeRef = useRef<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('running')
   const [question, setQuestion] = useState<EventPayloads['agent.question'] | null>(null)
+  // The vendor/model behind the prompt — reflected in the UI, never hardcoded.
+  const [agentLabel, setAgentLabel] = useState<string | null>(null)
 
   useEffect(() => {
     const mounted = window.agentinator
@@ -28,6 +30,11 @@ export function ComposerDock(): React.JSX.Element {
       return
     }
     let cancelled = false
+    void mounted.agent.current().then((agent) => {
+      if (!cancelled) {
+        setAgentLabel(agent.label)
+      }
+    })
     void mounted.approvals.pending().then((pending) => {
       if (!cancelled) {
         setApprovals(pending)
@@ -114,6 +121,7 @@ export function ComposerDock(): React.JSX.Element {
   }
 
   const replying = activeSessionId !== null
+  const who = agentLabel ?? 'the agent'
 
   return (
     <div className="composer-dock" aria-label="Composer">
@@ -156,15 +164,15 @@ export function ComposerDock(): React.JSX.Element {
           )}
           <div className="console">
             <span className="console-prompt" aria-hidden="true">
-              {'>'}
+              {agentLabel !== null && <span className="console-agent">{agentLabel}</span>} &gt;
             </span>
             <textarea
               className="console-input"
-              aria-label={replying ? 'Reply to Claude' : 'Task for Claude'}
+              aria-label={replying ? 'Reply to the agent' : 'Task for the agent'}
               placeholder={
                 replying
-                  ? 'Reply or steer the agent…  (Enter to send, Shift+Enter for a newline)'
-                  : 'Describe a task for Claude to do in this repo…  (Enter to send)'
+                  ? `Reply to ${who} or steer it…  (Enter to send, Shift+Enter for a newline)`
+                  : `Describe a task for ${who} to do in this repo…  (Enter to send)`
               }
               rows={1}
               value={prompt}

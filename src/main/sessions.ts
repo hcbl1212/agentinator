@@ -58,6 +58,12 @@ export class SessionManager {
     return [...this.#providers.keys()]
   }
 
+  /** A provider's public descriptor (id + human label), or undefined. */
+  describeProvider(id: string): { providerId: string; label: string } | undefined {
+    const provider = this.#providers.get(id)
+    return provider === undefined ? undefined : { providerId: provider.id, label: provider.label }
+  }
+
   activeCount(): number {
     return this.#handles.size
   }

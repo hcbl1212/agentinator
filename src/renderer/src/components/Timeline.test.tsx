@@ -56,6 +56,7 @@ function stubBridge(
         setBudget: vi.fn(() => Promise.resolve()),
       },
       agent: {
+        current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         startTask: vi.fn(() => Promise.resolve('s')),
         send: vi.fn(() => Promise.resolve()),

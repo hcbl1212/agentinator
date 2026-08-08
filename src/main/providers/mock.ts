@@ -30,6 +30,7 @@ export function createMockProvider(
 ): AgentProvider {
   return {
     id: 'mock',
+    label: 'Mock',
     capabilities: {
       vision: false,
       toolUse: true,

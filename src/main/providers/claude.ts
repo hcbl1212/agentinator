@@ -205,6 +205,7 @@ export function createClaudeProvider(
 ): AgentProvider {
   return {
     id: 'claude',
+    label: 'Claude',
     capabilities: {
       vision: true,
       toolUse: true,

@@ -9,6 +9,7 @@ import type { AgentProvider } from './providers/types'
 function instantProvider(id: string): AgentProvider {
   return {
     id,
+    label: id,
     capabilities: {
       vision: false,
       toolUse: false,
@@ -123,6 +124,14 @@ describe('SessionManager', () => {
     manager.start({ providerId: 'boom', title: 'T', prompt: 'P', cwd: '/tmp' })
 
     expect(manager.activeCount()).toBe(0)
+  })
+
+  it('describes a registered provider and returns undefined for an unknown one', () => {
+    const manager = new SessionManager(new EventStore())
+    manager.register(instantProvider('claude'))
+
+    expect(manager.describeProvider('claude')).toEqual({ providerId: 'claude', label: 'claude' })
+    expect(manager.describeProvider('nope')).toBeUndefined()
   })
 
   it('cancelling an unknown session is a no-op', async () => {

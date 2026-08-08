@@ -48,6 +48,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         setBudget: vi.fn(() => Promise.resolve()),
       },
       agent: {
+        current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         startTask: startTask as AgentinatorBridge['agent']['startTask'],
         send: send as AgentinatorBridge['agent']['send'],
@@ -76,8 +77,8 @@ function requested(requestId: string): StoredEvent {
 }
 
 async function launchTask(): Promise<void> {
-  await userEvent.type(screen.getByRole('textbox', { name: 'Task for Claude' }), 'Do it{Enter}')
-  await screen.findByRole('textbox', { name: 'Reply to Claude' })
+  await userEvent.type(screen.getByRole('textbox', { name: 'Task for the agent' }), 'Do it{Enter}')
+  await screen.findByRole('textbox', { name: 'Reply to the agent' })
 }
 
 afterEach(() => {
@@ -89,7 +90,20 @@ describe('ComposerDock', () => {
     render(<ComposerDock />)
 
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Task for Claude' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Task for the agent' })).not.toBeInTheDocument()
+  })
+
+  it('reflects the current agent at the prompt, not a hardcoded vendor', async () => {
+    const stub = stubBridge()
+    ;(stub.bridge.agent.current as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: 'acme',
+      label: 'Acme-7',
+    })
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+
+    expect(await screen.findByText('Acme-7')).toBeInTheDocument()
   })
 
   it('launches a task from the console prompt and clears it', async () => {
@@ -97,7 +111,7 @@ describe('ComposerDock', () => {
     window.agentinator = stub.bridge
 
     render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, 'Add a hello util{Enter}')
 
     expect(stub.startTask).toHaveBeenCalledWith('Add a hello util')
@@ -109,7 +123,7 @@ describe('ComposerDock', () => {
     window.agentinator = stub.bridge
 
     render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
 
     await userEvent.type(input, 'first line')
     fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
@@ -124,7 +138,7 @@ describe('ComposerDock', () => {
     window.agentinator = stub.bridge
 
     render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, '   {Enter}')
 
     expect(stub.startTask).not.toHaveBeenCalled()
@@ -140,7 +154,7 @@ describe('ComposerDock', () => {
     expect(screen.getByText('Working…')).toBeInTheDocument()
 
     await userEvent.type(
-      screen.getByRole('textbox', { name: 'Reply to Claude' }),
+      screen.getByRole('textbox', { name: 'Reply to the agent' }),
       'also add tests{Enter}',
     )
 
@@ -192,7 +206,7 @@ describe('ComposerDock', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New task' }))
 
     expect(stub.cancel).toHaveBeenCalledWith('session_task')
-    expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
   })
 
   it('clears the active session and returns to the launcher when the session ends', async () => {
@@ -205,7 +219,7 @@ describe('ComposerDock', () => {
       stub.emit(sessionEvent('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
     })
 
-    expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
   })
 
   it('ignores session idle, question, and ended events for other sessions', async () => {
@@ -230,7 +244,7 @@ describe('ComposerDock', () => {
 
     expect(screen.getByText('Working…')).toBeInTheDocument()
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Reply to Claude' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Reply to the agent' })).toBeInTheDocument()
   })
 
   it('shows already-pending approvals and resolves them via the bridge', async () => {

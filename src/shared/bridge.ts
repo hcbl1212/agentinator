@@ -12,6 +12,14 @@ export interface PendingApproval {
   input: unknown
 }
 
+/** The agent a new task will run on — surfaced so the UI reflects the current
+ * vendor/model instead of hardcoding one. */
+export interface AgentDescriptor {
+  providerId: string
+  label: string
+  model?: string
+}
+
 /**
  * The API the preload script exposes to the renderer as `window.agentinator`.
  * The renderer never touches Node or Electron directly — everything crosses
@@ -33,9 +41,11 @@ export interface AgentinatorBridge {
     onAppended(listener: (event: StoredEvent) => void): () => void
   }
   agent: {
+    /** The agent a new task will run on (vendor label + optional model). */
+    current(): Promise<AgentDescriptor>
     /** Launch the scripted mock session — writes real events into the log. */
     startDemo(): Promise<string>
-    /** Launch a real Claude agent on the workspace repo with a task prompt. */
+    /** Launch a real agent on the workspace repo with a task prompt. */
     startTask(prompt: string): Promise<string>
     /** Send a follow-up message into an ongoing session (reply / steer). */
     send(sessionId: string, text: string): Promise<void>

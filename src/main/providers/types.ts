@@ -47,6 +47,9 @@ export interface AgentSessionHandle {
 
 export interface AgentProvider {
   readonly id: string
+  /** Human-facing name of the vendor/agent (e.g. "Claude"). The UI shows this
+   * instead of hardcoding a vendor — the provider layer owns its own name. */
+  readonly label: string
   readonly capabilities: ProviderCapabilities
   startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle
 }
