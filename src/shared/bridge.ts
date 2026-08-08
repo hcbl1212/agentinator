@@ -1,4 +1,4 @@
-import type { StoredEvent } from './events'
+import type { ImageAttachment, StoredEvent } from './events'
 
 /** Grace window for a DENY before it reaches the agent — a mis-clicked deny
  * is the costly mistake, so it's undoable; approvals commit instantly.
@@ -45,10 +45,11 @@ export interface AgentinatorBridge {
     current(): Promise<AgentDescriptor>
     /** Launch the scripted mock session — writes real events into the log. */
     startDemo(): Promise<string>
-    /** Launch a real agent on the workspace repo with a task prompt. */
-    startTask(prompt: string): Promise<string>
-    /** Send a follow-up message into an ongoing session (reply / steer). */
-    send(sessionId: string, text: string): Promise<void>
+    /** Launch a real agent on the workspace repo with a task prompt and any
+     * attached images (pasted screenshots). */
+    startTask(prompt: string, images?: ImageAttachment[]): Promise<string>
+    /** Send a follow-up message (with any attached images) into a session. */
+    send(sessionId: string, text: string, images?: ImageAttachment[]): Promise<void>
     cancel(sessionId: string): Promise<void>
   }
   settings: {

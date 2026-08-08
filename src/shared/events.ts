@@ -13,6 +13,13 @@ export function createEntityId(kind: EntityKind): string {
   return `${kind}_${crypto.randomUUID()}`
 }
 
+/** A base64 image attached to a message (e.g. a pasted screenshot), carried to
+ * vision-capable providers. `data` is base64 with no data-URL prefix. */
+export interface ImageAttachment {
+  mediaType: string
+  data: string
+}
+
 export interface EventPayloads {
   /** Emitted once per app launch — proves the fabric end-to-end. */
   'app.started': { version: string }
@@ -28,8 +35,10 @@ export interface EventPayloads {
     requestId: string
     questions: Array<{ question: string; options: string[] }>
   }
-  /** A user message sent into an ongoing session (steering / reply). */
-  'user.message': { sessionId: string; text: string }
+  /** A user message sent into an ongoing session (steering / reply).
+   * imageCount is present (>0) when screenshots were attached — the bytes go to
+   * the model, not the log; an added optional field keeps old logs replaying. */
+  'user.message': { sessionId: string; text: string; imageCount?: number }
   'tool.called': { sessionId: string; callId: string; tool: string; input: unknown }
   'tool.resulted': { sessionId: string; callId: string; ok: boolean; output: string }
   'file.diffed': {

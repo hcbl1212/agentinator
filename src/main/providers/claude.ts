@@ -1,4 +1,5 @@
 import { createEntityId } from '../../shared/events'
+import type { ImageAttachment } from '../../shared/events'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
   AgentProvider,
@@ -28,9 +29,13 @@ export type CanUseTool = (
   | { behavior: 'deny'; message: string }
 >
 
+type SdkContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
 export type SdkUserMessage = {
   type: 'user'
-  message: { role: 'user'; content: string }
+  message: { role: 'user'; content: string | SdkContentBlock[] }
   parent_tool_use_id: null
   session_id: string
 }
@@ -61,10 +66,22 @@ function toNumber(value: unknown): number {
   return typeof value === 'number' ? value : 0
 }
 
-function userMessage(text: string): SdkUserMessage {
+function userMessage(text: string, images: ImageAttachment[] = []): SdkUserMessage {
+  // Plain string when there are no images (keeps the cache-friendly shape);
+  // a content-block array with base64 image blocks when there are.
+  const content: string | SdkContentBlock[] =
+    images.length === 0
+      ? text
+      : [
+          { type: 'text', text },
+          ...images.map((image): SdkContentBlock => ({
+            type: 'image',
+            source: { type: 'base64', media_type: image.mediaType, data: image.data },
+          })),
+        ]
   return {
     type: 'user',
-    message: { role: 'user', content: text },
+    message: { role: 'user', content },
     parent_tool_use_id: null,
     session_id: '',
   }
@@ -219,7 +236,7 @@ export function createClaudeProvider(
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {
       const { sessionId } = context
       const input = createInputStream()
-      input.push(userMessage(context.prompt))
+      input.push(userMessage(context.prompt, context.images))
 
       const canUseTool: CanUseTool = async (toolName, toolInput) => {
         // The agent's own questions are not permission requests — surface them
@@ -290,8 +307,8 @@ export function createClaudeProvider(
       void run()
 
       return {
-        send: (text) => {
-          input.push(userMessage(text))
+        send: (text, images) => {
+          input.push(userMessage(text, images))
           return Promise.resolve()
         },
         cancel: async () => {

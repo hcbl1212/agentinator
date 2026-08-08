@@ -787,6 +787,51 @@ body {
   margin: 0 0 0.6rem;
 }
 
+/* pasted-screenshot thumbnails above the prompt */
+.paste-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.paste-thumb {
+  position: relative;
+  display: inline-flex;
+}
+
+.paste-thumb img {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: block;
+  height: 44px;
+  object-fit: cover;
+  width: 44px;
+}
+
+.paste-thumb-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--soft);
+  cursor: pointer;
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.paste-thumb-remove:hover,
+.paste-thumb-remove:focus-visible {
+  background: var(--accent);
+  color: #08110e;
+  outline: none;
+}
+
 /* a traditional console prompt: a "›" and the input, Enter to send */
 .console {
   align-items: baseline;

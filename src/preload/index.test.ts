@@ -100,8 +100,17 @@ describe('preload bridge', () => {
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:current')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-demo')
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-task', 'do the thing')
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:send', 'session_9', 'keep going')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'agent:start-task',
+      'do the thing',
+      undefined,
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'agent:send',
+      'session_9',
+      'keep going',
+      undefined,
+    )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
   })
 

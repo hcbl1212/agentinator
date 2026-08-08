@@ -369,6 +369,41 @@ describe('createClaudeProvider', () => {
     await handle.cancel()
   })
 
+  it('sends attached images as base64 content blocks, text stays a plain string', async () => {
+    const seen: unknown[] = []
+    const query: ClaudeQuery = (args) => {
+      const prompt = args.prompt as AsyncIterable<SdkUserMessage>
+      return (async function* () {
+        for await (const message of prompt) {
+          seen.push(message.message.content)
+          yield { ...successResult }
+        }
+      })() as ReturnType<ClaudeQuery>
+    }
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+
+    const handle = provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.filter((event) => event.type === 'session.idle')).toHaveLength(1)
+    })
+
+    await handle.send('look at this', [{ mediaType: 'image/png', data: 'AQID' }])
+    await vi.waitFor(() => {
+      expect(seen).toHaveLength(2)
+    })
+
+    // The opening message had no images → a plain string (cache-friendly).
+    expect(seen[0]).toBe('Do the task.')
+    // The follow-up carries a text block plus an image block.
+    expect(seen[1]).toEqual([
+      { type: 'text', text: 'look at this' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AQID' } },
+    ])
+
+    await handle.cancel()
+  })
+
   it('ends failed when the stream errors', async () => {
     const query: ClaudeQuery = () =>
       (async function* () {

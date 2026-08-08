@@ -4,7 +4,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
-import type { StoredEvent } from '../shared/events'
+import type { ImageAttachment, StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
 import { EventStore } from './eventStore'
@@ -91,18 +91,19 @@ export function registerAgentIpc(
       cwd: process.cwd(),
     }),
   )
-  handle('agent:start-task', (_event, prompt) =>
+  handle('agent:start-task', (_event, prompt, images) =>
     manager.start({
       providerId: TASK_PROVIDER,
       title: taskTitle(prompt as string),
       prompt: prompt as string,
+      images: images as ImageAttachment[] | undefined,
       // The workspace repo — for now the process cwd (the repo when run via
       // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
       cwd: process.cwd(),
     }),
   )
-  handle('agent:send', (_event, sessionId, text) =>
-    manager.send(sessionId as string, text as string),
+  handle('agent:send', (_event, sessionId, text, images) =>
+    manager.send(sessionId as string, text as string, images as ImageAttachment[] | undefined),
   )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
 }

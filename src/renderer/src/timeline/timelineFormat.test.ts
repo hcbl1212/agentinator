@@ -69,6 +69,13 @@ describe('describeEvent', () => {
     expect(
       describeEvent(stored('user.message', { sessionId: 's', text: 'keep going' })),
     ).toMatchObject({ marker: '›', text: 'keep going', tone: 'accent' })
+    // Attached screenshots surface as a count suffix (singular / plural).
+    expect(
+      describeEvent(stored('user.message', { sessionId: 's', text: 'this', imageCount: 1 })),
+    ).toMatchObject({ text: 'this [+1 image]' })
+    expect(
+      describeEvent(stored('user.message', { sessionId: 's', text: 'these', imageCount: 2 })),
+    ).toMatchObject({ text: 'these [+2 images]' })
   })
 
   it('compacts tool inputs: command, path, then truncated JSON', () => {

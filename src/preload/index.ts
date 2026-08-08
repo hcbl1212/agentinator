@@ -27,8 +27,10 @@ export const bridge: AgentinatorBridge = {
     current: () =>
       ipcRenderer.invoke('agent:current') as Promise<import('../shared/bridge').AgentDescriptor>,
     startDemo: () => ipcRenderer.invoke('agent:start-demo') as Promise<string>,
-    startTask: (prompt) => ipcRenderer.invoke('agent:start-task', prompt) as Promise<string>,
-    send: (sessionId, text) => ipcRenderer.invoke('agent:send', sessionId, text) as Promise<void>,
+    startTask: (prompt, images) =>
+      ipcRenderer.invoke('agent:start-task', prompt, images) as Promise<string>,
+    send: (sessionId, text, images) =>
+      ipcRenderer.invoke('agent:send', sessionId, text, images) as Promise<void>,
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
   },
   settings: {

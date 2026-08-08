@@ -1,7 +1,7 @@
 import { BUDGET_SCOPES } from '../shared/budget'
 import type { Budgets, BudgetScope } from '../shared/budget'
 import { createEntityId } from '../shared/events'
-import type { StoredEvent } from '../shared/events'
+import type { ImageAttachment, StoredEvent } from '../shared/events'
 import { periodStartIso } from './budgetPeriods'
 import type { EventStore } from './eventStore'
 import type { AgentProvider, AgentSessionHandle } from './providers/types'
@@ -14,6 +14,8 @@ export interface StartSession {
   model?: string
   workspaceId?: string
   agentId?: string
+  /** Images attached to the opening message (pasted screenshots). */
+  images?: ImageAttachment[]
 }
 
 const NO_BUDGETS: Budgets = { session: null, hour: null, day: null, week: null, month: null }
@@ -155,6 +157,7 @@ export class SessionManager {
         prompt: options.prompt,
         cwd: options.cwd,
         model: options.model,
+        images: options.images,
       },
       (type, payload) => {
         const stored = this.#store.append(type, payload)
@@ -188,12 +191,20 @@ export class SessionManager {
     return sessionId
   }
 
-  /** Send a follow-up message into an ongoing session (steering / reply). */
-  async send(sessionId: string, text: string): Promise<void> {
+  /** Send a follow-up message (with any attached images) into a session. */
+  async send(sessionId: string, text: string, images?: ImageAttachment[]): Promise<void> {
     const handle = this.#handles.get(sessionId)
     if (handle !== undefined) {
-      this.#emit(this.#store.append('user.message', { sessionId, text }))
-      await handle.send(text)
+      const imageCount = images?.length ?? 0
+      // Record that images were sent (a count, not the bytes); the model gets
+      // the bytes via the handle.
+      this.#emit(
+        this.#store.append(
+          'user.message',
+          imageCount > 0 ? { sessionId, text, imageCount } : { sessionId, text },
+        ),
+      )
+      await handle.send(text, images)
     }
   }
 

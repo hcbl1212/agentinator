@@ -81,6 +81,15 @@ async function launchTask(): Promise<void> {
   await screen.findByRole('textbox', { name: 'Reply to the agent' })
 }
 
+/** A 3-byte PNG whose base64 is a known constant ("AQID"). */
+function imageFile(): File {
+  return new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })
+}
+
+function paste(input: HTMLElement, items: unknown[]): void {
+  fireEvent.paste(input, { clipboardData: { items } })
+}
+
 afterEach(() => {
   delete window.agentinator
 })
@@ -114,7 +123,7 @@ describe('ComposerDock', () => {
     const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, 'Add a hello util{Enter}')
 
-    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util')
+    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [])
     expect(input).toHaveValue('')
   })
 
@@ -130,7 +139,7 @@ describe('ComposerDock', () => {
     expect(stub.startTask).not.toHaveBeenCalled()
 
     await userEvent.type(input, '{Enter}')
-    expect(stub.startTask).toHaveBeenCalledWith('first line')
+    expect(stub.startTask).toHaveBeenCalledWith('first line', [])
   })
 
   it('ignores an empty/whitespace submission', async () => {
@@ -142,6 +151,53 @@ describe('ComposerDock', () => {
     await userEvent.type(input, '   {Enter}')
 
     expect(stub.startTask).not.toHaveBeenCalled()
+  })
+
+  it('attaches a pasted screenshot and sends it (image-only is allowed)', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
+
+    await screen.findByAltText('pasted screenshot')
+    await userEvent.type(input, '{Enter}')
+
+    expect(stub.startTask).toHaveBeenCalledWith('', [{ mediaType: 'image/png', data: 'AQID' }])
+    // The attachment clears once sent.
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('ignores a paste that carries no image', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [{ kind: 'string', type: 'text/plain', getAsFile: () => null }])
+
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('keeps only real image files from a mixed paste, and removes a thumbnail on demand', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [
+      { kind: 'file', type: 'image/png', getAsFile: () => imageFile() },
+      { kind: 'string', type: 'text/plain', getAsFile: () => null },
+      { kind: 'file', type: 'text/plain', getAsFile: () => imageFile() },
+      { kind: 'file', type: 'image/png', getAsFile: () => null },
+    ])
+
+    const thumbs = await screen.findAllByAltText('pasted screenshot')
+    expect(thumbs).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove image' }))
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
   })
 
   it('enters reply mode after a task launches and sends a follow-up to that session', async () => {
@@ -158,7 +214,7 @@ describe('ComposerDock', () => {
       'also add tests{Enter}',
     )
 
-    expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests')
+    expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests', [])
   })
 
   it('marks the session idle when its turn ends', async () => {
@@ -193,7 +249,7 @@ describe('ComposerDock', () => {
     expect(screen.getByLabelText('Agent question')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(stub.send).toHaveBeenCalledWith('session_task', 'Continue')
+    expect(stub.send).toHaveBeenCalledWith('session_task', 'Continue', [])
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
   })
 

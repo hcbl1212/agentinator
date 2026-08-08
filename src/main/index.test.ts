@@ -252,7 +252,7 @@ describe('registerAgentIpc', () => {
     })
     void handlers.get('agent:send')?.(undefined, 'session_7', 'keep going')
 
-    expect(manager.send).toHaveBeenCalledWith('session_7', 'keep going')
+    expect(manager.send).toHaveBeenCalledWith('session_7', 'keep going', undefined)
   })
 
   it('routes cancellation to the session manager', () => {

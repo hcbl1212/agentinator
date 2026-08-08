@@ -66,7 +66,9 @@ export function describeEvent(event: StoredEvent): TimelineLine {
     }
     case 'user.message': {
       const payload = event.payload as EventPayloads['user.message']
-      return { marker: '›', text: payload.text, tone: 'accent' }
+      const count = payload.imageCount ?? 0
+      const images = count > 0 ? ` [+${count} image${count > 1 ? 's' : ''}]` : ''
+      return { marker: '›', text: `${payload.text}${images}`, tone: 'accent' }
     }
     case 'tool.called': {
       const payload = event.payload as EventPayloads['tool.called']

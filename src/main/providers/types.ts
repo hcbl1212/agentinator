@@ -1,4 +1,4 @@
-import type { EventPayloads, EventType } from '../../shared/events'
+import type { EventPayloads, EventType, ImageAttachment } from '../../shared/events'
 
 /**
  * The vendor abstraction. Adapters implement AgentProvider and emit ONLY
@@ -36,11 +36,13 @@ export interface SessionContext {
   prompt: string
   cwd: string
   model?: string
+  /** Images attached to the opening message (pasted screenshots). */
+  images?: ImageAttachment[]
 }
 
 export interface AgentSessionHandle {
-  /** Steer the running session with an additional message. */
-  send(text: string): Promise<void>
+  /** Steer the running session with an additional message and any images. */
+  send(text: string, images?: ImageAttachment[]): Promise<void>
   /** Stop the session; the provider must still emit session.ended. */
   cancel(): Promise<void>
 }

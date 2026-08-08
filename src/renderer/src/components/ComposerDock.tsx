@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { PendingApproval } from '../../../shared/bridge'
-import type { EventPayloads } from '../../../shared/events'
+import type { EventPayloads, ImageAttachment } from '../../../shared/events'
 import { ApprovalCard } from './ApprovalCard'
 import { QuestionCard } from './QuestionCard'
 
 type SessionStatus = 'running' | 'idle'
+
+/** A screenshot pasted into the composer: a thumbnail plus the base64 payload
+ * sent to the model. */
+interface PastedImage {
+  id: string
+  dataUrl: string
+  mediaType: string
+  data: string
+}
 
 /**
  * The bottom of the stream: active decisions (the agent's question, pending
@@ -23,6 +32,7 @@ export function ComposerDock(): React.JSX.Element {
   const [question, setQuestion] = useState<EventPayloads['agent.question'] | null>(null)
   // The vendor/model behind the prompt — reflected in the UI, never hardcoded.
   const [agentLabel, setAgentLabel] = useState<string | null>(null)
+  const [images, setImages] = useState<PastedImage[]>([])
 
   useEffect(() => {
     const mounted = window.agentinator
@@ -78,31 +88,66 @@ export function ComposerDock(): React.JSX.Element {
     }
   }, [])
 
-  const beginTask = (trimmed: string): void => {
-    void bridge?.agent.startTask(trimmed).then((sessionId) => {
+  const beginTask = (trimmed: string, attachments: ImageAttachment[]): void => {
+    void bridge?.agent.startTask(trimmed, attachments).then((sessionId) => {
       activeRef.current = sessionId
       setActiveSessionId(sessionId)
       setStatus('running')
     })
   }
 
-  const reply = (sessionId: string, trimmed: string): void => {
-    void bridge?.agent.send(sessionId, trimmed)
+  const reply = (sessionId: string, trimmed: string, attachments: ImageAttachment[]): void => {
+    void bridge?.agent.send(sessionId, trimmed, attachments)
     setStatus('running')
     setQuestion(null)
   }
 
   const submit = (): void => {
     const trimmed = prompt.trim()
-    if (bridge === undefined || trimmed === '') {
+    // A screenshot with no words is still worth sending.
+    if (bridge === undefined || (trimmed === '' && images.length === 0)) {
       return
     }
+    const attachments = images.map(({ mediaType, data }) => ({ mediaType, data }))
     if (activeSessionId === null) {
-      beginTask(trimmed)
+      beginTask(trimmed, attachments)
     } else {
-      reply(activeSessionId, trimmed)
+      reply(activeSessionId, trimmed, attachments)
     }
     setPrompt('')
+    setImages([])
+  }
+
+  // Capture pasted images as attachments (kept out of the text field).
+  const onPaste = (pasteEvent: React.ClipboardEvent): void => {
+    const files = Array.from(pasteEvent.clipboardData.items)
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
+    if (files.length === 0) {
+      return
+    }
+    pasteEvent.preventDefault()
+    for (const file of files) {
+      const reader = new FileReader()
+      reader.onload = (): void => {
+        const dataUrl = String(reader.result)
+        setImages((previous) => [
+          ...previous,
+          {
+            id: crypto.randomUUID(),
+            dataUrl,
+            mediaType: dataUrl.slice(5, dataUrl.indexOf(';')),
+            data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+          },
+        ])
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeImage = (id: string): void => {
+    setImages((previous) => previous.filter((image) => image.id !== id))
   }
 
   // Enter sends; Shift+Enter is a newline (the terminal-composer convention).
@@ -146,7 +191,10 @@ export function ComposerDock(): React.JSX.Element {
       ) : (
         <>
           {question !== null && activeSessionId !== null && (
-            <QuestionCard question={question} onAnswer={(text) => reply(activeSessionId, text)} />
+            <QuestionCard
+              question={question}
+              onAnswer={(text) => reply(activeSessionId, text, [])}
+            />
           )}
           {approvals.length > 0 && (
             <div className="approvals" aria-label="Pending approvals">
@@ -162,6 +210,23 @@ export function ComposerDock(): React.JSX.Element {
               ))}
             </div>
           )}
+          {images.length > 0 && (
+            <div className="paste-thumbs" aria-label="Pasted images">
+              {images.map((image) => (
+                <span key={image.id} className="paste-thumb">
+                  <img src={image.dataUrl} alt="pasted screenshot" />
+                  <button
+                    type="button"
+                    className="paste-thumb-remove"
+                    aria-label="Remove image"
+                    onClick={() => removeImage(image.id)}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="console">
             <span className="console-prompt" aria-hidden="true">
               {agentLabel !== null && <span className="console-agent">{agentLabel}</span>} &gt;
@@ -172,12 +237,13 @@ export function ComposerDock(): React.JSX.Element {
               placeholder={
                 replying
                   ? `Reply to ${who} or steer it…  (Enter to send, Shift+Enter for a newline)`
-                  : `Describe a task for ${who} to do in this repo…  (Enter to send)`
+                  : `Describe a task for ${who} to do in this repo…  (paste a screenshot too)`
               }
               rows={1}
               value={prompt}
               onChange={(changed) => setPrompt(changed.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={onPaste}
             />
           </div>
         </>

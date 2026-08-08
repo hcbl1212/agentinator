@@ -163,9 +163,38 @@ describe('SessionManager', () => {
     const sessionId = manager.start({ providerId: 'chatty', title: 'T', prompt: 'P', cwd: '/tmp' })
     await manager.send(sessionId, 'keep going')
 
-    expect(send).toHaveBeenCalledWith('keep going')
+    expect(send).toHaveBeenCalledWith('keep going', undefined)
     const message = events.find((event) => event.type === 'user.message')
     expect(message?.payload).toEqual({ sessionId, text: 'keep going' })
+  })
+
+  it('forwards attached images and records their count on the message', async () => {
+    const send = vi.fn(() => Promise.resolve())
+    const provider: AgentProvider = {
+      ...instantProvider('chatty'),
+      id: 'chatty',
+      startSession(context, emit) {
+        emit('session.started', {
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          workspaceId: context.workspaceId,
+          title: context.title,
+        })
+        return { send, cancel: () => Promise.resolve() }
+      },
+    }
+    const store = new EventStore()
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+    manager.register(provider)
+
+    const sessionId = manager.start({ providerId: 'chatty', title: 'T', prompt: 'P', cwd: '/tmp' })
+    const shots = [{ mediaType: 'image/png', data: 'AAA' }]
+    await manager.send(sessionId, 'look at this', shots)
+
+    expect(send).toHaveBeenCalledWith('look at this', shots)
+    const message = events.find((event) => event.type === 'user.message')
+    expect(message?.payload).toEqual({ sessionId, text: 'look at this', imageCount: 1 })
   })
 
   it('sending to an unknown session is a no-op', async () => {
