@@ -2,8 +2,17 @@ import { Roster } from './components/Roster'
 import { StatusBar } from './components/StatusBar'
 import { Timeline } from './components/Timeline'
 import { Preview } from './components/Preview'
+import { SelectionProvider } from './state/selection'
 
 export function App(): React.JSX.Element {
+  return (
+    <SelectionProvider>
+      <AppShell />
+    </SelectionProvider>
+  )
+}
+
+function AppShell(): React.JSX.Element {
   return (
     <div className="cockpit">
       <header className="titlebar">
