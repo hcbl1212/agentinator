@@ -119,7 +119,7 @@ body {
 
 .approval-actions {
   display: flex;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .approve-button,
@@ -128,8 +128,10 @@ body {
   border: 1px solid var(--line);
   border-radius: 4px;
   cursor: pointer;
+  flex: 1;
   font: inherit;
-  padding: 0.2rem 0.6rem;
+  padding: 0.3rem 0.6rem;
+  text-align: center;
 }
 
 .approve-button {
