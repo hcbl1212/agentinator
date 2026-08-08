@@ -3,18 +3,22 @@ import { useEffect, useRef, useState } from 'react'
 import type { PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads } from '../../../shared/events'
 import { ApprovalCard } from './ApprovalCard'
+import { ConversationLog } from './ConversationLog'
 import { QuestionCard } from './QuestionCard'
 
 type SessionStatus = 'running' | 'idle'
 
-export function Roster(): React.JSX.Element {
+/**
+ * The conversation column: a terminal-style transcript up top, then any active
+ * decisions (the agent's question, pending approvals) as interactive cards, and
+ * a roomy composer at the bottom. Enter sends; Shift+Enter inserts a newline.
+ * Launching a task turns the composer into a reply box on that session, so the
+ * whole column is one continuous conversation.
+ */
+export function Conversation(): React.JSX.Element {
   const bridge = window.agentinator
   const [prompt, setPrompt] = useState('')
-  const [dispatched, setDispatched] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
-  // The ongoing conversation: a task launched from here that hasn't ended.
-  // The ref mirrors the state so the once-mounted event listener can compare
-  // incoming session ids without re-subscribing on every change.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const activeRef = useRef<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('running')
@@ -75,7 +79,6 @@ export function Roster(): React.JSX.Element {
       setActiveSessionId(sessionId)
       setStatus('running')
     })
-    setDispatched('Task dispatched to Claude — watch it work in the timeline.')
   }
 
   const reply = (sessionId: string, trimmed: string): void => {
@@ -84,8 +87,7 @@ export function Roster(): React.JSX.Element {
     setQuestion(null)
   }
 
-  const runTask = (submitEvent: React.FormEvent): void => {
-    submitEvent.preventDefault()
+  const submit = (): void => {
     const trimmed = prompt.trim()
     if (bridge === undefined || trimmed === '') {
       return
@@ -98,86 +100,104 @@ export function Roster(): React.JSX.Element {
     setPrompt('')
   }
 
+  const onSubmit = (submitEvent: React.FormEvent): void => {
+    submitEvent.preventDefault()
+    submit()
+  }
+
+  // Enter sends; Shift+Enter is a newline (the terminal-composer convention).
+  const onKeyDown = (keyEvent: React.KeyboardEvent): void => {
+    if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
+      keyEvent.preventDefault()
+      submit()
+    }
+  }
+
   const startNew = (sessionId: string): void => {
     void bridge?.agent.cancel(sessionId)
     activeRef.current = null
     setActiveSessionId(null)
     setQuestion(null)
-    setDispatched(null)
   }
 
   const replying = activeSessionId !== null
 
   return (
-    <aside className="pane roster" aria-label="Agent roster">
-      <h2 className="pane-label">Agents</h2>
+    <section className="pane conversation" aria-label="Conversation">
+      <div className="conversation-head">
+        <h2 className="pane-label">Conversation</h2>
+        {activeSessionId !== null && (
+          <div className="session-status" aria-label="Active session">
+            <span className={`status-dot ${status}`} aria-hidden="true" />
+            <span className="session-status-label">
+              {status === 'idle' ? 'Awaiting your reply' : 'Working…'}
+            </span>
+            <button
+              type="button"
+              className="new-task-button"
+              onClick={() => startNew(activeSessionId)}
+            >
+              New task
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ConversationLog />
+
       {bridge === undefined ? (
-        <p className="empty-state">No agents yet.</p>
+        <p className="empty-state">Open a workspace to talk to an agent.</p>
       ) : (
-        <>
-          {activeSessionId !== null && (
-            <div className="session-status" aria-label="Active session">
-              <span className={`status-dot ${status}`} aria-hidden="true" />
-              <span className="session-status-label">
-                {status === 'idle' ? 'Awaiting your reply' : 'Working…'}
-              </span>
-              <button
-                type="button"
-                className="new-task-button"
-                onClick={() => startNew(activeSessionId)}
-              >
-                New task
-              </button>
+        <div className="composer-dock">
+          {question !== null && activeSessionId !== null && (
+            <QuestionCard question={question} onAnswer={(text) => reply(activeSessionId, text)} />
+          )}
+          {approvals.length > 0 && (
+            <div className="approvals" aria-label="Pending approvals">
+              {approvals.map((approval) => (
+                <ApprovalCard
+                  key={approval.requestId}
+                  approval={approval}
+                  onResolve={(approved) =>
+                    void bridge.approvals.resolve(approval.requestId, approved)
+                  }
+                  onUndo={() => void bridge.approvals.undo(approval.requestId)}
+                />
+              ))}
             </div>
           )}
-          <form className="task-launcher" onSubmit={runTask}>
+          <form className="composer" onSubmit={onSubmit}>
             <textarea
-              className="task-input"
+              className="composer-input"
               aria-label={replying ? 'Reply to Claude' : 'Task for Claude'}
               placeholder={
                 replying
-                  ? 'Reply to the agent or steer it…'
-                  : 'Describe a task for Claude to do in this repo…'
+                  ? 'Reply to the agent or steer it…  (Enter to send, Shift+Enter for a newline)'
+                  : 'Describe a task for Claude to do in this repo…  (Enter to send)'
               }
               rows={3}
               value={prompt}
               onChange={(changed) => setPrompt(changed.target.value)}
+              onKeyDown={onKeyDown}
             />
-            <button type="submit" className="run-task-button" disabled={prompt.trim() === ''}>
-              {replying ? '➤ Send reply' : '▶ Run task (Claude)'}
-            </button>
+            <div className="composer-bar">
+              {!replying && (
+                <button
+                  type="button"
+                  className="demo-button"
+                  onClick={() => void bridge.agent.startDemo()}
+                >
+                  ▶ Demo
+                </button>
+              )}
+              <span className="composer-hint">↵ send · ⇧↵ newline</span>
+              <button type="submit" className="run-task-button" disabled={prompt.trim() === ''}>
+                {replying ? '➤ Send' : '▶ Run task'}
+              </button>
+            </div>
           </form>
-          {!replying && (
-            <button
-              type="button"
-              className="demo-button"
-              onClick={() => {
-                setDispatched('Demo dispatched — watch the log count in the status bar.')
-                void bridge.agent.startDemo()
-              }}
-            >
-              ▶ Run demo (mock)
-            </button>
-          )}
-        </>
-      )}
-      {question !== null && activeSessionId !== null && (
-        <QuestionCard question={question} onAnswer={(text) => reply(activeSessionId, text)} />
-      )}
-      {dispatched !== null && <p className="empty-state">{dispatched}</p>}
-      {approvals.length > 0 && (
-        <div className="approvals" aria-label="Pending approvals">
-          <h2 className="pane-label">Needs approval</h2>
-          {approvals.map((approval) => (
-            <ApprovalCard
-              key={approval.requestId}
-              approval={approval}
-              onResolve={(approved) => void bridge?.approvals.resolve(approval.requestId, approved)}
-              onUndo={() => void bridge?.approvals.undo(approval.requestId)}
-            />
-          ))}
         </div>
       )}
-    </aside>
+    </section>
   )
 }

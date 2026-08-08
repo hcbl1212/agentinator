@@ -1,4 +1,5 @@
-import { Roster } from './components/Roster'
+import { AgentRail } from './components/AgentRail'
+import { Conversation } from './components/Conversation'
 import { StatusBar } from './components/StatusBar'
 import { Workspace } from './components/Workspace'
 import { Preview } from './components/Preview'
@@ -20,7 +21,8 @@ function AppShell(): React.JSX.Element {
         <span className="titlebar-context">no workspace open</span>
       </header>
       <div className="panes">
-        <Roster />
+        <AgentRail />
+        <Conversation />
         <Workspace />
         <Preview />
       </div>

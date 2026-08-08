@@ -10,7 +10,8 @@ describe('App', () => {
 
     expect(screen.getByText('Agentinator')).toBeInTheDocument()
     expect(screen.getByText('no workspace open')).toBeInTheDocument()
-    expect(screen.getByRole('complementary', { name: 'Agent roster' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Agents' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Workspace' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'App preview' })).toBeInTheDocument()
@@ -20,7 +21,8 @@ describe('App', () => {
   it('shows the empty states that orient a first-time user', () => {
     render(<App />)
 
-    expect(screen.getByText(/No agents yet/)).toBeInTheDocument()
+    expect(screen.getByText(/conversation with the agent appears here/)).toBeInTheDocument()
+    expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
     expect(screen.getByText(/target app renders here/)).toBeInTheDocument()
   })

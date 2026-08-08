@@ -54,7 +54,7 @@ body {
 .panes {
   display: grid;
   flex: 1;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: 52px 360px 1fr 300px;
   min-height: 0;
 }
 
@@ -724,4 +724,165 @@ body {
   font-size: 0.7rem;
   line-height: 1.4;
   margin-top: 0.5rem;
+}
+
+/* ---- agent rail (slim fleet column) ---- */
+.rail {
+  align-items: center;
+  padding: 0.75rem 0.35rem;
+}
+
+.rail-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  margin: 0.4rem 0;
+}
+
+.rail-empty {
+  color: var(--faint);
+  text-align: center;
+}
+
+.rail-agent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.rail-count {
+  color: var(--soft);
+  font-size: 0.75rem;
+}
+
+/* ---- conversation column ---- */
+.conversation {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.conversation-head {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex: none;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.conversation-head .pane-label {
+  margin: 0;
+}
+
+.conversation-head .session-status {
+  margin: 0 0 0 auto;
+}
+
+/* the terminal-style transcript — a monospace console you read top to bottom */
+.convo-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem;
+  scrollbar-width: none;
+}
+
+.convo-log::-webkit-scrollbar {
+  display: none;
+}
+
+.convo-lines {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.convo-line {
+  display: flex;
+  gap: 0.5rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.convo-marker {
+  flex: none;
+  text-align: center;
+  width: 1rem;
+  color: var(--faint);
+}
+
+/* your own lines (user.message renders tone-accent) read brightest */
+.convo-line.tone-accent .convo-text {
+  color: var(--ink);
+}
+
+/* ---- composer dock (decisions + input) ---- */
+.composer-dock {
+  border-top: 1px solid var(--line);
+  flex: none;
+  padding: 0.6rem 0.75rem 0.75rem;
+}
+
+.composer-dock .approvals {
+  margin: 0 0 0.6rem;
+}
+
+.composer-dock .question-card {
+  margin: 0 0 0.6rem;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.composer-input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  /* Auto-grow with content between a roomy floor and a 40vh ceiling; older
+     engines fall back to the 3-row textarea. */
+  field-sizing: content;
+  min-height: 4.2rem;
+  max-height: 40vh;
+  padding: 0.55rem 0.65rem;
+  resize: none;
+}
+
+.composer-input::placeholder {
+  color: var(--faint);
+}
+
+.composer-input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.composer-bar {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.composer-hint {
+  color: var(--faint);
+  font-size: 0.72rem;
+  margin-left: auto;
+}
+
+.composer-bar .demo-button {
+  margin-top: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
 }

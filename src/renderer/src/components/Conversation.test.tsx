@@ -5,28 +5,29 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
-import { Roster } from './Roster'
+import { Conversation } from './Conversation'
 
 interface BridgeStub {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
-  resolve: ReturnType<typeof vi.fn>
   startTask: ReturnType<typeof vi.fn>
   send: ReturnType<typeof vi.fn>
   cancel: ReturnType<typeof vi.fn>
+  resolve: ReturnType<typeof vi.fn>
 }
 
 function stubBridge(pending: PendingApproval[] = []): BridgeStub {
-  let appended: ((event: StoredEvent) => void) | undefined
-  const resolve = vi.fn(() => Promise.resolve())
+  const listeners: ((event: StoredEvent) => void)[] = []
   const startTask = vi.fn(() => Promise.resolve('session_task'))
   const send = vi.fn(() => Promise.resolve())
   const cancel = vi.fn(() => Promise.resolve())
+  const resolve = vi.fn(() => Promise.resolve())
   return {
-    resolve,
     startTask,
     send,
     cancel,
+    resolve,
+    emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
@@ -36,7 +37,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         tail: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
-          appended = listener
+          listeners.push(listener)
           return () => undefined
         }),
       },
@@ -58,24 +59,22 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         undo: vi.fn(() => Promise.resolve()),
       },
     },
-    emit: (event) => appended?.(event),
   }
-}
-
-function requestedEvent(requestId: string, seq: number): StoredEvent {
-  return {
-    seq,
-    ts: 't',
-    type: 'approval.requested',
-    payload: { sessionId: 's', requestId, tool: 'bash', input: { command: 'git push' } },
-  } as StoredEvent
 }
 
 function sessionEvent(type: StoredEvent['type'], payload: object): StoredEvent {
   return { seq: 1, ts: 't', type, payload } as StoredEvent
 }
 
-/** Launch a task and settle into reply mode on the returned session id. */
+function requested(requestId: string): StoredEvent {
+  return sessionEvent('approval.requested', {
+    sessionId: 's',
+    requestId,
+    tool: 'bash',
+    input: { command: 'git push' },
+  })
+}
+
 async function launchTask(): Promise<void> {
   await userEvent.type(screen.getByRole('textbox', { name: 'Task for Claude' }), 'Do it')
   await userEvent.click(screen.getByRole('button', { name: /Run task/ }))
@@ -86,158 +85,81 @@ afterEach(() => {
   delete window.agentinator
 })
 
-describe('Roster', () => {
-  it('shows no launcher without a bridge (plain browser/test)', () => {
-    render(<Roster />)
+describe('Conversation', () => {
+  it('shows a placeholder and no composer without a bridge', () => {
+    render(<Conversation />)
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
-    expect(screen.getByText('No agents yet.')).toBeInTheDocument()
+    expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Task for Claude' })).not.toBeInTheDocument()
   })
 
-  it('launches a real Claude task with the typed prompt, then clears it', async () => {
+  it('launches a task with the typed prompt and clears the composer', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
-    const user = userEvent.setup()
 
-    render(<Roster />)
+    render(<Conversation />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
     const run = screen.getByRole('button', { name: /Run task/ })
     expect(run).toBeDisabled()
 
-    await user.type(input, 'Add a hello util')
+    await userEvent.type(input, 'Add a hello util')
     expect(run).toBeEnabled()
-    await user.click(run)
+    await userEvent.click(run)
 
     expect(stub.startTask).toHaveBeenCalledWith('Add a hello util')
-    expect(screen.getByText(/Task dispatched to Claude/)).toBeInTheDocument()
     expect(input).toHaveValue('')
   })
 
-  it('ignores an empty/whitespace task submission', async () => {
+  it('sends on Enter and treats Shift+Enter as a newline, not a send', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
-    const user = userEvent.setup()
 
-    render(<Roster />)
+    render(<Conversation />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
-    await user.type(input, '   ')
-    // Submit via Enter in the form (button stays disabled with only whitespace).
-    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    // Shift+Enter must not submit.
+    await userEvent.type(input, 'first line')
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    expect(stub.startTask).not.toHaveBeenCalled()
+
+    // Plain Enter sends.
+    await userEvent.type(input, '{Enter}')
+    expect(stub.startTask).toHaveBeenCalledWith('first line')
+  })
+
+  it('ignores an empty/whitespace submission', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Conversation />)
+    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    await userEvent.type(input, '   {Enter}')
 
     expect(stub.startTask).not.toHaveBeenCalled()
   })
 
-  it('starts the mock demo session and confirms dispatch', async () => {
+  it('starts the mock demo session from the composer bar', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
-    const user = userEvent.setup()
 
-    render(<Roster />)
-    await user.click(screen.getByRole('button', { name: /Run demo/ }))
+    render(<Conversation />)
+    await userEvent.click(screen.getByRole('button', { name: /Demo/ }))
 
     expect(stub.bridge.agent.startDemo).toHaveBeenCalledOnce()
-    expect(screen.getByText(/Demo dispatched/)).toBeInTheDocument()
-  })
-
-  it('shows already-pending approvals and resolves them via the bridge', async () => {
-    const stub = stubBridge([
-      { requestId: 'approval_1', sessionId: 's', tool: 'write', input: { path: 'a.ts' } },
-    ])
-    window.agentinator = stub.bridge
-    const user = userEvent.setup()
-
-    render(<Roster />)
-    await waitFor(() => {
-      expect(screen.getByText('write a.ts')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(stub.resolve).toHaveBeenCalledWith('approval_1', true)
-  })
-
-  it('denying enters a grace window and Undo aborts it', async () => {
-    const stub = stubBridge([
-      { requestId: 'approval_2', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },
-    ])
-    window.agentinator = stub.bridge
-    const user = userEvent.setup()
-
-    render(<Roster />)
-    await waitFor(() => {
-      expect(screen.getByText('write b.ts')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Deny' }))
-    expect(stub.resolve).toHaveBeenCalledWith('approval_2', false)
-
-    await user.click(screen.getByRole('button', { name: 'Undo' }))
-    expect(stub.bridge.approvals.undo).toHaveBeenCalledWith('approval_2')
-  })
-
-  it('adds cards from live requests (deduped) and removes them when resolved', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-    const user = userEvent.setup()
-
-    render(<Roster />)
-    await waitFor(() => {
-      expect(stub.bridge.approvals.pending).toHaveBeenCalled()
-    })
-
-    act(() => {
-      stub.emit(requestedEvent('approval_9', 1))
-      stub.emit(requestedEvent('approval_9', 1))
-    })
-    expect(screen.getAllByText('bash git push')).toHaveLength(1)
-
-    await user.click(screen.getByRole('button', { name: 'Deny' }))
-    expect(stub.resolve).toHaveBeenCalledWith('approval_9', false)
-
-    act(() => {
-      stub.emit({
-        seq: 2,
-        ts: 't',
-        type: 'approval.resolved',
-        payload: { sessionId: 's', requestId: 'approval_9', approved: false, via: 'user' },
-      } as StoredEvent)
-    })
-    expect(screen.queryByText('bash git push')).not.toBeInTheDocument()
-  })
-
-  it('ignores unrelated live events for the approvals list', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<Roster />)
-    await waitFor(() => {
-      expect(stub.bridge.approvals.pending).toHaveBeenCalled()
-    })
-
-    act(() => {
-      stub.emit({
-        seq: 3,
-        ts: 't',
-        type: 'agent.text',
-        payload: { sessionId: 's', text: 'hello' },
-      } as StoredEvent)
-    })
-
-    expect(screen.queryByText(/Needs approval/)).not.toBeInTheDocument()
   })
 
   it('enters reply mode after a task launches and sends a follow-up to that session', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
 
-    // The one-shot task launcher is gone; the demo button hides in a conversation.
-    expect(screen.queryByRole('button', { name: /Run demo/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Demo/ })).not.toBeInTheDocument()
     expect(screen.getByText('Working…')).toBeInTheDocument()
 
     await userEvent.type(screen.getByRole('textbox', { name: 'Reply to Claude' }), 'also add tests')
-    await userEvent.click(screen.getByRole('button', { name: /Send reply/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Send/ }))
 
     expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests')
   })
@@ -246,7 +168,7 @@ describe('Roster', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.idle', { sessionId: 'session_task' }))
@@ -259,7 +181,7 @@ describe('Roster', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
     act(() => {
       stub.emit(
@@ -272,33 +194,30 @@ describe('Roster', () => {
     })
 
     expect(screen.getByLabelText('Agent question')).toBeInTheDocument()
-    expect(screen.getByText('Which approach?')).toBeInTheDocument()
-
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(stub.send).toHaveBeenCalledWith('session_task', 'Continue')
-    // Answering dismisses the card.
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
   })
 
-  it('New task cancels the active session and returns to the task launcher', async () => {
+  it('New task cancels the active session and returns to the launcher', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
     await userEvent.click(screen.getByRole('button', { name: 'New task' }))
 
     expect(stub.cancel).toHaveBeenCalledWith('session_task')
     expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Run demo/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Demo/ })).toBeInTheDocument()
   })
 
   it('clears the active session and returns to the launcher when the session ends', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
@@ -311,7 +230,7 @@ describe('Roster', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Roster />)
+    render(<Conversation />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.idle', { sessionId: 'other' }))
@@ -323,12 +242,74 @@ describe('Roster', () => {
         }),
       )
       stub.emit(sessionEvent('session.ended', { sessionId: 'other', outcome: 'completed' }))
+      // An event outside the handled set flows through untouched.
+      stub.emit(sessionEvent('agent.text', { sessionId: 'other', text: 'noise' }))
     })
 
-    // The active session is untouched: still running, still in reply mode.
     expect(screen.getByText('Working…')).toBeInTheDocument()
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Reply to Claude' })).toBeInTheDocument()
+  })
+
+  it('shows already-pending approvals and resolves them via the bridge', async () => {
+    const stub = stubBridge([
+      { requestId: 'approval_1', sessionId: 's', tool: 'write', input: { path: 'a.ts' } },
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Conversation />)
+    await waitFor(() => {
+      expect(screen.getByText('write a.ts')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(stub.resolve).toHaveBeenCalledWith('approval_1', true)
+  })
+
+  it('adds live approval requests (deduped) and removes them when resolved', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<Conversation />)
+    await waitFor(() => {
+      expect(stub.bridge.approvals.pending).toHaveBeenCalled()
+    })
+
+    act(() => {
+      stub.emit(requested('approval_9'))
+      stub.emit(requested('approval_9'))
+    })
+    expect(screen.getAllByText('bash git push')).toHaveLength(1)
+
+    act(() => {
+      stub.emit(
+        sessionEvent('approval.resolved', {
+          sessionId: 's',
+          requestId: 'approval_9',
+          approved: false,
+          via: 'user',
+        }),
+      )
+    })
+    expect(screen.queryByText('bash git push')).not.toBeInTheDocument()
+  })
+
+  it('denying enters a grace window and Undo aborts it', async () => {
+    const stub = stubBridge([
+      { requestId: 'approval_2', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Conversation />)
+    await waitFor(() => {
+      expect(screen.getByText('write b.ts')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    expect(stub.resolve).toHaveBeenCalledWith('approval_2', false)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(stub.bridge.approvals.undo).toHaveBeenCalledWith('approval_2')
   })
 
   it('ignores a pending list that resolves after unmount', async () => {
@@ -341,7 +322,7 @@ describe('Roster', () => {
     )
     window.agentinator = stub.bridge
 
-    const { unmount } = render(<Roster />)
+    const { unmount } = render(<Conversation />)
     unmount()
     resolvePending([
       { requestId: 'approval_late', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },
