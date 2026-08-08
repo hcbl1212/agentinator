@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { StoredEvent } from '../shared/events'
+
 const { mockContextBridge, mockIpcRenderer } = vi.hoisted(() => ({
   mockContextBridge: { exposeInMainWorld: vi.fn() },
-  mockIpcRenderer: { invoke: vi.fn(() => Promise.resolve()) },
+  mockIpcRenderer: {
+    invoke: vi.fn(() => Promise.resolve()),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+  },
 }))
 
 vi.mock('electron', () => ({
@@ -33,5 +39,37 @@ describe('preload bridge', () => {
     await bridge.events.list()
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:list', 0)
+  })
+
+  it('subscribes to appended events and unwraps the IPC envelope', () => {
+    const listener = vi.fn()
+
+    bridge.events.onAppended(listener)
+
+    expect(mockIpcRenderer.on).toHaveBeenCalledWith('events:appended', expect.any(Function))
+    const wrapped = mockIpcRenderer.on.mock.calls.at(-1)?.[1] as (
+      event: unknown,
+      stored: StoredEvent,
+    ) => void
+    const stored = { seq: 4, ts: 't', type: 'agent.text', payload: {} } as unknown as StoredEvent
+    wrapped(undefined, stored)
+    expect(listener).toHaveBeenCalledWith(stored)
+  })
+
+  it('unsubscribes the same wrapped listener it registered', () => {
+    const unsubscribe = bridge.events.onAppended(vi.fn())
+    const wrapped = mockIpcRenderer.on.mock.calls.at(-1)?.[1] as unknown
+
+    unsubscribe()
+
+    expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith('events:appended', wrapped)
+  })
+
+  it('routes agent.startDemo and agent.cancel over IPC', async () => {
+    await bridge.agent.startDemo()
+    await bridge.agent.cancel('session_9')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-demo')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
   })
 })

@@ -7,6 +7,19 @@ export const bridge: AgentinatorBridge = {
   events: {
     count: () => ipcRenderer.invoke('events:count') as Promise<number>,
     list: (afterSeq = 0) => ipcRenderer.invoke('events:list', afterSeq) as Promise<StoredEvent[]>,
+    onAppended: (listener) => {
+      const wrapped = (_event: unknown, stored: StoredEvent): void => {
+        listener(stored)
+      }
+      ipcRenderer.on('events:appended', wrapped)
+      return () => {
+        ipcRenderer.removeListener('events:appended', wrapped)
+      }
+    },
+  },
+  agent: {
+    startDemo: () => ipcRenderer.invoke('agent:start-demo') as Promise<string>,
+    cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
   },
 }
 

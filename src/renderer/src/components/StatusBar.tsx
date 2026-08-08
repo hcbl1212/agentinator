@@ -14,8 +14,14 @@ export function StatusBar(): React.JSX.Element {
         setEventCount(count)
       }
     })
+    // seq is the row count in an append-only log that starts at 1 — a live
+    // append can update the count without a round trip.
+    const unsubscribe = bridge.events.onAppended((event) => {
+      setEventCount(event.seq)
+    })
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [])
 

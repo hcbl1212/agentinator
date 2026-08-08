@@ -83,6 +83,23 @@ body {
   max-width: 32ch;
 }
 
+.demo-button {
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  margin-top: 0.75rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.demo-button:hover,
+.demo-button:focus-visible {
+  background: rgba(53, 194, 165, 0.12);
+  outline: none;
+}
+
 .statusbar {
   border-top: 1px solid var(--line);
   color: var(--faint);

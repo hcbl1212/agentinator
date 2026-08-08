@@ -9,5 +9,12 @@ export interface AgentinatorBridge {
   events: {
     count(): Promise<number>
     list(afterSeq?: number): Promise<StoredEvent[]>
+    /** Subscribe to live appends; returns an unsubscribe function. */
+    onAppended(listener: (event: StoredEvent) => void): () => void
+  }
+  agent: {
+    /** Launch the scripted mock session — writes real events into the log. */
+    startDemo(): Promise<string>
+    cancel(sessionId: string): Promise<void>
   }
 }

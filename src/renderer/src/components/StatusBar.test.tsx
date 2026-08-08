@@ -1,17 +1,42 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
+import type { StoredEvent } from '../../../shared/events'
 import { StatusBar } from './StatusBar'
 
-function stubBridge(count: Promise<number>): AgentinatorBridge {
+interface BridgeStub {
+  bridge: AgentinatorBridge
+  emit: (event: StoredEvent) => void
+  unsubscribe: ReturnType<typeof vi.fn>
+}
+
+function stubBridge(count: Promise<number>): BridgeStub {
+  let appended: ((event: StoredEvent) => void) | undefined
+  const unsubscribe = vi.fn()
   return {
-    events: {
-      count: vi.fn(() => count),
-      list: vi.fn(() => Promise.resolve([])),
+    bridge: {
+      events: {
+        count: vi.fn(() => count),
+        list: vi.fn(() => Promise.resolve([])),
+        onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
+          appended = listener
+          return unsubscribe as () => void
+        }),
+      },
+      agent: {
+        startDemo: vi.fn(() => Promise.resolve('session_1')),
+        cancel: vi.fn(() => Promise.resolve()),
+      },
     },
+    emit: (event) => appended?.(event),
+    unsubscribe,
   }
+}
+
+function storedEvent(seq: number): StoredEvent {
+  return { seq, ts: 't', type: 'agent.text', payload: { sessionId: 's', text: 'x' } }
 }
 
 afterEach(() => {
@@ -26,7 +51,7 @@ describe('StatusBar', () => {
   })
 
   it('shows the event-log count fetched over the bridge', async () => {
-    window.agentinator = stubBridge(Promise.resolve(3))
+    window.agentinator = stubBridge(Promise.resolve(3)).bridge
 
     render(<StatusBar />)
 
@@ -35,19 +60,37 @@ describe('StatusBar', () => {
     })
   })
 
-  it('ignores a count that resolves after unmount', async () => {
+  it('updates the count live as events are appended', async () => {
+    const stub = stubBridge(Promise.resolve(3))
+    window.agentinator = stub.bridge
+
+    render(<StatusBar />)
+    await waitFor(() => {
+      expect(screen.getByText('log 3 events')).toBeInTheDocument()
+    })
+
+    act(() => {
+      stub.emit(storedEvent(4))
+    })
+
+    expect(screen.getByText('log 4 events')).toBeInTheDocument()
+  })
+
+  it('unsubscribes from appends on unmount and ignores a late count', async () => {
     let resolveCount: (n: number) => void = () => undefined
-    window.agentinator = stubBridge(
+    const stub = stubBridge(
       new Promise<number>((resolve) => {
         resolveCount = resolve
       }),
     )
+    window.agentinator = stub.bridge
 
     const { unmount } = render(<StatusBar />)
     unmount()
     resolveCount(9)
     await Promise.resolve()
 
+    expect(stub.unsubscribe).toHaveBeenCalledOnce()
     expect(screen.queryByText('log 9 events')).not.toBeInTheDocument()
   })
 })

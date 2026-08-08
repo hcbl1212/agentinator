@@ -17,6 +17,7 @@ const { mockApp, MockBrowserWindow, mockShell, mockIpcMain } = vi.hoisted(() => 
     loadURL = vi.fn()
     windowOpenHandler: WindowOpenHandler | undefined
     webContents = {
+      send: vi.fn(),
       setWindowOpenHandler: (handler: WindowOpenHandler): void => {
         this.windowOpenHandler = handler
       },
@@ -49,7 +50,18 @@ vi.mock('electron', () => ({
   ipcMain: mockIpcMain,
 }))
 
-import { bootstrap, createWindow, registerEventIpc } from './index'
+// The SDK spawns a CLI when queried; tests must never construct the real one.
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: vi.fn() }))
+
+import type { StoredEvent } from '../shared/events'
+import {
+  bootstrap,
+  broadcastEvent,
+  createWindow,
+  registerAgentIpc,
+  registerEventIpc,
+} from './index'
+import type { SessionManager } from './sessions'
 
 // index.ts has no import-time side effects (see entry.ts), so this runs
 // before any code can open a store: every getPath call lands in a temp dir.
@@ -132,6 +144,62 @@ describe('registerEventIpc', () => {
   })
 })
 
+describe('registerAgentIpc', () => {
+  function fakeManager(): { start: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn> } {
+    return { start: vi.fn(() => 'session_new'), cancel: vi.fn(() => Promise.resolve()) }
+  }
+
+  it('starts the mock demo session in the current working directory', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('agent:start-demo')?.(undefined)).toBe('session_new')
+    expect(manager.start).toHaveBeenCalledWith({
+      providerId: 'mock',
+      title: 'Demo: greet util',
+      prompt: 'Add a greet util with a test.',
+      cwd: process.cwd(),
+    })
+  })
+
+  it('routes cancellation to the session manager', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    void handlers.get('agent:cancel')?.(undefined, 'session_7')
+
+    expect(manager.cancel).toHaveBeenCalledWith('session_7')
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerAgentIpc(fakeManager() as unknown as SessionManager)
+
+    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    expect(channels).toEqual(['agent:start-demo', 'agent:cancel'])
+  })
+})
+
+describe('broadcastEvent', () => {
+  it('sends the appended event to every open window', () => {
+    const first = new MockBrowserWindow({})
+    const second = new MockBrowserWindow({})
+    MockBrowserWindow.getAllWindows.mockReturnValue([first, second])
+    const event = { seq: 1, ts: 't', type: 'agent.text', payload: {} } as unknown as StoredEvent
+
+    broadcastEvent(event)
+
+    expect(first.webContents.send).toHaveBeenCalledWith('events:appended', event)
+    expect(second.webContents.send).toHaveBeenCalledWith('events:appended', event)
+  })
+})
+
 describe('bootstrap', () => {
   it('opens the store in userData, records app.started, and serves IPC', async () => {
     const store = fakeStore()
@@ -142,6 +210,7 @@ describe('bootstrap', () => {
     expect(createStore).toHaveBeenCalledWith(expect.stringContaining('agentinator.db'))
     expect(store.append).toHaveBeenCalledWith('app.started', { version: '0.1.0-test' })
     expect(mockIpcMain.handle).toHaveBeenCalledWith('events:count', expect.any(Function))
+    expect(mockIpcMain.handle).toHaveBeenCalledWith('agent:start-demo', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
