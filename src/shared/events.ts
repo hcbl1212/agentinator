@@ -44,8 +44,13 @@ export interface EventPayloads {
     approved: boolean
     via: 'allowlist' | 'user'
   }
-  /** The session crossed its spend ceiling and was stopped. */
-  'budget.exceeded': { sessionId: string; usedUsd: number; capUsd: number }
+  /** A spend ceiling (session or a time window) was crossed. */
+  'budget.exceeded': {
+    sessionId: string
+    scope: import('./budget').BudgetScope
+    usedUsd: number
+    capUsd: number
+  }
 }
 
 export type EventType = keyof EventPayloads

@@ -49,8 +49,10 @@ function stubBridge(
         }),
       },
       settings: {
-        getBudgetUsd: vi.fn(() => Promise.resolve(5)),
-        setBudgetUsd: vi.fn(() => Promise.resolve()),
+        getBudgets: vi.fn(() =>
+          Promise.resolve({ session: 5, hour: null, day: null, week: null, month: null }),
+        ),
+        setBudget: vi.fn(() => Promise.resolve()),
       },
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),

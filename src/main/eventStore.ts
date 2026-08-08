@@ -51,6 +51,7 @@ export class EventStore {
   #selectSearch: StatementSync
   #selectMaxSeq: StatementSync
   #selectTotalCost: StatementSync
+  #selectCostSince: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -101,6 +102,9 @@ export class EventStore {
     this.#selectMaxSeq = this.#db.prepare('SELECT COALESCE(MAX(seq), 0) AS n FROM events')
     this.#selectTotalCost = this.#db.prepare(
       "SELECT COALESCE(SUM(json_extract(payload, '$.usd')), 0) AS usd FROM events WHERE type = 'cost.usage'",
+    )
+    this.#selectCostSince = this.#db.prepare(
+      "SELECT COALESCE(SUM(json_extract(payload, '$.usd')), 0) AS usd FROM events WHERE type = 'cost.usage' AND ts >= ?",
     )
   }
 
@@ -157,6 +161,12 @@ export class EventStore {
   /** Lifetime spend across every session in the log. */
   totalCostUsd(): number {
     const row = this.#selectTotalCost.get() as { usd: number }
+    return row.usd
+  }
+
+  /** Spend since an ISO timestamp — the basis for time-windowed budgets. */
+  costSinceUsd(sinceIso: string): number {
+    const row = this.#selectCostSince.get(sinceIso) as { usd: number }
     return row.usd
   }
 

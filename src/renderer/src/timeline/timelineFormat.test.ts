@@ -172,12 +172,14 @@ describe('describeEvent', () => {
     ).toMatchObject({ marker: '✗', text: 'approval denied · via user', tone: 'err' })
   })
 
-  it('renders budget breaches loudly', () => {
+  it('renders budget breaches loudly with their scope', () => {
     expect(
-      describeEvent(stored('budget.exceeded', { sessionId: 's', usedUsd: 6.004, capUsd: 5 })),
+      describeEvent(
+        stored('budget.exceeded', { sessionId: 's', scope: 'day', usedUsd: 6.004, capUsd: 5 }),
+      ),
     ).toMatchObject({
       marker: '!',
-      text: 'budget exceeded · $6.00 of $5.00 — session stopped',
+      text: 'day budget exceeded · $6.00 of $5.00 — session stopped',
       tone: 'err',
     })
   })

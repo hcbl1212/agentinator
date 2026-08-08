@@ -140,24 +140,21 @@ describe('SessionManager', () => {
     ).not.toThrow()
   })
 
-  it('stops a session that exceeds its budget and audits the breach', async () => {
-    const store = new EventStore()
-    const types: string[] = []
-    const manager = new SessionManager(store, (event) => types.push(event.type))
-    const cancel = vi.fn(() => Promise.resolve())
+  function costProvider(id: string, cancel = vi.fn(() => Promise.resolve())) {
     let emitCost: (usd: number) => void = () => undefined
-    manager.register({
-      ...instantProvider('spender'),
-      id: 'spender',
-      startSession(context, emit) {
-        emit('session.started', {
+    const provider = {
+      ...instantProvider(id),
+      id,
+      startSession(context: Parameters<AgentProvider['startSession']>[0], emit: never) {
+        const emitFn = emit as unknown as (type: string, payload: unknown) => void
+        emitFn('session.started', {
           sessionId: context.sessionId,
           agentId: context.agentId,
           workspaceId: context.workspaceId,
           title: context.title,
         })
         emitCost = (usd) =>
-          emit('cost.usage', {
+          emitFn('cost.usage', {
             sessionId: context.sessionId,
             inputTokens: 1,
             outputTokens: 1,
@@ -166,51 +163,141 @@ describe('SessionManager', () => {
           })
         return { send: () => Promise.resolve(), cancel }
       },
-    })
+    } as unknown as AgentProvider
+    return { provider, cost: (usd: number) => emitCost(usd) }
+  }
 
-    manager.start({
-      providerId: 'spender',
-      title: 'T',
-      prompt: 'P',
-      cwd: '/tmp',
-      budgetUsd: 5,
-    })
+  const onlySession = (usd: number | null) => (): import('../shared/budget').Budgets => ({
+    session: usd,
+    hour: null,
+    day: null,
+    week: null,
+    month: null,
+  })
 
-    emitCost(3)
+  it('stops a session that exceeds its session cap and audits the breach', () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const cancel = vi.fn(() => Promise.resolve())
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      getBudgets: onlySession(5),
+    })
+    const { provider, cost } = costProvider('spender', cancel)
+    manager.register(provider)
+
+    manager.start({ providerId: 'spender', title: 'T', prompt: 'P', cwd: '/tmp' })
+
+    cost(3)
     expect(types).not.toContain('budget.exceeded')
     expect(cancel).not.toHaveBeenCalled()
 
-    emitCost(3)
+    cost(3)
     expect(types).toContain('budget.exceeded')
     expect(cancel).toHaveBeenCalledOnce()
     const breach = store.list().find((event) => event.type === 'budget.exceeded')
-    expect(breach?.payload).toMatchObject({ usedUsd: 6, capUsd: 5 })
+    expect(breach?.payload).toMatchObject({ scope: 'session', usedUsd: 6, capUsd: 5 })
   })
 
-  it('applies the manager default budget (read live) when a session sets none', () => {
+  it('stops a session that pushes a daily window over its cap', () => {
     const store = new EventStore()
     const types: string[] = []
     const manager = new SessionManager(store, (event) => types.push(event.type), {
-      getDefaultBudgetUsd: () => 0.001,
+      getBudgets: () => ({ session: null, hour: null, day: 1, week: null, month: null }),
+      now: () => new Date(),
+    })
+    const cancel = vi.fn(() => Promise.resolve())
+    const { provider, cost } = costProvider('spender', cancel)
+    manager.register(provider)
+
+    manager.start({ providerId: 'spender', title: 'T', prompt: 'P', cwd: '/tmp' })
+
+    cost(1.5)
+
+    const breach = store.list().find((event) => event.type === 'budget.exceeded')
+    expect(breach?.payload).toMatchObject({ scope: 'day' })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('refuses to start a new session when a window is already spent', () => {
+    const store = new EventStore()
+    // Pre-load spend for today from a prior session.
+    store.append('cost.usage', {
+      sessionId: 'prior',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      usd: 10,
+    })
+    const types: string[] = []
+    const started = vi.fn()
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      getBudgets: () => ({ session: null, hour: null, day: 5, week: null, month: null }),
     })
     manager.register({
-      ...instantProvider('cheap'),
-      id: 'cheap',
-      startSession(context, emit) {
-        emit('cost.usage', {
-          sessionId: context.sessionId,
-          inputTokens: 1,
-          outputTokens: 1,
-          cacheReadInputTokens: 0,
-          usd: 0.01,
-        })
+      ...instantProvider('x'),
+      id: 'x',
+      startSession() {
+        started()
         return { send: () => Promise.resolve(), cancel: () => Promise.resolve() }
       },
     })
 
-    manager.start({ providerId: 'cheap', title: 'T', prompt: 'P', cwd: '/tmp' })
+    manager.start({ providerId: 'x', title: 'T', prompt: 'P', cwd: '/tmp' })
 
-    expect(types).toContain('budget.exceeded')
+    // Provider never ran; a coherent started → exceeded → failed was logged.
+    expect(started).not.toHaveBeenCalled()
+    expect(types).toEqual(['session.started', 'budget.exceeded', 'session.ended'])
+    const breach = store.list().find((event) => event.type === 'budget.exceeded')
+    expect(breach?.payload).toMatchObject({ scope: 'day', usedUsd: 10, capUsd: 5 })
+    expect(manager.activeCount()).toBe(0)
+  })
+
+  it('leaves an uncapped window and session alone', () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      getBudgets: onlySession(null),
+    })
+    const { provider, cost } = costProvider('free')
+    manager.register(provider)
+
+    manager.start({ providerId: 'free', title: 'T', prompt: 'P', cwd: '/tmp' })
+    cost(1000)
+
+    expect(types).not.toContain('budget.exceeded')
+  })
+
+  it('does not breach when session and window caps are both under', () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      // Session cap present but generous; day cap present but not reached.
+      getBudgets: () => ({ session: 100, hour: null, day: 100, week: null, month: null }),
+    })
+    const { provider, cost } = costProvider('modest')
+    manager.register(provider)
+
+    manager.start({ providerId: 'modest', title: 'T', prompt: 'P', cwd: '/tmp' })
+    cost(1.5)
+
+    expect(types).not.toContain('budget.exceeded')
+  })
+
+  it('breaches the day window even when a generous session cap is not reached', () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      getBudgets: () => ({ session: 100, hour: null, day: 1, week: null, month: null }),
+    })
+    const cancel = vi.fn(() => Promise.resolve())
+    const { provider, cost } = costProvider('spender', cancel)
+    manager.register(provider)
+
+    manager.start({ providerId: 'spender', title: 'T', prompt: 'P', cwd: '/tmp' })
+    cost(1.5)
+
+    const breach = store.list().find((event) => event.type === 'budget.exceeded')
+    expect(breach?.payload).toMatchObject({ scope: 'day' })
   })
 
   it('runs the real mock provider end to end through the store', async () => {

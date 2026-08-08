@@ -185,6 +185,29 @@ describe('EventStore', () => {
     expect(store.totalCostUsd()).toBeCloseTo(0.01, 10)
   })
 
+  it('sums cost since a timestamp for time-windowed budgets', () => {
+    const store = open()
+    const before = store.append('cost.usage', {
+      sessionId: 's',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      usd: 1,
+    })
+    const cutoff = store.append('cost.usage', {
+      sessionId: 's',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      usd: 2,
+    })
+
+    // Since the cutoff event's own timestamp: includes it and nothing earlier.
+    expect(store.costSinceUsd(cutoff.ts)).toBeGreaterThanOrEqual(2)
+    expect(store.costSinceUsd(before.ts)).toBeCloseTo(3, 10)
+    expect(store.costSinceUsd('2999-01-01T00:00:00.000Z')).toBe(0)
+  })
+
   it('exposes no way to update or delete events', () => {
     const store = open()
 

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 
+import type { BudgetScope } from '../shared/budget'
 import type { StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
@@ -85,9 +86,9 @@ export function registerSettingsIpc(
     ipcMain.handle(channel, listener)
   },
 ): void {
-  handle('settings:get-budget', () => settings.budgetUsd())
-  handle('settings:set-budget', (_event, usd) => {
-    settings.setBudgetUsd(usd as number)
+  handle('settings:get-budgets', () => settings.budgets())
+  handle('settings:set-budget', (_event, scope, usd) => {
+    settings.setBudget(scope as BudgetScope, usd as number | null)
   })
 }
 
@@ -146,7 +147,7 @@ export async function bootstrap(
   const decide = broker.decide.bind(broker)
 
   const manager = new SessionManager(store, broadcastEvent, {
-    getDefaultBudgetUsd: () => settings.budgetUsd(),
+    getBudgets: () => settings.budgets(),
   })
   manager.register(createMockProvider(undefined, undefined, decide))
   manager.register(createClaudeProvider(claudeQuery, decide))

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
+import type { Budgets } from '../../../shared/budget'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
 import { StatusBar } from './StatusBar'
 
@@ -11,13 +12,19 @@ interface BridgeStub {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   unsubscribe: ReturnType<typeof vi.fn>
-  setBudgetUsd: ReturnType<typeof vi.fn>
+  setBudget: ReturnType<typeof vi.fn>
 }
 
-function stubBridge(options: { count?: number; total?: number; budget?: number } = {}): BridgeStub {
+function budgets(overrides: Partial<Budgets> = {}): Budgets {
+  return { session: 5, hour: null, day: null, week: null, month: null, ...overrides }
+}
+
+function stubBridge(
+  options: { count?: number; total?: number; budgets?: Budgets } = {},
+): BridgeStub {
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
-  const setBudgetUsd = vi.fn(() => Promise.resolve())
+  const setBudget = vi.fn(() => Promise.resolve())
   return {
     bridge: {
       events: {
@@ -32,8 +39,8 @@ function stubBridge(options: { count?: number; total?: number; budget?: number }
         }),
       },
       settings: {
-        getBudgetUsd: vi.fn(() => Promise.resolve(options.budget ?? 5)),
-        setBudgetUsd: setBudgetUsd as AgentinatorBridge['settings']['setBudgetUsd'],
+        getBudgets: vi.fn(() => Promise.resolve(options.budgets ?? budgets())),
+        setBudget: setBudget as AgentinatorBridge['settings']['setBudget'],
       },
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
@@ -47,7 +54,7 @@ function stubBridge(options: { count?: number; total?: number; budget?: number }
     },
     emit: (event) => appended?.(event),
     unsubscribe,
-    setBudgetUsd,
+    setBudget,
   }
 }
 
@@ -79,8 +86,12 @@ describe('StatusBar', () => {
     expect(screen.getByText('budget —')).toBeInTheDocument()
   })
 
-  it('backfills total spend and the budget on mount', async () => {
-    window.agentinator = stubBridge({ count: 3, total: 1.2345, budget: 8 }).bridge
+  it('backfills total spend and the session cap on mount', async () => {
+    window.agentinator = stubBridge({
+      count: 3,
+      total: 1.2345,
+      budgets: budgets({ session: 8 }),
+    }).bridge
 
     render(<StatusBar />)
 
@@ -91,8 +102,18 @@ describe('StatusBar', () => {
     expect(screen.getByText('session $0.00 / $8.00')).toBeInTheDocument()
   })
 
+  it('shows session spend without a cap when the session budget is cleared', async () => {
+    window.agentinator = stubBridge({ budgets: budgets({ session: null }) }).bridge
+
+    render(<StatusBar />)
+
+    await waitFor(() => {
+      expect(screen.getByText('session $0.00')).toBeInTheDocument()
+    })
+  })
+
   it('accumulates spend live into both the total and the current session', async () => {
-    const stub = stubBridge({ total: 1, budget: 5 })
+    const stub = stubBridge({ total: 1 })
     window.agentinator = stub.bridge
 
     render(<StatusBar />)
@@ -101,7 +122,6 @@ describe('StatusBar', () => {
     })
 
     act(() => {
-      // An unrelated event bumps the log count but not spend.
       stub.emit(event(2, 'agent.text', { sessionId: 's', text: 'hi' }))
       stub.emit(cost(3, 0.5))
     })
@@ -112,18 +132,8 @@ describe('StatusBar', () => {
     expect(screen.getByText('log 3 events')).toBeInTheDocument()
   })
 
-  it('can open the budget editor from the placeholder when spend is unknown', async () => {
-    render(<StatusBar />)
-
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'budget —' }))
-
-    const input = screen.getByRole('spinbutton', { name: 'Session budget in dollars' })
-    expect(input).toHaveValue(null)
-  })
-
   it('resets the session figure when a new session starts', async () => {
-    const stub = stubBridge({ budget: 5 })
+    const stub = stubBridge()
     window.agentinator = stub.bridge
 
     render(<StatusBar />)
@@ -150,7 +160,7 @@ describe('StatusBar', () => {
   })
 
   it('warms to amber near the cap and red at breach', async () => {
-    const stub = stubBridge({ budget: 1 })
+    const stub = stubBridge({ budgets: budgets({ session: 1 }) })
     window.agentinator = stub.bridge
 
     render(<StatusBar />)
@@ -169,8 +179,8 @@ describe('StatusBar', () => {
     expect(screen.getByRole('button', { name: /session/ }).className).toContain('budget-over')
   })
 
-  it('edits the budget and persists it', async () => {
-    const stub = stubBridge({ budget: 5 })
+  it('opens the budget panel and edits a time-window cap', async () => {
+    const stub = stubBridge()
     window.agentinator = stub.bridge
     const user = userEvent.setup()
 
@@ -180,57 +190,22 @@ describe('StatusBar', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /session/ }))
-    const input = screen.getByRole('spinbutton', { name: 'Session budget in dollars' })
-    await user.clear(input)
-    await user.type(input, '12')
+    expect(screen.getByRole('dialog', { name: 'Budget settings' })).toBeInTheDocument()
+
+    const dayInput = screen.getByRole('spinbutton', { name: 'Day budget in dollars' })
+    await user.type(dayInput, '20')
     await user.keyboard('{Enter}')
 
-    expect(stub.setBudgetUsd).toHaveBeenCalledWith(12)
-    expect(screen.getByText('session $0.00 / $12.00')).toBeInTheDocument()
-  })
+    expect(stub.setBudget).toHaveBeenCalledWith('day', 20)
 
-  it('cancels an edit on Escape without persisting', async () => {
-    const stub = stubBridge({ budget: 5 })
-    window.agentinator = stub.bridge
-    const user = userEvent.setup()
-
-    render(<StatusBar />)
-    await waitFor(() => {
-      expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /session/ }))
-    await user.type(screen.getByRole('spinbutton'), '99')
-    await user.keyboard('{Escape}')
-
-    expect(stub.setBudgetUsd).not.toHaveBeenCalled()
-    expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
-  })
-
-  it('ignores a non-positive budget edit', async () => {
-    const stub = stubBridge({ budget: 5 })
-    window.agentinator = stub.bridge
-    const user = userEvent.setup()
-
-    render(<StatusBar />)
-    await waitFor(() => {
-      expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /session/ }))
-    const input = screen.getByRole('spinbutton')
-    await user.clear(input)
-    await user.type(input, '0')
-    fireEvent.blur(input)
-
-    expect(stub.setBudgetUsd).not.toHaveBeenCalled()
-    expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Close budgets' }))
+    expect(screen.queryByRole('dialog', { name: 'Budget settings' })).not.toBeInTheDocument()
   })
 
   it('unsubscribes on unmount and ignores a late load', async () => {
-    let resolve: (values: [number, number, number]) => void = () => undefined
+    let resolve: (values: [number, number, Budgets]) => void = () => undefined
     const stub = stubBridge()
-    const pending = new Promise<[number, number, number]>((r) => {
+    const pending = new Promise<[number, number, Budgets]>((r) => {
       resolve = r
     })
     ;(stub.bridge.events.count as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -239,14 +214,14 @@ describe('StatusBar', () => {
     ;(stub.bridge.events.totalCost as ReturnType<typeof vi.fn>).mockReturnValue(
       pending.then(([, total]) => total),
     )
-    ;(stub.bridge.settings.getBudgetUsd as ReturnType<typeof vi.fn>).mockReturnValue(
-      pending.then(([, , budget]) => budget),
+    ;(stub.bridge.settings.getBudgets as ReturnType<typeof vi.fn>).mockReturnValue(
+      pending.then(([, , loaded]) => loaded),
     )
     window.agentinator = stub.bridge
 
     const { unmount } = render(<StatusBar />)
     unmount()
-    resolve([9, 9, 9])
+    resolve([9, 9, budgets()])
     await Promise.resolve()
 
     expect(stub.unsubscribe).toHaveBeenCalledOnce()

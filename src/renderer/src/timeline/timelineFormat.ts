@@ -92,7 +92,7 @@ export function describeEvent(event: StoredEvent): TimelineLine {
       const payload = event.payload as EventPayloads['budget.exceeded']
       return {
         marker: '!',
-        text: `budget exceeded · $${payload.usedUsd.toFixed(2)} of $${payload.capUsd.toFixed(2)} — session stopped`,
+        text: `${payload.scope} budget exceeded · $${payload.usedUsd.toFixed(2)} of $${payload.capUsd.toFixed(2)} — session stopped`,
         tone: 'err',
       }
     }

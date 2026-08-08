@@ -85,8 +85,8 @@ function fakeStore(): EventStore {
 
 function fakeSettings(): SettingsStore {
   return {
-    budgetUsd: vi.fn(() => 5),
-    setBudgetUsd: vi.fn(),
+    budgets: vi.fn(() => ({ session: 5, hour: null, day: null, week: null, month: null })),
+    setBudget: vi.fn(),
     close: vi.fn(),
   } as unknown as SettingsStore
 }
@@ -213,24 +213,25 @@ describe('registerAgentIpc', () => {
 })
 
 describe('registerSettingsIpc', () => {
-  it('serves and updates the session budget', () => {
-    const settings = { budgetUsd: vi.fn(() => 5), setBudgetUsd: vi.fn() }
+  it('serves and updates per-scope budgets', () => {
+    const budgets = { session: 5, hour: null, day: null, week: null, month: null }
+    const settings = { budgets: vi.fn(() => budgets), setBudget: vi.fn() }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerSettingsIpc(settings as unknown as SettingsStore, (channel, listener) => {
       handlers.set(channel, listener)
     })
 
-    expect(handlers.get('settings:get-budget')?.(undefined)).toBe(5)
-    handlers.get('settings:set-budget')?.(undefined, 12)
-    expect(settings.setBudgetUsd).toHaveBeenCalledWith(12)
+    expect(handlers.get('settings:get-budgets')?.(undefined)).toBe(budgets)
+    handlers.get('settings:set-budget')?.(undefined, 'day', 12)
+    expect(settings.setBudget).toHaveBeenCalledWith('day', 12)
   })
 
   it('registers on ipcMain by default', () => {
     registerSettingsIpc(fakeSettings())
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['settings:get-budget', 'settings:set-budget'])
+    expect(channels).toEqual(['settings:get-budgets', 'settings:set-budget'])
   })
 })
 
@@ -317,7 +318,7 @@ describe('bootstrap', () => {
     expect(mockIpcMain.handle).toHaveBeenCalledWith('events:count', expect.any(Function))
     expect(mockIpcMain.handle).toHaveBeenCalledWith('agent:start-demo', expect.any(Function))
     expect(mockIpcMain.handle).toHaveBeenCalledWith('approvals:pending', expect.any(Function))
-    expect(mockIpcMain.handle).toHaveBeenCalledWith('settings:get-budget', expect.any(Function))
+    expect(mockIpcMain.handle).toHaveBeenCalledWith('settings:get-budgets', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
@@ -373,7 +374,7 @@ describe('bootstrap', () => {
     )?.[1] as (event: unknown, sessionId: string) => Promise<void>
 
     const sessionId = startDemo(undefined)
-    expect(settings.budgetUsd).toHaveBeenCalled()
+    expect(settings.budgets).toHaveBeenCalled()
     await cancel(undefined, sessionId) // stop the scripted session's timers
   })
 

@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react'
 
+import { EMPTY_BUDGETS } from '../../../shared/budget'
+import type { Budgets, BudgetScope } from '../../../shared/budget'
 import type { EventPayloads } from '../../../shared/events'
+import { BudgetPanel } from './BudgetPanel'
 
 /**
  * Live status bar. Total spend is backfilled from the whole log on mount then
- * kept current from live cost events. The budget region shows the active
- * session's spend against the editable per-session cap, warming to amber as it
- * approaches and red at breach.
+ * kept current from live cost events. The session chip shows the active
+ * session's spend against its cap (amber near, red at breach); clicking the
+ * budget region opens the time-bound budget editor.
  */
 export function StatusBar(): React.JSX.Element {
   const [eventCount, setEventCount] = useState<number | null>(null)
   const [tokens, setTokens] = useState({ input: 0, cacheRead: 0 })
   const [totalUsd, setTotalUsd] = useState(0)
   const [sessionUsd, setSessionUsd] = useState(0)
-  const [budgetUsd, setBudgetUsd] = useState<number | null>(null)
+  const [budgets, setBudgets] = useState<Budgets>(EMPTY_BUDGETS)
+  const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
 
   useEffect(() => {
     const bridge = window.agentinator
@@ -26,12 +29,13 @@ export function StatusBar(): React.JSX.Element {
     void Promise.all([
       bridge.events.count(),
       bridge.events.totalCost(),
-      bridge.settings.getBudgetUsd(),
-    ]).then(([count, total, budget]) => {
+      bridge.settings.getBudgets(),
+    ]).then(([count, total, loadedBudgets]) => {
       if (!cancelled) {
         setEventCount(count)
         setTotalUsd(total)
-        setBudgetUsd(budget)
+        setBudgets(loadedBudgets)
+        setLoaded(true)
       }
     })
     const unsubscribe = bridge.events.onAppended((event) => {
@@ -58,21 +62,22 @@ export function StatusBar(): React.JSX.Element {
   const cacheHealth =
     tokensSeen === 0 ? 'cache —' : `cache ${Math.round((tokens.cacheRead / tokensSeen) * 100)}%`
 
-  const commitBudget = (): void => {
-    setEditing(false)
-    const parsed = Number(draft)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      setBudgetUsd(parsed)
-      void window.agentinator?.settings.setBudgetUsd(parsed)
-    }
+  const changeBudget = (scope: BudgetScope, usd: number | null): void => {
+    setBudgets((previous) => ({ ...previous, [scope]: usd }))
+    void window.agentinator?.settings.setBudget(scope, usd)
   }
 
-  const budgetClass =
-    budgetUsd === null || sessionUsd < budgetUsd * 0.8
+  const sessionCap = budgets.session
+  const sessionClass =
+    sessionCap === null || sessionUsd < sessionCap * 0.8
       ? ''
-      : sessionUsd >= budgetUsd
+      : sessionUsd >= sessionCap
         ? ' budget-over'
         : ' budget-near'
+  const sessionLabel =
+    sessionCap === null
+      ? `session $${sessionUsd.toFixed(2)}`
+      : `session $${sessionUsd.toFixed(2)} / $${sessionCap.toFixed(2)}`
 
   return (
     <footer className="statusbar" aria-label="Status bar">
@@ -81,44 +86,18 @@ export function StatusBar(): React.JSX.Element {
       <span title="Share of input tokens served from the prompt cache this session">
         {cacheHealth}
       </span>
-      {editing ? (
-        <span className="budget">
-          budget $
-          <input
-            type="number"
-            className="budget-input"
-            aria-label="Session budget in dollars"
-            step="0.5"
-            min="0"
-            autoFocus
-            value={draft}
-            onChange={(changed) => setDraft(changed.target.value)}
-            onBlur={commitBudget}
-            onKeyDown={(key) => {
-              if (key.key === 'Enter') {
-                commitBudget()
-              } else if (key.key === 'Escape') {
-                setEditing(false)
-              }
-            }}
-          />
-        </span>
-      ) : (
-        <button
-          type="button"
-          className={`budget budget-button${budgetClass}`}
-          title="Per-session spend ceiling — click to edit"
-          onClick={() => {
-            setDraft(budgetUsd === null ? '' : String(budgetUsd))
-            setEditing(true)
-          }}
-        >
-          {budgetUsd === null
-            ? 'budget —'
-            : `session $${sessionUsd.toFixed(2)} / $${budgetUsd.toFixed(2)}`}
-        </button>
-      )}
+      <button
+        type="button"
+        className={`budget budget-button${sessionClass}`}
+        title="Time-bound spend ceilings — click to edit"
+        onClick={() => setEditing(true)}
+      >
+        {loaded ? sessionLabel : 'budget —'}
+      </button>
       <span className="statusbar-right">v0.1.0</span>
+      {editing && loaded && (
+        <BudgetPanel budgets={budgets} onChange={changeBudget} onClose={() => setEditing(false)} />
+      )}
     </footer>
   )
 }

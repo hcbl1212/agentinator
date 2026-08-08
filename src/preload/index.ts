@@ -27,8 +27,10 @@ export const bridge: AgentinatorBridge = {
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
   },
   settings: {
-    getBudgetUsd: () => ipcRenderer.invoke('settings:get-budget') as Promise<number>,
-    setBudgetUsd: (usd) => ipcRenderer.invoke('settings:set-budget', usd) as Promise<void>,
+    getBudgets: () =>
+      ipcRenderer.invoke('settings:get-budgets') as Promise<import('../shared/budget').Budgets>,
+    setBudget: (scope, usd) =>
+      ipcRenderer.invoke('settings:set-budget', scope, usd) as Promise<void>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,

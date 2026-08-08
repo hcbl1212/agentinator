@@ -36,9 +36,9 @@ export interface AgentinatorBridge {
     cancel(sessionId: string): Promise<void>
   }
   settings: {
-    /** Per-session spend ceiling applied to new sessions. */
-    getBudgetUsd(): Promise<number>
-    setBudgetUsd(usd: number): Promise<void>
+    /** Spend ceilings per scope (session + time windows). */
+    getBudgets(): Promise<import('./budget').Budgets>
+    setBudget(scope: import('./budget').BudgetScope, usd: number | null): Promise<void>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

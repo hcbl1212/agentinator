@@ -32,11 +32,11 @@ describe('preload bridge', () => {
   })
 
   it('routes settings get/set over IPC', async () => {
-    await bridge.settings.getBudgetUsd()
-    await bridge.settings.setBudgetUsd(12)
+    await bridge.settings.getBudgets()
+    await bridge.settings.setBudget('day', 12)
 
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budget')
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 12)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budgets')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 'day', 12)
   })
 
   it('routes events.list over IPC with the given cursor', async () => {
