@@ -76,8 +76,7 @@ function requested(requestId: string): StoredEvent {
 }
 
 async function launchTask(): Promise<void> {
-  await userEvent.type(screen.getByRole('textbox', { name: 'Task for Claude' }), 'Do it')
-  await userEvent.click(screen.getByRole('button', { name: /Run task/ }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Task for Claude' }), 'Do it{Enter}')
   await screen.findByRole('textbox', { name: 'Reply to Claude' })
 }
 
@@ -93,18 +92,13 @@ describe('ComposerDock', () => {
     expect(screen.queryByRole('textbox', { name: 'Task for Claude' })).not.toBeInTheDocument()
   })
 
-  it('launches a task with the typed prompt and clears the composer', async () => {
+  it('launches a task from the console prompt and clears it', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
     render(<ComposerDock />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
-    const run = screen.getByRole('button', { name: /Run task/ })
-    expect(run).toBeDisabled()
-
-    await userEvent.type(input, 'Add a hello util')
-    expect(run).toBeEnabled()
-    await userEvent.click(run)
+    await userEvent.type(input, 'Add a hello util{Enter}')
 
     expect(stub.startTask).toHaveBeenCalledWith('Add a hello util')
     expect(input).toHaveValue('')
@@ -136,16 +130,6 @@ describe('ComposerDock', () => {
     expect(stub.startTask).not.toHaveBeenCalled()
   })
 
-  it('starts the mock demo session from the composer bar', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    await userEvent.click(screen.getByRole('button', { name: /Demo/ }))
-
-    expect(stub.bridge.agent.startDemo).toHaveBeenCalledOnce()
-  })
-
   it('enters reply mode after a task launches and sends a follow-up to that session', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
@@ -153,11 +137,12 @@ describe('ComposerDock', () => {
     render(<ComposerDock />)
     await launchTask()
 
-    expect(screen.queryByRole('button', { name: /Demo/ })).not.toBeInTheDocument()
     expect(screen.getByText('Working…')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByRole('textbox', { name: 'Reply to Claude' }), 'also add tests')
-    await userEvent.click(screen.getByRole('button', { name: /Send/ }))
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Reply to Claude' }),
+      'also add tests{Enter}',
+    )
 
     expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests')
   })
@@ -208,7 +193,6 @@ describe('ComposerDock', () => {
 
     expect(stub.cancel).toHaveBeenCalledWith('session_task')
     expect(screen.getByRole('textbox', { name: 'Task for Claude' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Demo/ })).toBeInTheDocument()
   })
 
   it('clears the active session and returns to the launcher when the session ends', async () => {

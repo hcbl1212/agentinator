@@ -529,23 +529,6 @@ body {
   filter: brightness(1.1);
 }
 
-.demo-button {
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--soft);
-  cursor: pointer;
-  font: inherit;
-  margin-top: 0.5rem;
-  padding: 0.35rem 0.7rem;
-}
-
-.demo-button:hover,
-.demo-button:focus-visible {
-  background: rgba(53, 194, 165, 0.12);
-  outline: none;
-}
-
 .session-status {
   align-items: center;
   border: 1px solid var(--line);
@@ -804,50 +787,35 @@ body {
   margin: 0 0 0.6rem;
 }
 
-.composer {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.composer-input {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink);
-  font: inherit;
-  /* Auto-grow with content between a roomy floor and a 40vh ceiling; older
-     engines fall back to the 3-row textarea. */
-  field-sizing: content;
-  min-height: 4.2rem;
-  max-height: 40vh;
-  padding: 0.55rem 0.65rem;
-  resize: none;
-}
-
-.composer-input::placeholder {
-  color: var(--faint);
-}
-
-.composer-input:focus-visible {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.composer-bar {
-  align-items: center;
+/* a traditional console prompt: a "›" and the input, Enter to send */
+.console {
+  align-items: baseline;
   display: flex;
   gap: 0.5rem;
 }
 
-.composer-hint {
-  color: var(--faint);
-  font-size: 0.72rem;
-  margin-left: auto;
+.console-prompt {
+  color: var(--accent);
+  flex: none;
+  font-weight: 600;
+  user-select: none;
 }
 
-.composer-bar .demo-button {
-  margin-top: 0;
-  padding: 0.28rem 0.55rem;
-  font-size: 0.78rem;
+.console-input {
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  /* One line that auto-grows with content, up to a 40vh ceiling. */
+  field-sizing: content;
+  max-height: 40vh;
+  min-width: 0;
+  outline: none;
+  padding: 0;
+  resize: none;
+}
+
+.console-input::placeholder {
+  color: var(--faint);
 }

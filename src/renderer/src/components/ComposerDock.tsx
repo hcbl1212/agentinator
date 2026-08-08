@@ -98,11 +98,6 @@ export function ComposerDock(): React.JSX.Element {
     setPrompt('')
   }
 
-  const onSubmit = (submitEvent: React.FormEvent): void => {
-    submitEvent.preventDefault()
-    submit()
-  }
-
   // Enter sends; Shift+Enter is a newline (the terminal-composer convention).
   const onKeyDown = (keyEvent: React.KeyboardEvent): void => {
     if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
@@ -159,36 +154,24 @@ export function ComposerDock(): React.JSX.Element {
               ))}
             </div>
           )}
-          <form className="composer" onSubmit={onSubmit}>
+          <div className="console">
+            <span className="console-prompt" aria-hidden="true">
+              {'>'}
+            </span>
             <textarea
-              className="composer-input"
+              className="console-input"
               aria-label={replying ? 'Reply to Claude' : 'Task for Claude'}
               placeholder={
                 replying
-                  ? 'Reply to the agent or steer it…  (Enter to send, Shift+Enter for a newline)'
+                  ? 'Reply or steer the agent…  (Enter to send, Shift+Enter for a newline)'
                   : 'Describe a task for Claude to do in this repo…  (Enter to send)'
               }
-              rows={3}
+              rows={1}
               value={prompt}
               onChange={(changed) => setPrompt(changed.target.value)}
               onKeyDown={onKeyDown}
             />
-            <div className="composer-bar">
-              {!replying && (
-                <button
-                  type="button"
-                  className="demo-button"
-                  onClick={() => void bridge.agent.startDemo()}
-                >
-                  ▶ Demo
-                </button>
-              )}
-              <span className="composer-hint">↵ send · ⇧↵ newline</span>
-              <button type="submit" className="run-task-button" disabled={prompt.trim() === ''}>
-                {replying ? '➤ Send' : '▶ Run task'}
-              </button>
-            </div>
-          </form>
+          </div>
         </>
       )}
     </div>
