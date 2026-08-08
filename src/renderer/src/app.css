@@ -89,11 +89,22 @@ body {
   --err: #e06555;
 }
 
+/* The timeline scrolls; its toolbar floats. The pane's top padding moves
+   onto the sticky toolbar so scrolled lines pass beneath it, not above. */
+.pane.timeline {
+  padding-top: 0;
+}
+
 .timeline-toolbar {
   align-items: center;
+  background: var(--bg);
   display: flex;
   gap: 0.6rem;
   margin-bottom: 0.6rem;
+  padding: 0.75rem 0 0.35rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .timeline-toolbar .pane-label {
