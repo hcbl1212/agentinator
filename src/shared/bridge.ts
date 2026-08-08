@@ -1,9 +1,9 @@
 import type { StoredEvent } from './events'
 
-/** Window during which a resolved approval can still be undone before it
- * reaches the agent. Shared so the broker's timer and the card's countdown
- * agree. */
-export const APPROVAL_GRACE_MS = 5000
+/** Grace window for a DENY before it reaches the agent — a mis-clicked deny
+ * is the costly mistake, so it's undoable; approvals commit instantly.
+ * Shared so the broker's timer and the card's countdown agree. */
+export const DENY_GRACE_MS = 3000
 
 export interface PendingApproval {
   requestId: string

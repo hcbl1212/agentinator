@@ -68,7 +68,19 @@ describe('PermissionBroker', () => {
     expect(gate.pending()).toHaveLength(1)
   })
 
-  it('defers a user decision through the grace window before it reaches the agent', async () => {
+  it('commits an approval immediately — no grace window', async () => {
+    const timer = manualSchedule()
+    const { broker: gate, events } = broker({ schedule: timer.schedule })
+
+    const decision = gate.decide('session_1', 'write', { path: 'src/a.ts' })
+    gate.resolve(gate.pending()[0]?.requestId ?? '', true)
+
+    expect(timer.scheduledCount()).toBe(0)
+    await expect(decision).resolves.toBe(true)
+    expect(events.at(-1)?.payload).toMatchObject({ approved: true, via: 'user' })
+  })
+
+  it('defers a deny through the grace window before it reaches the agent', async () => {
     const timer = manualSchedule()
     const { broker: gate, events } = broker({ schedule: timer.schedule })
 
@@ -76,7 +88,7 @@ describe('PermissionBroker', () => {
     const pending = gate.pending()
     expect(pending).toHaveLength(1)
 
-    gate.resolve(pending[0]?.requestId ?? '', true)
+    gate.resolve(pending[0]?.requestId ?? '', false)
 
     // Scheduled, but the agent has NOT been told yet — no resolved event.
     expect(gate.pending()).toEqual([])
@@ -85,11 +97,11 @@ describe('PermissionBroker', () => {
 
     timer.flush()
 
-    await expect(decision).resolves.toBe(true)
-    expect(events.at(-1)?.payload).toMatchObject({ approved: true, via: 'user' })
+    await expect(decision).resolves.toBe(false)
+    expect(events.at(-1)?.payload).toMatchObject({ approved: false, via: 'user' })
   })
 
-  it('undo aborts a scheduled decision and returns it to pending', async () => {
+  it('undo aborts a scheduled deny and returns it to pending', async () => {
     const timer = manualSchedule()
     const { broker: gate, events } = broker({ schedule: timer.schedule })
 
@@ -104,9 +116,8 @@ describe('PermissionBroker', () => {
     // Nothing committed to the agent or the audit trail.
     expect(events.map((event) => event.type)).toEqual(['approval.requested'])
 
-    // The same request can now be resolved for real.
+    // The same request can now be approved for real.
     gate.resolve(requestId, true)
-    timer.flush()
     await expect(decision).resolves.toBe(true)
   })
 
@@ -118,7 +129,7 @@ describe('PermissionBroker', () => {
     expect(events).toEqual([])
   })
 
-  it('undo of an unknown or already-committed request is a no-op', () => {
+  it('undo of an unknown or already-committed deny is a no-op', () => {
     const timer = manualSchedule()
     const { broker: gate } = broker({ schedule: timer.schedule })
 
@@ -126,20 +137,20 @@ describe('PermissionBroker', () => {
 
     const decision = gate.decide('session_1', 'write', { path: 'src/a.ts' })
     const requestId = gate.pending()[0]?.requestId ?? ''
-    gate.resolve(requestId, true)
+    gate.resolve(requestId, false)
     timer.flush()
     gate.undo(requestId) // already committed
 
     expect(gate.pending()).toEqual([])
-    return expect(decision).resolves.toBe(true)
+    return expect(decision).resolves.toBe(false)
   })
 
-  it('uses real timers by default, and undo cancels the pending timeout', () => {
+  it('uses real timers by default, and undo cancels a pending deny timeout', () => {
     const { broker: gate } = broker({ graceMs: 10_000 })
 
     void gate.decide('session_1', 'write', { path: 'a.ts' })
     const requestId = gate.pending()[0]?.requestId ?? ''
-    gate.resolve(requestId, true)
+    gate.resolve(requestId, false)
     gate.undo(requestId)
 
     // Back to pending with the real setTimeout cleared (no leaked timer).

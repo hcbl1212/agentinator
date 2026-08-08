@@ -26,23 +26,20 @@ describe('ApprovalCard', () => {
     expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument()
   })
 
-  it('enters a grace countdown on Approve and reports the decision', () => {
-    vi.useFakeTimers()
+  it('approves instantly with no countdown', async () => {
     const onResolve = vi.fn()
+    const user = userEvent.setup()
     render(<ApprovalCard approval={approval} onResolve={onResolve} onUndo={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(onResolve).toHaveBeenCalledWith(true)
-    expect(screen.getByText(/Approving · 5s/)).toBeInTheDocument()
-
-    act(() => {
-      vi.advanceTimersByTime(2000)
-    })
-    expect(screen.getByText(/Approving · 3s/)).toBeInTheDocument()
+    // Still showing Approve/Deny (the parent unmounts it on the resolved event).
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.queryByText(/Denying/)).not.toBeInTheDocument()
   })
 
-  it('shows a denying countdown on Deny', () => {
+  it('enters a grace countdown on Deny and reports the decision', () => {
     vi.useFakeTimers()
     const onResolve = vi.fn()
     render(<ApprovalCard approval={approval} onResolve={onResolve} onUndo={vi.fn()} />)
@@ -50,7 +47,12 @@ describe('ApprovalCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
 
     expect(onResolve).toHaveBeenCalledWith(false)
-    expect(screen.getByText(/Denying · 5s/)).toBeInTheDocument()
+    expect(screen.getByText(/Denying · 3s/)).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(screen.getByText(/Denying · 1s/)).toBeInTheDocument()
   })
 
   it('Undo returns to Approve/Deny and reports the undo', async () => {
@@ -58,23 +60,23 @@ describe('ApprovalCard', () => {
     const user = userEvent.setup()
     render(<ApprovalCard approval={approval} onResolve={vi.fn()} onUndo={onUndo} />)
 
-    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(screen.getByRole('button', { name: 'Deny' }))
     await user.click(screen.getByRole('button', { name: 'Undo' }))
 
     expect(onUndo).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-    expect(screen.queryByText(/Approving/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Denying/)).not.toBeInTheDocument()
   })
 
   it('clamps the countdown at zero without going negative', () => {
     vi.useFakeTimers()
     render(<ApprovalCard approval={approval} onResolve={vi.fn()} onUndo={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
     act(() => {
       vi.advanceTimersByTime(10_000)
     })
 
-    expect(screen.getByText(/Approving · 0s/)).toBeInTheDocument()
+    expect(screen.getByText(/Denying · 0s/)).toBeInTheDocument()
   })
 })

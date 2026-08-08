@@ -89,9 +89,25 @@ describe('Roster', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
     expect(stub.resolve).toHaveBeenCalledWith('approval_1', true)
+  })
+
+  it('denying enters a grace window and Undo aborts it', async () => {
+    const stub = stubBridge([
+      { requestId: 'approval_2', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },
+    ])
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Roster />)
+    await waitFor(() => {
+      expect(screen.getByText('write b.ts')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Deny' }))
+    expect(stub.resolve).toHaveBeenCalledWith('approval_2', false)
 
     await user.click(screen.getByRole('button', { name: 'Undo' }))
-    expect(stub.bridge.approvals.undo).toHaveBeenCalledWith('approval_1')
+    expect(stub.bridge.approvals.undo).toHaveBeenCalledWith('approval_2')
   })
 
   it('adds cards from live requests (deduped) and removes them when resolved', async () => {

@@ -1,4 +1,4 @@
-import { APPROVAL_GRACE_MS } from '../shared/bridge'
+import { DENY_GRACE_MS } from '../shared/bridge'
 import type { PendingApproval } from '../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../shared/events'
 import { createEntityId } from '../shared/events'
@@ -55,7 +55,7 @@ export class PermissionBroker {
     this.#emit = emit
     this.#rules = options.rules ?? DEFAULT_ALLOWLIST
     this.#schedule = options.schedule ?? defaultSchedule
-    this.#graceMs = options.graceMs ?? APPROVAL_GRACE_MS
+    this.#graceMs = options.graceMs ?? DENY_GRACE_MS
   }
 
   #allowlisted(tool: string, input: unknown): boolean {
@@ -93,9 +93,10 @@ export class PermissionBroker {
   }
 
   /**
-   * Schedule a user decision. The agent is NOT told until the grace window
-   * closes — until then the decision is still in the harness and can be
-   * undone, so a mis-click never reaches the agent.
+   * Resolve a user decision. Approvals commit immediately — the agent should
+   * proceed with no delay. Denials are deferred through the grace window: the
+   * agent is NOT told until it closes, so a mis-clicked deny can be undone and
+   * never reaches the agent.
    */
   resolve(requestId: string, approved: boolean): void {
     const waiter = this.#pending.get(requestId)
@@ -103,7 +104,8 @@ export class PermissionBroker {
       return
     }
     this.#pending.delete(requestId)
-    const cancel = this.#schedule(() => {
+
+    const commit = (): void => {
       this.#scheduled.delete(requestId)
       this.#emit('approval.resolved', {
         sessionId: waiter.approval.sessionId,
@@ -112,11 +114,17 @@ export class PermissionBroker {
         via: 'user',
       })
       waiter.resolve(approved)
-    }, this.#graceMs)
+    }
+
+    if (approved) {
+      commit()
+      return
+    }
+    const cancel = this.#schedule(commit, this.#graceMs)
     this.#scheduled.set(requestId, { waiter, cancel })
   }
 
-  /** Abort a scheduled decision within the grace window; back to pending. */
+  /** Abort a scheduled deny within the grace window; back to pending. */
   undo(requestId: string): void {
     const entry = this.#scheduled.get(requestId)
     if (entry === undefined) {
