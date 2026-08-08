@@ -40,8 +40,9 @@ So a subscription is enough: sessions count against your subscription's usage li
 dollar figures in cost events are notional (nothing is billed beyond the subscription).
 
 - **Verify your setup**: `npm run smoke:claude` runs one real session end to end through the
-  adapter and asserts the normalized event stream. It is gated behind `CLAUDE_SMOKE=1` — CI
-  and normal `npm test` runs never make a network call.
+  adapter and asserts the normalized event stream. `npm run smoke:dogfood` drives a real Claude
+  task on this repo through the full session manager (the path the "Run task" button uses). Both
+  are gated behind `CLAUDE_SMOKE=1` — CI and normal `npm test` runs never make a network call.
 - **Headless environments** (CI, servers): run `claude setup-token` once on a logged-in
   machine and export the result as `CLAUDE_CODE_OAUTH_TOKEN`.
 - **The test suite never needs credentials.** All unit tests run against the mock provider;

@@ -450,14 +450,62 @@ body {
   color: var(--soft);
 }
 
-.demo-button {
-  background: transparent;
+.task-launcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.task-input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  resize: vertical;
+}
+
+.task-input::placeholder {
+  color: var(--faint);
+}
+
+.task-input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.run-task-button {
+  background: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 4px;
-  color: var(--accent);
+  color: #0b1512;
   cursor: pointer;
   font: inherit;
-  margin-top: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+}
+
+.run-task-button:disabled {
+  background: transparent;
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.run-task-button:not(:disabled):hover,
+.run-task-button:not(:disabled):focus-visible {
+  outline: none;
+  filter: brightness(1.1);
+}
+
+.demo-button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  margin-top: 0.5rem;
   padding: 0.35rem 0.7rem;
 }
 

@@ -6,7 +6,8 @@ import { ApprovalCard } from './ApprovalCard'
 
 export function Roster(): React.JSX.Element {
   const bridge = window.agentinator
-  const [dispatched, setDispatched] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [dispatched, setDispatched] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
 
   useEffect(() => {
@@ -29,7 +30,6 @@ export function Roster(): React.JSX.Element {
             : [...previous, payload],
         )
       } else if (event.type === 'approval.resolved') {
-        // The committed decision — remove the card (its grace window closed).
         const payload = event.payload as EventPayloads['approval.resolved']
         setApprovals((previous) =>
           previous.filter((approval) => approval.requestId !== payload.requestId),
@@ -42,25 +42,50 @@ export function Roster(): React.JSX.Element {
     }
   }, [])
 
+  const runTask = (submitEvent: React.FormEvent): void => {
+    submitEvent.preventDefault()
+    const trimmed = prompt.trim()
+    if (bridge === undefined || trimmed === '') {
+      return
+    }
+    void bridge.agent.startTask(trimmed)
+    setDispatched('Task dispatched to Claude — watch it work in the timeline.')
+    setPrompt('')
+  }
+
   return (
     <aside className="pane roster" aria-label="Agent roster">
       <h2 className="pane-label">Agents</h2>
-      <p className="empty-state">No agents yet. Run the demo to watch events flow into the log.</p>
-      {bridge !== undefined && (
-        <button
-          type="button"
-          className="demo-button"
-          onClick={() => {
-            setDispatched(true)
-            void bridge.agent.startDemo()
-          }}
-        >
-          ▶ Run demo agent
-        </button>
+      {bridge === undefined ? (
+        <p className="empty-state">No agents yet.</p>
+      ) : (
+        <>
+          <form className="task-launcher" onSubmit={runTask}>
+            <textarea
+              className="task-input"
+              aria-label="Task for Claude"
+              placeholder="Describe a task for Claude to do in this repo…"
+              rows={3}
+              value={prompt}
+              onChange={(changed) => setPrompt(changed.target.value)}
+            />
+            <button type="submit" className="run-task-button" disabled={prompt.trim() === ''}>
+              ▶ Run task (Claude)
+            </button>
+          </form>
+          <button
+            type="button"
+            className="demo-button"
+            onClick={() => {
+              setDispatched('Demo dispatched — watch the log count in the status bar.')
+              void bridge.agent.startDemo()
+            }}
+          >
+            ▶ Run demo (mock)
+          </button>
+        </>
       )}
-      {dispatched && (
-        <p className="empty-state">Demo dispatched — watch the log count in the status bar.</p>
-      )}
+      {dispatched !== null && <p className="empty-state">{dispatched}</p>}
       {approvals.length > 0 && (
         <div className="approvals" aria-label="Pending approvals">
           <h2 className="pane-label">Needs approval</h2>

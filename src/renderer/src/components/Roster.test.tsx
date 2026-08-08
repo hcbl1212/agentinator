@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,13 +11,16 @@ interface BridgeStub {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   resolve: ReturnType<typeof vi.fn>
+  startTask: ReturnType<typeof vi.fn>
 }
 
 function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   let appended: ((event: StoredEvent) => void) | undefined
   const resolve = vi.fn(() => Promise.resolve())
+  const startTask = vi.fn(() => Promise.resolve('session_task'))
   return {
     resolve,
+    startTask,
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
@@ -39,6 +42,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       },
       agent: {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
+        startTask: startTask as AgentinatorBridge['agent']['startTask'],
         cancel: vi.fn(() => Promise.resolve()),
       },
       approvals: {
@@ -65,19 +69,53 @@ afterEach(() => {
 })
 
 describe('Roster', () => {
-  it('hides the demo button without a bridge (plain browser/test)', () => {
+  it('shows no launcher without a bridge (plain browser/test)', () => {
     render(<Roster />)
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getByText('No agents yet.')).toBeInTheDocument()
   })
 
-  it('starts the demo session and confirms dispatch', async () => {
+  it('launches a real Claude task with the typed prompt, then clears it', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
     const user = userEvent.setup()
 
     render(<Roster />)
-    await user.click(screen.getByRole('button', { name: /Run demo agent/ }))
+    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    const run = screen.getByRole('button', { name: /Run task/ })
+    expect(run).toBeDisabled()
+
+    await user.type(input, 'Add a hello util')
+    expect(run).toBeEnabled()
+    await user.click(run)
+
+    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util')
+    expect(screen.getByText(/Task dispatched to Claude/)).toBeInTheDocument()
+    expect(input).toHaveValue('')
+  })
+
+  it('ignores an empty/whitespace task submission', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Roster />)
+    const input = screen.getByRole('textbox', { name: 'Task for Claude' })
+    await user.type(input, '   ')
+    // Submit via Enter in the form (button stays disabled with only whitespace).
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(stub.startTask).not.toHaveBeenCalled()
+  })
+
+  it('starts the mock demo session and confirms dispatch', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Roster />)
+    await user.click(screen.getByRole('button', { name: /Run demo/ }))
 
     expect(stub.bridge.agent.startDemo).toHaveBeenCalledOnce()
     expect(screen.getByText(/Demo dispatched/)).toBeInTheDocument()

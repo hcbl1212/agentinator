@@ -63,6 +63,7 @@ import {
   registerApprovalIpc,
   registerEventIpc,
   registerSettingsIpc,
+  taskTitle,
 } from './index'
 import type { SessionManager } from './sessions'
 import type { SettingsStore } from './settingsStore'
@@ -195,6 +196,23 @@ describe('registerAgentIpc', () => {
     })
   })
 
+  it('starts a real Claude task with the prompt as the session prompt', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    handlers.get('agent:start-task')?.(undefined, 'Add a hello util')
+
+    expect(manager.start).toHaveBeenCalledWith({
+      providerId: 'claude',
+      title: 'Add a hello util',
+      prompt: 'Add a hello util',
+      cwd: process.cwd(),
+    })
+  })
+
   it('routes cancellation to the session manager', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -211,7 +229,23 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(fakeManager() as unknown as SessionManager)
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['agent:start-demo', 'agent:cancel'])
+    expect(channels).toEqual(['agent:start-demo', 'agent:start-task', 'agent:cancel'])
+  })
+})
+
+describe('taskTitle', () => {
+  it('uses the first line of the prompt', () => {
+    expect(taskTitle('Add a util\nwith details')).toBe('Add a util')
+  })
+
+  it('truncates a long first line', () => {
+    const title = taskTitle('x'.repeat(80))
+    expect(title.endsWith('…')).toBe(true)
+    expect(title.length).toBe(58)
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(taskTitle('  spaced  ')).toBe('spaced')
   })
 })
 

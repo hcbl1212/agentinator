@@ -78,7 +78,24 @@ export function registerAgentIpc(
       cwd: process.cwd(),
     }),
   )
+  handle('agent:start-task', (_event, prompt) =>
+    manager.start({
+      providerId: 'claude',
+      title: taskTitle(prompt as string),
+      prompt: prompt as string,
+      // The workspace repo — for now the process cwd (the repo when run via
+      // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
+      cwd: process.cwd(),
+    }),
+  )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
+}
+
+/** A short one-line title from a task prompt for the roster and timeline. */
+export function taskTitle(prompt: string): string {
+  // split() always yields at least one element, so [0] is defined.
+  const firstLine = prompt.trim().split('\n')[0]
+  return firstLine.length > 60 ? `${firstLine.slice(0, 57)}…` : firstLine
 }
 
 export function registerSettingsIpc(

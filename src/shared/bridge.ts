@@ -35,6 +35,8 @@ export interface AgentinatorBridge {
   agent: {
     /** Launch the scripted mock session — writes real events into the log. */
     startDemo(): Promise<string>
+    /** Launch a real Claude agent on the workspace repo with a task prompt. */
+    startTask(prompt: string): Promise<string>
     cancel(sessionId: string): Promise<void>
   }
   settings: {
