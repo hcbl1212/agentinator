@@ -113,6 +113,88 @@ describe('createMockProvider', () => {
     expect(events.at(-1)?.payload).toMatchObject({ outcome: 'cancelled' })
   })
 
+  it('asks permission for the write and the test run, in that order', async () => {
+    const decisions: Array<{ tool: string; input: unknown }> = []
+    const decide = vi.fn((_session: string, tool: string, input: unknown) => {
+      decisions.push({ tool, input })
+      return Promise.resolve(true)
+    })
+    const provider = createMockProvider(immediate, 0, decide)
+
+    provider.startSession(context, () => undefined)
+    await settle()
+
+    expect(decisions).toEqual([
+      { tool: 'write', input: { path: 'src/demo/greet.ts' } },
+      { tool: 'bash', input: { command: 'npm test' } },
+    ])
+    expect(decide).toHaveBeenCalledWith('session_demo', 'write', expect.anything())
+  })
+
+  it('skips the change when the write is denied, but still completes', async () => {
+    const decide = vi.fn((_session: string, tool: string) => Promise.resolve(tool !== 'write'))
+    const provider = createMockProvider(immediate, 0, decide)
+    const events: Array<{ type: EventType; payload: unknown }> = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await settle()
+
+    const types = events.map((event) => event.type)
+    expect(types).not.toContain('file.diffed')
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'agent.text' &&
+          (event.payload as { text: string }).text.includes('Write denied'),
+      ),
+    ).toBe(true)
+    expect(types.filter((type) => type === 'tool.called')).toHaveLength(1)
+    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('reports a denial for the test run too', async () => {
+    const decide = vi.fn((_session: string, tool: string) => Promise.resolve(tool !== 'bash'))
+    const provider = createMockProvider(immediate, 0, decide)
+    const events: Array<{ type: EventType; payload: unknown }> = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await settle()
+
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'agent.text' &&
+          (event.payload as { text: string }).text.includes('Test run denied'),
+      ),
+    ).toBe(true)
+    expect(events.at(-1)?.payload).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('bails out cancelled at each pre-decide checkpoint', async () => {
+    // The script checks `cancelled` right before each decide() call. Drive a
+    // sleep that cancels the session on its Nth call to hit both checkpoints.
+    for (const cancelOnCall of [3, 6]) {
+      let calls = 0
+      const ref: { handle?: { cancel: () => Promise<void> } } = {}
+      const sleep = vi.fn((): Promise<void> => {
+        calls += 1
+        if (calls === cancelOnCall) {
+          void ref.handle?.cancel()
+        }
+        return Promise.resolve()
+      })
+      const decide = vi.fn(() => Promise.resolve(true))
+      const provider = createMockProvider(sleep, 0, decide)
+      const events: Array<{ type: EventType; payload: unknown }> = []
+
+      ref.handle = provider.startSession(context, (type, payload) => events.push({ type, payload }))
+      await settle()
+
+      expect(events.at(-1)?.type).toBe('session.ended')
+      expect(events.at(-1)?.payload).toMatchObject({ outcome: 'cancelled' })
+    }
+  })
+
   it('paces the script with real timer delays by default', async () => {
     vi.useFakeTimers()
     try {

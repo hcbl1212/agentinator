@@ -4,6 +4,8 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 
 import type { StoredEvent } from '../shared/events'
+import { PermissionBroker } from './approvals'
+import type { EmitStored } from './approvals'
 import { EventStore } from './eventStore'
 import { createClaudeProvider } from './providers/claude'
 import type { ClaudeQuery } from './providers/claude'
@@ -75,9 +77,30 @@ export function registerAgentIpc(
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
 }
 
+export function registerApprovalIpc(
+  broker: PermissionBroker,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('approvals:pending', () => broker.pending())
+  handle('approvals:resolve', (_event, requestId, approved) => {
+    broker.resolve(requestId as string, approved as boolean)
+  })
+}
+
 export function broadcastEvent(event: StoredEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('events:appended', event)
+  }
+}
+
+/** Append + broadcast in one call — the broker's audit channel into the log. */
+export function makeEmitStored(store: EventStore, broadcast = broadcastEvent): EmitStored {
+  return (type, payload) => {
+    const stored = store.append(type, payload)
+    broadcast(stored)
+    return stored
   }
 }
 
@@ -100,10 +123,14 @@ export async function bootstrap(
   store.append('app.started', { version: electronApp.getVersion() })
   registerEventIpc(store)
 
+  const broker = new PermissionBroker(makeEmitStored(store))
+  const decide = broker.decide.bind(broker)
+
   const manager = new SessionManager(store, broadcastEvent)
-  manager.register(createMockProvider())
-  manager.register(createClaudeProvider(claudeQuery))
+  manager.register(createMockProvider(undefined, undefined, decide))
+  manager.register(createClaudeProvider(claudeQuery, decide))
   registerAgentIpc(manager)
+  registerApprovalIpc(broker)
 
   createWindow()
   if (replayPath !== undefined) {

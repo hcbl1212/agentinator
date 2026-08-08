@@ -93,6 +93,65 @@ body {
 :root {
   --ok: #47b881;
   --err: #e06555;
+  --warn: #e0a83c;
+}
+
+.tone-warn {
+  color: var(--warn);
+}
+
+.approvals {
+  margin-top: 1rem;
+}
+
+.approval-card {
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  margin-bottom: 0.6rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.approval-what {
+  color: var(--ink);
+  margin-bottom: 0.45rem;
+  overflow-wrap: anywhere;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.approve-button,
+.deny-button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.2rem 0.6rem;
+}
+
+.approve-button {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.deny-button {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.approve-button:hover,
+.approve-button:focus-visible {
+  background: rgba(71, 184, 129, 0.12);
+  outline: none;
+}
+
+.deny-button:hover,
+.deny-button:focus-visible {
+  background: rgba(224, 101, 85, 0.12);
+  outline: none;
 }
 
 /* The timeline scrolls; its toolbar floats. The pane's top padding moves

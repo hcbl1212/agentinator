@@ -11,6 +11,8 @@ export interface StartSession {
   model?: string
   workspaceId?: string
   agentId?: string
+  /** Spend ceiling for this session; the manager default applies if unset. */
+  budgetUsd?: number
 }
 
 /**
@@ -22,12 +24,19 @@ export class SessionManager {
   #providers = new Map<string, AgentProvider>()
   #handles = new Map<string, AgentSessionHandle>()
   #endedEarly = new Set<string>()
+  #spentUsd = new Map<string, number>()
   readonly #store: EventStore
   readonly #onEvent: (event: StoredEvent) => void
+  readonly #defaultBudgetUsd: number
 
-  constructor(store: EventStore, onEvent: (event: StoredEvent) => void = () => undefined) {
+  constructor(
+    store: EventStore,
+    onEvent: (event: StoredEvent) => void = () => undefined,
+    options: { defaultBudgetUsd?: number } = {},
+  ) {
     this.#store = store
     this.#onEvent = onEvent
+    this.#defaultBudgetUsd = options.defaultBudgetUsd ?? 5
   }
 
   register(provider: AgentProvider): void {
@@ -51,6 +60,7 @@ export class SessionManager {
     const sessionId = createEntityId('session')
     const workspaceId = options.workspaceId ?? createEntityId('workspace')
     const agentId = options.agentId ?? createEntityId('agent')
+    const budgetUsd = options.budgetUsd ?? this.#defaultBudgetUsd
 
     const handle = provider.startSession(
       {
@@ -70,8 +80,23 @@ export class SessionManager {
           if (!this.#handles.delete(sessionId)) {
             this.#endedEarly.add(sessionId)
           }
+          this.#spentUsd.delete(sessionId)
         }
         this.#onEvent(stored)
+
+        if (type === 'cost.usage') {
+          const spent = (this.#spentUsd.get(sessionId) ?? 0) + (payload as { usd: number }).usd
+          this.#spentUsd.set(sessionId, spent)
+          if (spent > budgetUsd) {
+            const exceeded = this.#store.append('budget.exceeded', {
+              sessionId,
+              usedUsd: spent,
+              capUsd: budgetUsd,
+            })
+            this.#onEvent(exceeded)
+            void this.cancel(sessionId)
+          }
+        }
       },
     )
 

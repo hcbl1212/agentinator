@@ -18,6 +18,16 @@ export interface ProviderCapabilities {
 
 export type EmitEvent = <T extends EventType>(type: T, payload: EventPayloads[T]) => void
 
+/**
+ * Asks the harness for permission before a side-effecting tool runs.
+ * Resolves true/false — possibly only after a human clicks a card.
+ */
+export type PermissionDecider = (
+  sessionId: string,
+  tool: string,
+  input: unknown,
+) => Promise<boolean>
+
 export interface SessionContext {
   sessionId: string
   workspaceId: string

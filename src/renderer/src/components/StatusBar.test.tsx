@@ -31,6 +31,10 @@ function stubBridge(count: Promise<number>): BridgeStub {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         cancel: vi.fn(() => Promise.resolve()),
       },
+      approvals: {
+        pending: vi.fn(() => Promise.resolve([])),
+        resolve: vi.fn(() => Promise.resolve()),
+      },
     },
     emit: (event) => appended?.(event),
     unsubscribe,
@@ -76,6 +80,31 @@ describe('StatusBar', () => {
     })
 
     expect(screen.getByText('log 4 events')).toBeInTheDocument()
+  })
+
+  it('reports cache health from accumulated cost events', async () => {
+    const stub = stubBridge(Promise.resolve(1))
+    window.agentinator = stub.bridge
+
+    render(<StatusBar />)
+    expect(screen.getByText('cache —')).toBeInTheDocument()
+
+    act(() => {
+      stub.emit({
+        seq: 2,
+        ts: 't',
+        type: 'cost.usage',
+        payload: {
+          sessionId: 's',
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheReadInputTokens: 300,
+          usd: 0.01,
+        },
+      } as StoredEvent)
+    })
+
+    expect(screen.getByText('cache 75%')).toBeInTheDocument()
   })
 
   it('unsubscribes from appends on unmount and ignores a late count', async () => {

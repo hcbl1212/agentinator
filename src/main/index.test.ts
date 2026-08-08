@@ -58,7 +58,9 @@ import {
   bootstrap,
   broadcastEvent,
   createWindow,
+  makeEmitStored,
   registerAgentIpc,
+  registerApprovalIpc,
   registerEventIpc,
 } from './index'
 import type { SessionManager } from './sessions'
@@ -192,6 +194,52 @@ describe('registerAgentIpc', () => {
   })
 })
 
+describe('registerApprovalIpc', () => {
+  it('serves pending approvals and routes resolutions to the broker', () => {
+    const broker = { pending: vi.fn(() => []), resolve: vi.fn() }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerApprovalIpc(broker as never, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('approvals:pending')?.(undefined)).toEqual([])
+    handlers.get('approvals:resolve')?.(undefined, 'approval_1', false)
+    expect(broker.resolve).toHaveBeenCalledWith('approval_1', false)
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerApprovalIpc({ pending: vi.fn(), resolve: vi.fn() } as never)
+
+    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    expect(channels).toEqual(['approvals:pending', 'approvals:resolve'])
+  })
+})
+
+describe('makeEmitStored', () => {
+  it('appends to the store and broadcasts the result', () => {
+    const store = fakeStore()
+    ;(store.append as ReturnType<typeof vi.fn>).mockReturnValue({
+      seq: 1,
+      ts: 't',
+      type: 'approval.requested',
+      payload: {},
+    })
+    const broadcast = vi.fn()
+
+    const emit = makeEmitStored(store, broadcast)
+    const stored = emit('approval.requested', {
+      sessionId: 's',
+      requestId: 'r',
+      tool: 'write',
+      input: {},
+    })
+
+    expect(store.append).toHaveBeenCalledWith('approval.requested', expect.any(Object))
+    expect(broadcast).toHaveBeenCalledWith(stored)
+  })
+})
+
 describe('broadcastEvent', () => {
   it('sends the appended event to every open window', () => {
     const first = new MockBrowserWindow({})
@@ -217,6 +265,7 @@ describe('bootstrap', () => {
     expect(store.append).toHaveBeenCalledWith('app.started', { version: '0.1.0-test' })
     expect(mockIpcMain.handle).toHaveBeenCalledWith('events:count', expect.any(Function))
     expect(mockIpcMain.handle).toHaveBeenCalledWith('agent:start-demo', expect.any(Function))
+    expect(mockIpcMain.handle).toHaveBeenCalledWith('approvals:pending', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })

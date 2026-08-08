@@ -4,7 +4,7 @@ import type { EventPayloads, StoredEvent } from '../../../shared/events'
  * Turns stored events into readable timeline lines. Tones map to CSS classes
  * (cockpit design system); markers are plain text, no icon fonts.
  */
-export type Tone = 'accent' | 'ink' | 'soft' | 'faint' | 'ok' | 'err'
+export type Tone = 'accent' | 'ink' | 'soft' | 'faint' | 'ok' | 'err' | 'warn'
 
 export interface TimelineLine {
   marker: string
@@ -12,7 +12,7 @@ export interface TimelineLine {
   tone: Tone
 }
 
-function compactInput(input: unknown): string {
+export function compactInput(input: unknown): string {
   if (typeof input === 'object' && input !== null) {
     const record = input as Record<string, unknown>
     if (typeof record['command'] === 'string') {
@@ -70,6 +70,30 @@ export function describeEvent(event: StoredEvent): TimelineLine {
         marker: '±',
         text: `${payload.path} +${payload.additions} −${payload.deletions}`,
         tone: 'ink',
+      }
+    }
+    case 'approval.requested': {
+      const payload = event.payload as EventPayloads['approval.requested']
+      return {
+        marker: '?',
+        text: `approval requested · ${payload.tool} ${compactInput(payload.input)}`,
+        tone: 'warn',
+      }
+    }
+    case 'approval.resolved': {
+      const payload = event.payload as EventPayloads['approval.resolved']
+      return {
+        marker: payload.approved ? '✓' : '✗',
+        text: `approval ${payload.approved ? 'granted' : 'denied'} · via ${payload.via}`,
+        tone: payload.approved ? 'ok' : 'err',
+      }
+    }
+    case 'budget.exceeded': {
+      const payload = event.payload as EventPayloads['budget.exceeded']
+      return {
+        marker: '!',
+        text: `budget exceeded · $${payload.usedUsd.toFixed(2)} of $${payload.capUsd.toFixed(2)} — session stopped`,
+        tone: 'err',
       }
     }
     case 'cost.usage': {

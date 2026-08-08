@@ -1,5 +1,11 @@
 import { assembleSystemPrompt } from './promptAssembly'
-import type { AgentProvider, AgentSessionHandle, EmitEvent, SessionContext } from './types'
+import type {
+  AgentProvider,
+  AgentSessionHandle,
+  EmitEvent,
+  PermissionDecider,
+  SessionContext,
+} from './types'
 
 /**
  * Adapter for the Claude Agent SDK. The query function is injected — the
@@ -8,12 +14,21 @@ import type { AgentProvider, AgentSessionHandle, EmitEvent, SessionContext } fro
  * shapes are narrowed structurally (isRecord + field checks) rather than
  * typed against the SDK, so vendor type drift cannot leak past this file.
  */
+export type CanUseTool = (
+  toolName: string,
+  input: Record<string, unknown>,
+) => Promise<
+  | { behavior: 'allow'; updatedInput: Record<string, unknown> }
+  | { behavior: 'deny'; message: string }
+>
+
 export interface ClaudeQueryArgs {
   prompt: string
   options: {
     cwd: string
     model?: string
     systemPrompt: string
+    canUseTool?: CanUseTool
   }
 }
 
@@ -108,7 +123,10 @@ function mapSdkMessage(message: unknown, { sessionId, emit, isCancelled }: MapCo
   return false
 }
 
-export function createClaudeProvider(query: ClaudeQuery): AgentProvider {
+export function createClaudeProvider(
+  query: ClaudeQuery,
+  decide?: PermissionDecider,
+): AgentProvider {
   return {
     id: 'claude',
     capabilities: {
@@ -125,6 +143,16 @@ export function createClaudeProvider(query: ClaudeQuery): AgentProvider {
       let cancelled = false
       const { sessionId } = context
 
+      // The SDK asks before side-effecting tools; the broker's answer may
+      // wait on a human clicking an approval card.
+      const canUseTool: CanUseTool | undefined =
+        decide === undefined
+          ? undefined
+          : async (toolName, input) =>
+              (await decide(sessionId, toolName, input))
+                ? { behavior: 'allow', updatedInput: input }
+                : { behavior: 'deny', message: 'Denied from an Agentinator approval card.' }
+
       const stream = query({
         prompt: context.prompt,
         options: {
@@ -133,6 +161,7 @@ export function createClaudeProvider(query: ClaudeQuery): AgentProvider {
           // Stable prefix only for now; the knowledge slice joins the stable
           // sections and per-run context joins volatile once they exist.
           systemPrompt: assembleSystemPrompt({ stable: [SYSTEM_BASE], volatile: [] }),
+          canUseTool,
         },
       })
 

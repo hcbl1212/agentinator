@@ -135,6 +135,53 @@ describe('describeEvent', () => {
     ).toMatchObject({ marker: '$', text: '1200 in / 340 out · cache 900 · $0.0042', tone: 'faint' })
   })
 
+  it('renders approvals with warn/ok/err tones and the deciding channel', () => {
+    expect(
+      describeEvent(
+        stored('approval.requested', {
+          sessionId: 's',
+          requestId: 'approval_1',
+          tool: 'bash',
+          input: { command: 'npm install left-pad' },
+        }),
+      ),
+    ).toMatchObject({
+      marker: '?',
+      text: 'approval requested · bash npm install left-pad',
+      tone: 'warn',
+    })
+    expect(
+      describeEvent(
+        stored('approval.resolved', {
+          sessionId: 's',
+          requestId: 'approval_1',
+          approved: true,
+          via: 'allowlist',
+        }),
+      ),
+    ).toMatchObject({ marker: '✓', text: 'approval granted · via allowlist', tone: 'ok' })
+    expect(
+      describeEvent(
+        stored('approval.resolved', {
+          sessionId: 's',
+          requestId: 'approval_1',
+          approved: false,
+          via: 'user',
+        }),
+      ),
+    ).toMatchObject({ marker: '✗', text: 'approval denied · via user', tone: 'err' })
+  })
+
+  it('renders budget breaches loudly', () => {
+    expect(
+      describeEvent(stored('budget.exceeded', { sessionId: 's', usedUsd: 6.004, capUsd: 5 })),
+    ).toMatchObject({
+      marker: '!',
+      text: 'budget exceeded · $6.00 of $5.00 — session stopped',
+      tone: 'err',
+    })
+  })
+
   it('renders unknown event types from newer logs inert instead of crashing', () => {
     const future = {
       seq: 1,

@@ -140,6 +140,79 @@ describe('SessionManager', () => {
     ).not.toThrow()
   })
 
+  it('stops a session that exceeds its budget and audits the breach', async () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type))
+    const cancel = vi.fn(() => Promise.resolve())
+    let emitCost: (usd: number) => void = () => undefined
+    manager.register({
+      ...instantProvider('spender'),
+      id: 'spender',
+      startSession(context, emit) {
+        emit('session.started', {
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          workspaceId: context.workspaceId,
+          title: context.title,
+        })
+        emitCost = (usd) =>
+          emit('cost.usage', {
+            sessionId: context.sessionId,
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheReadInputTokens: 0,
+            usd,
+          })
+        return { send: () => Promise.resolve(), cancel }
+      },
+    })
+
+    manager.start({
+      providerId: 'spender',
+      title: 'T',
+      prompt: 'P',
+      cwd: '/tmp',
+      budgetUsd: 5,
+    })
+
+    emitCost(3)
+    expect(types).not.toContain('budget.exceeded')
+    expect(cancel).not.toHaveBeenCalled()
+
+    emitCost(3)
+    expect(types).toContain('budget.exceeded')
+    expect(cancel).toHaveBeenCalledOnce()
+    const breach = store.list().find((event) => event.type === 'budget.exceeded')
+    expect(breach?.payload).toMatchObject({ usedUsd: 6, capUsd: 5 })
+  })
+
+  it('applies the manager default budget when a session sets none', () => {
+    const store = new EventStore()
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type), {
+      defaultBudgetUsd: 0.001,
+    })
+    manager.register({
+      ...instantProvider('cheap'),
+      id: 'cheap',
+      startSession(context, emit) {
+        emit('cost.usage', {
+          sessionId: context.sessionId,
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadInputTokens: 0,
+          usd: 0.01,
+        })
+        return { send: () => Promise.resolve(), cancel: () => Promise.resolve() }
+      },
+    })
+
+    manager.start({ providerId: 'cheap', title: 'T', prompt: 'P', cwd: '/tmp' })
+
+    expect(types).toContain('budget.exceeded')
+  })
+
   it('runs the real mock provider end to end through the store', async () => {
     const store = new EventStore()
     const types: string[] = []

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { AgentinatorBridge } from '../shared/bridge'
+import type { AgentinatorBridge, PendingApproval } from '../shared/bridge'
 import type { StoredEvent } from '../shared/events'
 
 export const bridge: AgentinatorBridge = {
@@ -24,6 +24,11 @@ export const bridge: AgentinatorBridge = {
   agent: {
     startDemo: () => ipcRenderer.invoke('agent:start-demo') as Promise<string>,
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
+  },
+  approvals: {
+    pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,
+    resolve: (requestId, approved) =>
+      ipcRenderer.invoke('approvals:resolve', requestId, approved) as Promise<void>,
   },
 }
 

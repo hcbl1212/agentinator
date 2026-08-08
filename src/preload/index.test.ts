@@ -86,4 +86,12 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-demo')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
   })
+
+  it('routes approvals over IPC', async () => {
+    await bridge.approvals.pending()
+    await bridge.approvals.resolve('approval_1', true)
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:pending')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:resolve', 'approval_1', true)
+  })
 })

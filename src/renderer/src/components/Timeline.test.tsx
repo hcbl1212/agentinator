@@ -51,6 +51,10 @@ function stubBridge(
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         cancel: vi.fn(() => Promise.resolve()),
       },
+      approvals: {
+        pending: vi.fn(() => Promise.resolve([])),
+        resolve: vi.fn(() => Promise.resolve()),
+      },
     },
     emit: (event) => appended?.(event),
     unsubscribe,

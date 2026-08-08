@@ -79,6 +79,41 @@ describe('createClaudeProvider', () => {
     expect(queryArgs.options.systemPrompt).toContain('Agentinator agent')
   })
 
+  it('omits canUseTool when no permission decider is wired', async () => {
+    const { queryArgs } = await runSession([successResult])
+
+    expect(queryArgs.options.canUseTool).toBeUndefined()
+  })
+
+  it('maps the permission decider onto the SDK canUseTool contract', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    const decide = vi.fn((_session: string, tool: string) => Promise.resolve(tool === 'read'))
+    const provider = createClaudeProvider(query, decide)
+    const events: Recorded[] = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+
+    const canUseTool = queryArgs?.options.canUseTool
+    expect(canUseTool).toBeDefined()
+
+    await expect(canUseTool?.('read', { path: 'a.ts' })).resolves.toEqual({
+      behavior: 'allow',
+      updatedInput: { path: 'a.ts' },
+    })
+    await expect(canUseTool?.('bash', { command: 'rm -rf /' })).resolves.toEqual({
+      behavior: 'deny',
+      message: 'Denied from an Agentinator approval card.',
+    })
+    expect(decide).toHaveBeenCalledWith('session_c', 'read', { path: 'a.ts' })
+  })
+
   it('emits session.started immediately with the context identity', async () => {
     const { events } = await runSession([successResult])
 

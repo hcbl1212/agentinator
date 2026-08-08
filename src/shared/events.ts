@@ -5,7 +5,7 @@
  * mutate or repurpose existing ones (old logs must replay forever).
  */
 
-export const ENTITY_KINDS = ['workspace', 'repo', 'session', 'agent', 'task'] as const
+export const ENTITY_KINDS = ['workspace', 'repo', 'session', 'agent', 'task', 'approval'] as const
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
 
@@ -36,6 +36,16 @@ export interface EventPayloads {
     cacheReadInputTokens: number
     usd: number
   }
+  /** A tool use is waiting on permission — the audit trail starts here. */
+  'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }
+  'approval.resolved': {
+    sessionId: string
+    requestId: string
+    approved: boolean
+    via: 'allowlist' | 'user'
+  }
+  /** The session crossed its spend ceiling and was stopped. */
+  'budget.exceeded': { sessionId: string; usedUsd: number; capUsd: number }
 }
 
 export type EventType = keyof EventPayloads
