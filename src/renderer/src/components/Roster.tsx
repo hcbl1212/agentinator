@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import type { PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads } from '../../../shared/events'
-import { compactInput } from '../timeline/timelineFormat'
+import { ApprovalCard } from './ApprovalCard'
 
 export function Roster(): React.JSX.Element {
   const bridge = window.agentinator
@@ -29,6 +29,7 @@ export function Roster(): React.JSX.Element {
             : [...previous, payload],
         )
       } else if (event.type === 'approval.resolved') {
+        // The committed decision — remove the card (its grace window closed).
         const payload = event.payload as EventPayloads['approval.resolved']
         setApprovals((previous) =>
           previous.filter((approval) => approval.requestId !== payload.requestId),
@@ -64,27 +65,12 @@ export function Roster(): React.JSX.Element {
         <div className="approvals" aria-label="Pending approvals">
           <h2 className="pane-label">Needs approval</h2>
           {approvals.map((approval) => (
-            <div key={approval.requestId} className="approval-card">
-              <p className="approval-what">
-                {approval.tool} {compactInput(approval.input)}
-              </p>
-              <div className="approval-actions">
-                <button
-                  type="button"
-                  className="approve-button"
-                  onClick={() => void bridge?.approvals.resolve(approval.requestId, true)}
-                >
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  className="deny-button"
-                  onClick={() => void bridge?.approvals.resolve(approval.requestId, false)}
-                >
-                  Deny
-                </button>
-              </div>
-            </div>
+            <ApprovalCard
+              key={approval.requestId}
+              approval={approval}
+              onResolve={(approved) => void bridge?.approvals.resolve(approval.requestId, approved)}
+              onUndo={() => void bridge?.approvals.undo(approval.requestId)}
+            />
           ))}
         </div>
       )}

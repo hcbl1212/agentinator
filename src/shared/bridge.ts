@@ -1,5 +1,10 @@
 import type { StoredEvent } from './events'
 
+/** Window during which a resolved approval can still be undone before it
+ * reaches the agent. Shared so the broker's timer and the card's countdown
+ * agree. */
+export const APPROVAL_GRACE_MS = 5000
+
 export interface PendingApproval {
   requestId: string
   sessionId: string
@@ -30,7 +35,9 @@ export interface AgentinatorBridge {
   }
   approvals: {
     pending(): Promise<PendingApproval[]>
-    /** The only path that resolves an approval — agents can never call it. */
+    /** Schedule a decision; it reaches the agent only after the grace window. */
     resolve(requestId: string, approved: boolean): Promise<void>
+    /** Abort a scheduled decision before the grace window closes. */
+    undo(requestId: string): Promise<void>
   }
 }

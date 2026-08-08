@@ -90,8 +90,10 @@ describe('preload bridge', () => {
   it('routes approvals over IPC', async () => {
     await bridge.approvals.pending()
     await bridge.approvals.resolve('approval_1', true)
+    await bridge.approvals.undo('approval_1')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:pending')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:resolve', 'approval_1', true)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:undo', 'approval_1')
   })
 })

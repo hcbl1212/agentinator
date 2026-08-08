@@ -54,6 +54,7 @@ function stubBridge(
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),
         resolve: vi.fn(() => Promise.resolve()),
+        undo: vi.fn(() => Promise.resolve()),
       },
     },
     emit: (event) => appended?.(event),

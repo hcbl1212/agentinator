@@ -1,25 +1,46 @@
 import { describe, expect, it } from 'vitest'
 
 import type { EventPayloads, EventType } from '../shared/events'
-import { DEFAULT_ALLOWLIST, PermissionBroker } from './approvals'
-import type { EmitStored } from './approvals'
+import { PermissionBroker } from './approvals'
+import type { EmitStored, Schedule } from './approvals'
 
 interface Recorded {
   type: EventType
   payload: EventPayloads[EventType]
 }
 
-function broker(rules = DEFAULT_ALLOWLIST): { broker: PermissionBroker; events: Recorded[] } {
+/** A schedule whose deferred callbacks fire only when flush() is called. */
+function manualSchedule(): { schedule: Schedule; flush: () => void; scheduledCount: () => number } {
+  const tasks = new Set<() => void>()
+  return {
+    schedule: (fn) => {
+      tasks.add(fn)
+      return () => tasks.delete(fn)
+    },
+    flush: () => {
+      for (const fn of [...tasks]) {
+        tasks.delete(fn)
+        fn()
+      }
+    },
+    scheduledCount: () => tasks.size,
+  }
+}
+
+function broker(options: ConstructorParameters<typeof PermissionBroker>[1] = {}): {
+  broker: PermissionBroker
+  events: Recorded[]
+} {
   const events: Recorded[] = []
   const emit: EmitStored = (type, payload) => {
     events.push({ type, payload })
     return { seq: events.length, ts: 't', type, payload }
   }
-  return { broker: new PermissionBroker(emit, rules), events }
+  return { broker: new PermissionBroker(emit, options), events }
 }
 
 describe('PermissionBroker', () => {
-  it('auto-approves allowlisted tools and audits both events', async () => {
+  it('auto-approves allowlisted tools immediately and audits both events', async () => {
     const { broker: gate, events } = broker()
 
     const approved = await gate.decide('session_1', 'read', { path: 'src/a.ts' })
@@ -31,17 +52,12 @@ describe('PermissionBroker', () => {
   })
 
   it('auto-approves bash commands matching the command pattern only', async () => {
-    const { broker: gate, events } = broker()
+    const { broker: gate } = broker()
 
-    const testRun = await gate.decide('session_1', 'bash', { command: 'npm test' })
-    expect(testRun).toBe(true)
+    await expect(gate.decide('session_1', 'bash', { command: 'npm test' })).resolves.toBe(true)
 
-    const install = gate.decide('session_1', 'bash', { command: 'npm install left-pad' })
+    gate.decide('session_1', 'bash', { command: 'npm install left-pad' })
     expect(gate.pending()).toHaveLength(1)
-    expect(events.at(-1)?.type).toBe('approval.requested')
-
-    gate.resolve(gate.pending()[0]?.requestId ?? '', false)
-    await expect(install).resolves.toBe(false)
   })
 
   it('treats a bash call without a command string as not allowlisted', () => {
@@ -52,19 +68,46 @@ describe('PermissionBroker', () => {
     expect(gate.pending()).toHaveLength(1)
   })
 
-  it('blocks non-allowlisted tools until a user resolves, and audits the user decision', async () => {
-    const { broker: gate, events } = broker()
+  it('defers a user decision through the grace window before it reaches the agent', async () => {
+    const timer = manualSchedule()
+    const { broker: gate, events } = broker({ schedule: timer.schedule })
 
     const decision = gate.decide('session_1', 'write', { path: 'src/a.ts' })
     const pending = gate.pending()
     expect(pending).toHaveLength(1)
-    expect(pending[0]).toMatchObject({ sessionId: 'session_1', tool: 'write' })
 
     gate.resolve(pending[0]?.requestId ?? '', true)
 
+    // Scheduled, but the agent has NOT been told yet — no resolved event.
+    expect(gate.pending()).toEqual([])
+    expect(timer.scheduledCount()).toBe(1)
+    expect(events.map((event) => event.type)).toEqual(['approval.requested'])
+
+    timer.flush()
+
     await expect(decision).resolves.toBe(true)
     expect(events.at(-1)?.payload).toMatchObject({ approved: true, via: 'user' })
-    expect(gate.pending()).toEqual([])
+  })
+
+  it('undo aborts a scheduled decision and returns it to pending', async () => {
+    const timer = manualSchedule()
+    const { broker: gate, events } = broker({ schedule: timer.schedule })
+
+    const decision = gate.decide('session_1', 'write', { path: 'src/a.ts' })
+    const requestId = gate.pending()[0]?.requestId ?? ''
+
+    gate.resolve(requestId, false)
+    gate.undo(requestId)
+
+    expect(timer.scheduledCount()).toBe(0)
+    expect(gate.pending().map((approval) => approval.requestId)).toEqual([requestId])
+    // Nothing committed to the agent or the audit trail.
+    expect(events.map((event) => event.type)).toEqual(['approval.requested'])
+
+    // The same request can now be resolved for real.
+    gate.resolve(requestId, true)
+    timer.flush()
+    await expect(decision).resolves.toBe(true)
   })
 
   it('resolving an unknown request is a no-op', () => {
@@ -73,5 +116,33 @@ describe('PermissionBroker', () => {
     gate.resolve('approval_missing', true)
 
     expect(events).toEqual([])
+  })
+
+  it('undo of an unknown or already-committed request is a no-op', () => {
+    const timer = manualSchedule()
+    const { broker: gate } = broker({ schedule: timer.schedule })
+
+    gate.undo('approval_missing')
+
+    const decision = gate.decide('session_1', 'write', { path: 'src/a.ts' })
+    const requestId = gate.pending()[0]?.requestId ?? ''
+    gate.resolve(requestId, true)
+    timer.flush()
+    gate.undo(requestId) // already committed
+
+    expect(gate.pending()).toEqual([])
+    return expect(decision).resolves.toBe(true)
+  })
+
+  it('uses real timers by default, and undo cancels the pending timeout', () => {
+    const { broker: gate } = broker({ graceMs: 10_000 })
+
+    void gate.decide('session_1', 'write', { path: 'a.ts' })
+    const requestId = gate.pending()[0]?.requestId ?? ''
+    gate.resolve(requestId, true)
+    gate.undo(requestId)
+
+    // Back to pending with the real setTimeout cleared (no leaked timer).
+    expect(gate.pending().map((approval) => approval.requestId)).toEqual([requestId])
   })
 })

@@ -1,3 +1,4 @@
+import { APPROVAL_GRACE_MS } from '../shared/bridge'
 import type { PendingApproval } from '../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../shared/events'
 import { createEntityId } from '../shared/events'
@@ -8,6 +9,16 @@ export interface AllowRule {
   tool: string
   /** For bash-like tools: the command must match this regex to auto-allow. */
   commandPattern?: string
+}
+
+/** Defers a callback, returning a canceller. Injected so tests control time. */
+export type Schedule = (fn: () => void, ms: number) => () => void
+
+const defaultSchedule: Schedule = (fn, ms) => {
+  const timer = setTimeout(fn, ms)
+  return () => {
+    clearTimeout(timer)
+  }
 }
 
 /** Routine, read-only or repo-safe operations that never need a card. */
@@ -24,14 +35,27 @@ export const DEFAULT_ALLOWLIST: AllowRule[] = [
  * else blocks the calling provider until a human resolves the card. Agents
  * can never resolve approvals: the only path is the approvals IPC.
  */
+interface Waiter {
+  approval: PendingApproval
+  resolve: (approved: boolean) => void
+}
+
 export class PermissionBroker {
   readonly #emit: EmitStored
   readonly #rules: AllowRule[]
-  #pending = new Map<string, { approval: PendingApproval; resolve: (approved: boolean) => void }>()
+  readonly #schedule: Schedule
+  readonly #graceMs: number
+  #pending = new Map<string, Waiter>()
+  #scheduled = new Map<string, { waiter: Waiter; cancel: () => void }>()
 
-  constructor(emit: EmitStored, rules: AllowRule[] = DEFAULT_ALLOWLIST) {
+  constructor(
+    emit: EmitStored,
+    options: { rules?: AllowRule[]; schedule?: Schedule; graceMs?: number } = {},
+  ) {
     this.#emit = emit
-    this.#rules = rules
+    this.#rules = options.rules ?? DEFAULT_ALLOWLIST
+    this.#schedule = options.schedule ?? defaultSchedule
+    this.#graceMs = options.graceMs ?? APPROVAL_GRACE_MS
   }
 
   #allowlisted(tool: string, input: unknown): boolean {
@@ -68,18 +92,38 @@ export class PermissionBroker {
     return [...this.#pending.values()].map((entry) => entry.approval)
   }
 
+  /**
+   * Schedule a user decision. The agent is NOT told until the grace window
+   * closes — until then the decision is still in the harness and can be
+   * undone, so a mis-click never reaches the agent.
+   */
   resolve(requestId: string, approved: boolean): void {
-    const entry = this.#pending.get(requestId)
-    if (entry === undefined) {
+    const waiter = this.#pending.get(requestId)
+    if (waiter === undefined) {
       return
     }
     this.#pending.delete(requestId)
-    this.#emit('approval.resolved', {
-      sessionId: entry.approval.sessionId,
-      requestId,
-      approved,
-      via: 'user',
-    })
-    entry.resolve(approved)
+    const cancel = this.#schedule(() => {
+      this.#scheduled.delete(requestId)
+      this.#emit('approval.resolved', {
+        sessionId: waiter.approval.sessionId,
+        requestId,
+        approved,
+        via: 'user',
+      })
+      waiter.resolve(approved)
+    }, this.#graceMs)
+    this.#scheduled.set(requestId, { waiter, cancel })
+  }
+
+  /** Abort a scheduled decision within the grace window; back to pending. */
+  undo(requestId: string): void {
+    const entry = this.#scheduled.get(requestId)
+    if (entry === undefined) {
+      return
+    }
+    this.#scheduled.delete(requestId)
+    entry.cancel()
+    this.#pending.set(requestId, entry.waiter)
   }
 }

@@ -156,6 +156,36 @@ body {
   outline: none;
 }
 
+.approval-resolving {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.resolving-approved {
+  color: var(--ok);
+}
+
+.resolving-denied {
+  color: var(--err);
+}
+
+.undo-button {
+  background: transparent;
+  border: 1px solid var(--soft);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.3rem 0.7rem;
+}
+
+.undo-button:hover,
+.undo-button:focus-visible {
+  border-color: var(--ink);
+  color: var(--ink);
+  outline: none;
+}
+
 /* The timeline scrolls; its toolbar floats. The pane's top padding moves
    onto the sticky toolbar so scrolled lines pass beneath it, not above. */
 .pane.timeline {

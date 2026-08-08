@@ -195,8 +195,8 @@ describe('registerAgentIpc', () => {
 })
 
 describe('registerApprovalIpc', () => {
-  it('serves pending approvals and routes resolutions to the broker', () => {
-    const broker = { pending: vi.fn(() => []), resolve: vi.fn() }
+  it('serves pending approvals and routes resolve/undo to the broker', () => {
+    const broker = { pending: vi.fn(() => []), resolve: vi.fn(), undo: vi.fn() }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerApprovalIpc(broker as never, (channel, listener) => {
@@ -206,13 +206,15 @@ describe('registerApprovalIpc', () => {
     expect(handlers.get('approvals:pending')?.(undefined)).toEqual([])
     handlers.get('approvals:resolve')?.(undefined, 'approval_1', false)
     expect(broker.resolve).toHaveBeenCalledWith('approval_1', false)
+    handlers.get('approvals:undo')?.(undefined, 'approval_1')
+    expect(broker.undo).toHaveBeenCalledWith('approval_1')
   })
 
   it('registers on ipcMain by default', () => {
-    registerApprovalIpc({ pending: vi.fn(), resolve: vi.fn() } as never)
+    registerApprovalIpc({ pending: vi.fn(), resolve: vi.fn(), undo: vi.fn() } as never)
 
     const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
-    expect(channels).toEqual(['approvals:pending', 'approvals:resolve'])
+    expect(channels).toEqual(['approvals:pending', 'approvals:resolve', 'approvals:undo'])
   })
 })
 

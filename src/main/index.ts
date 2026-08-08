@@ -87,6 +87,9 @@ export function registerApprovalIpc(
   handle('approvals:resolve', (_event, requestId, approved) => {
     broker.resolve(requestId as string, approved as boolean)
   })
+  handle('approvals:undo', (_event, requestId) => {
+    broker.undo(requestId as string)
+  })
 }
 
 export function broadcastEvent(event: StoredEvent): void {

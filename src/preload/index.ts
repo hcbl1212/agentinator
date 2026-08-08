@@ -29,6 +29,7 @@ export const bridge: AgentinatorBridge = {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,
     resolve: (requestId, approved) =>
       ipcRenderer.invoke('approvals:resolve', requestId, approved) as Promise<void>,
+    undo: (requestId) => ipcRenderer.invoke('approvals:undo', requestId) as Promise<void>,
   },
 }
 

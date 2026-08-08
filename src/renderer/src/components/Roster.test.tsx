@@ -36,6 +36,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),
         resolve: resolve as AgentinatorBridge['approvals']['resolve'],
+        undo: vi.fn(() => Promise.resolve()),
       },
     },
     emit: (event) => appended?.(event),
@@ -88,6 +89,9 @@ describe('Roster', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
     expect(stub.resolve).toHaveBeenCalledWith('approval_1', true)
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(stub.bridge.approvals.undo).toHaveBeenCalledWith('approval_1')
   })
 
   it('adds cards from live requests (deduped) and removes them when resolved', async () => {
