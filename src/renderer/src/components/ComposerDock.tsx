@@ -3,19 +3,17 @@ import { useEffect, useRef, useState } from 'react'
 import type { PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads } from '../../../shared/events'
 import { ApprovalCard } from './ApprovalCard'
-import { ConversationLog } from './ConversationLog'
 import { QuestionCard } from './QuestionCard'
 
 type SessionStatus = 'running' | 'idle'
 
 /**
- * The conversation column: a terminal-style transcript up top, then any active
- * decisions (the agent's question, pending approvals) as interactive cards, and
- * a roomy composer at the bottom. Enter sends; Shift+Enter inserts a newline.
- * Launching a task turns the composer into a reply box on that session, so the
- * whole column is one continuous conversation.
+ * The bottom of the stream: active decisions (the agent's question, pending
+ * approvals) as interactive cards, then a roomy composer. Enter sends;
+ * Shift+Enter is a newline. Launching a task turns the composer into a reply
+ * box on that session, so the stream above stays one continuous conversation.
  */
-export function Conversation(): React.JSX.Element {
+export function ComposerDock(): React.JSX.Element {
   const bridge = window.agentinator
   const [prompt, setPrompt] = useState('')
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
@@ -123,32 +121,27 @@ export function Conversation(): React.JSX.Element {
   const replying = activeSessionId !== null
 
   return (
-    <section className="pane conversation" aria-label="Conversation">
-      <div className="conversation-head">
-        <h2 className="pane-label">Conversation</h2>
-        {activeSessionId !== null && (
-          <div className="session-status" aria-label="Active session">
-            <span className={`status-dot ${status}`} aria-hidden="true" />
-            <span className="session-status-label">
-              {status === 'idle' ? 'Awaiting your reply' : 'Working…'}
-            </span>
-            <button
-              type="button"
-              className="new-task-button"
-              onClick={() => startNew(activeSessionId)}
-            >
-              New task
-            </button>
-          </div>
-        )}
-      </div>
-
-      <ConversationLog />
+    <div className="composer-dock" aria-label="Composer">
+      {activeSessionId !== null && (
+        <div className="session-status" aria-label="Active session">
+          <span className={`status-dot ${status}`} aria-hidden="true" />
+          <span className="session-status-label">
+            {status === 'idle' ? 'Awaiting your reply' : 'Working…'}
+          </span>
+          <button
+            type="button"
+            className="new-task-button"
+            onClick={() => startNew(activeSessionId)}
+          >
+            New task
+          </button>
+        </div>
+      )}
 
       {bridge === undefined ? (
         <p className="empty-state">Open a workspace to talk to an agent.</p>
       ) : (
-        <div className="composer-dock">
+        <>
           {question !== null && activeSessionId !== null && (
             <QuestionCard question={question} onAnswer={(text) => reply(activeSessionId, text)} />
           )}
@@ -196,8 +189,8 @@ export function Conversation(): React.JSX.Element {
               </button>
             </div>
           </form>
-        </div>
+        </>
       )}
-    </section>
+    </div>
   )
 }

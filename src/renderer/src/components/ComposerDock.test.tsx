@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
-import { Conversation } from './Conversation'
+import { ComposerDock } from './ComposerDock'
 
 interface BridgeStub {
   bridge: AgentinatorBridge
@@ -85,9 +85,9 @@ afterEach(() => {
   delete window.agentinator
 })
 
-describe('Conversation', () => {
+describe('ComposerDock', () => {
   it('shows a placeholder and no composer without a bridge', () => {
-    render(<Conversation />)
+    render(<ComposerDock />)
 
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Task for Claude' })).not.toBeInTheDocument()
@@ -97,7 +97,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
     const run = screen.getByRole('button', { name: /Run task/ })
     expect(run).toBeDisabled()
@@ -114,15 +114,13 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
 
-    // Shift+Enter must not submit.
     await userEvent.type(input, 'first line')
     fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
     expect(stub.startTask).not.toHaveBeenCalled()
 
-    // Plain Enter sends.
     await userEvent.type(input, '{Enter}')
     expect(stub.startTask).toHaveBeenCalledWith('first line')
   })
@@ -131,7 +129,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     const input = screen.getByRole('textbox', { name: 'Task for Claude' })
     await userEvent.type(input, '   {Enter}')
 
@@ -142,7 +140,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await userEvent.click(screen.getByRole('button', { name: /Demo/ }))
 
     expect(stub.bridge.agent.startDemo).toHaveBeenCalledOnce()
@@ -152,7 +150,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
 
     expect(screen.queryByRole('button', { name: /Demo/ })).not.toBeInTheDocument()
@@ -168,7 +166,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.idle', { sessionId: 'session_task' }))
@@ -181,7 +179,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
     act(() => {
       stub.emit(
@@ -204,7 +202,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
     await userEvent.click(screen.getByRole('button', { name: 'New task' }))
 
@@ -217,7 +215,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
@@ -230,7 +228,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await launchTask()
     act(() => {
       stub.emit(sessionEvent('session.idle', { sessionId: 'other' }))
@@ -257,7 +255,7 @@ describe('Conversation', () => {
     ])
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await waitFor(() => {
       expect(screen.getByText('write a.ts')).toBeInTheDocument()
     })
@@ -270,7 +268,7 @@ describe('Conversation', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await waitFor(() => {
       expect(stub.bridge.approvals.pending).toHaveBeenCalled()
     })
@@ -300,7 +298,7 @@ describe('Conversation', () => {
     ])
     window.agentinator = stub.bridge
 
-    render(<Conversation />)
+    render(<ComposerDock />)
     await waitFor(() => {
       expect(screen.getByText('write b.ts')).toBeInTheDocument()
     })
@@ -322,7 +320,7 @@ describe('Conversation', () => {
     )
     window.agentinator = stub.bridge
 
-    const { unmount } = render(<Conversation />)
+    const { unmount } = render(<ComposerDock />)
     unmount()
     resolvePending([
       { requestId: 'approval_late', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },

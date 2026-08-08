@@ -54,8 +54,23 @@ body {
 .panes {
   display: grid;
   flex: 1;
-  grid-template-columns: 52px 360px 1fr 300px;
+  grid-template-columns: 52px 1fr 380px;
   min-height: 0;
+}
+
+/* the unified conversation ∪ timeline: log fills, composer docks at the foot */
+.stream {
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stream .timeline {
+  border-right: none;
+  flex: 1;
 }
 
 .pane {
@@ -756,72 +771,6 @@ body {
 .rail-count {
   color: var(--soft);
   font-size: 0.75rem;
-}
-
-/* ---- conversation column ---- */
-.conversation {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  padding: 0;
-}
-
-.conversation-head {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex: none;
-  gap: 0.6rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.conversation-head .pane-label {
-  margin: 0;
-}
-
-.conversation-head .session-status {
-  margin: 0 0 0 auto;
-}
-
-/* the terminal-style transcript — a monospace console you read top to bottom */
-.convo-log {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.6rem 0.75rem;
-  scrollbar-width: none;
-}
-
-.convo-log::-webkit-scrollbar {
-  display: none;
-}
-
-.convo-lines {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.convo-line {
-  display: flex;
-  gap: 0.5rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.convo-marker {
-  flex: none;
-  text-align: center;
-  width: 1rem;
-  color: var(--faint);
-}
-
-/* your own lines (user.message renders tone-accent) read brightest */
-.convo-line.tone-accent .convo-text {
-  color: var(--ink);
 }
 
 /* ---- composer dock (decisions + input) ---- */

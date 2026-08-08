@@ -11,20 +11,22 @@ describe('App', () => {
     expect(screen.getByText('Agentinator')).toBeInTheDocument()
     expect(screen.getByText('no workspace open')).toBeInTheDocument()
     expect(screen.getByRole('complementary', { name: 'Agents' })).toBeInTheDocument()
+    // The unified conversation ∪ timeline stream, with its composer…
     expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Workspace' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'App preview' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Composer')).toBeInTheDocument()
+    // …and the Diff/Preview inspector.
+    expect(screen.getByRole('region', { name: 'Inspector' })).toBeInTheDocument()
     expect(screen.getByRole('contentinfo', { name: 'Status bar' })).toBeInTheDocument()
   })
 
   it('shows the empty states that orient a first-time user', () => {
     render(<App />)
 
-    expect(screen.getByText(/conversation with the agent appears here/)).toBeInTheDocument()
-    expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
-    expect(screen.getByText(/target app renders here/)).toBeInTheDocument()
+    expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
+    // The Diff tab is default; Preview lives behind its tab.
+    expect(screen.getByText(/File changes appear here as agents edit/)).toBeInTheDocument()
   })
 
   it('shows a zeroed cost readout and version in the status bar', () => {

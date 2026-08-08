@@ -1,8 +1,7 @@
 import { AgentRail } from './components/AgentRail'
-import { Conversation } from './components/Conversation'
+import { Inspector } from './components/Inspector'
 import { StatusBar } from './components/StatusBar'
-import { Workspace } from './components/Workspace'
-import { Preview } from './components/Preview'
+import { Stream } from './components/Stream'
 import { SelectionProvider } from './state/selection'
 
 export function App(): React.JSX.Element {
@@ -22,9 +21,8 @@ function AppShell(): React.JSX.Element {
       </header>
       <div className="panes">
         <AgentRail />
-        <Conversation />
-        <Workspace />
-        <Preview />
+        <Stream />
+        <Inspector />
       </div>
       <StatusBar />
     </div>
