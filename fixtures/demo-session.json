@@ -1,0 +1,85 @@
+[
+  {
+    "type": "session.started",
+    "payload": {
+      "sessionId": "session_replay",
+      "agentId": "agent_replay",
+      "workspaceId": "workspace_replay",
+      "title": "Replay: greet util"
+    }
+  },
+  {
+    "type": "agent.thinking",
+    "payload": {
+      "sessionId": "session_replay",
+      "summary": "Planning: add a greet() util with a colocated test."
+    }
+  },
+  {
+    "type": "agent.text",
+    "payload": {
+      "sessionId": "session_replay",
+      "text": "Adding src/demo/greet.ts with a test, then running the suite."
+    }
+  },
+  {
+    "type": "tool.called",
+    "payload": {
+      "sessionId": "session_replay",
+      "callId": "call_1",
+      "tool": "write",
+      "input": { "path": "src/demo/greet.ts" }
+    }
+  },
+  {
+    "type": "tool.resulted",
+    "payload": {
+      "sessionId": "session_replay",
+      "callId": "call_1",
+      "ok": true,
+      "output": "wrote src/demo/greet.ts"
+    }
+  },
+  {
+    "type": "file.diffed",
+    "payload": {
+      "sessionId": "session_replay",
+      "path": "src/demo/greet.ts",
+      "additions": 3,
+      "deletions": 0,
+      "patch": "+export function greet(name: string): string {\n+  return `hello ${name}`\n+}"
+    }
+  },
+  {
+    "type": "tool.called",
+    "payload": {
+      "sessionId": "session_replay",
+      "callId": "call_2",
+      "tool": "bash",
+      "input": { "command": "npm test" }
+    }
+  },
+  {
+    "type": "tool.resulted",
+    "payload": {
+      "sessionId": "session_replay",
+      "callId": "call_2",
+      "ok": true,
+      "output": "Tests passed."
+    }
+  },
+  {
+    "type": "cost.usage",
+    "payload": {
+      "sessionId": "session_replay",
+      "inputTokens": 1200,
+      "outputTokens": 340,
+      "cacheReadInputTokens": 900,
+      "usd": 0.0042
+    }
+  },
+  {
+    "type": "session.ended",
+    "payload": { "sessionId": "session_replay", "outcome": "completed" }
+  }
+]

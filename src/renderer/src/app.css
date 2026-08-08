@@ -83,6 +83,57 @@ body {
   max-width: 32ch;
 }
 
+/* Semantic status colors — status is never encoded by color alone. */
+:root {
+  --ok: #47b881;
+  --err: #e06555;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  padding: 0;
+}
+
+.timeline-line {
+  display: flex;
+  gap: 0.5rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.timeline-marker {
+  flex: none;
+  text-align: center;
+  width: 1rem;
+}
+
+.tone-accent {
+  color: var(--accent);
+}
+
+.tone-ink {
+  color: var(--ink);
+}
+
+.tone-soft {
+  color: var(--soft);
+}
+
+.tone-faint {
+  color: var(--faint);
+}
+
+.tone-ok {
+  color: var(--ok);
+}
+
+.tone-err {
+  color: var(--err);
+}
+
 .demo-button {
   background: transparent;
   border: 1px solid var(--accent);

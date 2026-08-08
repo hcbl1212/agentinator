@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "smoke:claude": "CLAUDE_SMOKE=1 vitest run claude.smoke --coverage.enabled=false"
+    "smoke:claude": "CLAUDE_SMOKE=1 vitest run claude.smoke --coverage.enabled=false",
+    "replay:demo": "AGENTINATOR_REPLAY=fixtures/demo-session.json electron-vite dev"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.226",

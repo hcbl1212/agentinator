@@ -227,6 +227,23 @@ describe('bootstrap', () => {
     }
   })
 
+  it('replays a fixture into an in-memory store when AGENTINATOR_REPLAY is set', async () => {
+    const store = fakeStore()
+    const createStore = vi.fn(() => store)
+    const replay = vi.fn(() => Promise.resolve())
+
+    await bootstrap(
+      mockApp as never,
+      createStore,
+      undefined,
+      { AGENTINATOR_REPLAY: 'fixtures/demo.json' },
+      replay,
+    )
+
+    expect(createStore).toHaveBeenCalledWith(':memory:')
+    expect(replay).toHaveBeenCalledWith('fixtures/demo.json', store, broadcastEvent)
+  })
+
   it('quits the app when the last window closes, on every platform', async () => {
     await bootstrap(mockApp as never, fakeStore)
 

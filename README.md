@@ -23,6 +23,7 @@ npm run lint          # eslint
 npm run typecheck     # tsc --noEmit
 npm run build         # production build to out/
 npm run smoke:claude  # opt-in: run the Claude adapter against real Claude (see below)
+npm run replay:demo   # launch the app replaying a recorded session (no API spend)
 ```
 
 ## Connecting Claude

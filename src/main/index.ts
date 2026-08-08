@@ -8,6 +8,7 @@ import { EventStore } from './eventStore'
 import { createClaudeProvider } from './providers/claude'
 import type { ClaudeQuery } from './providers/claude'
 import { createMockProvider } from './providers/mock'
+import { replayFixture } from './replay'
 import { SessionManager } from './sessions'
 
 export function createWindow(): BrowserWindow {
@@ -80,10 +81,18 @@ export async function bootstrap(
   electronApp = app,
   createStore: (dbPath: string) => EventStore = (dbPath) => new EventStore(dbPath),
   claudeQuery: ClaudeQuery = query as unknown as ClaudeQuery,
+  env: Record<string, string | undefined> = process.env,
+  replay: typeof replayFixture = replayFixture,
 ): Promise<EventStore> {
   await electronApp.whenReady()
 
-  const store = createStore(join(electronApp.getPath('userData'), 'agentinator.db'))
+  // Replay mode reviews UI against a recorded session with zero API spend —
+  // an in-memory store keeps fixtures out of the real event log.
+  const replayPath = env['AGENTINATOR_REPLAY']
+  const store =
+    replayPath === undefined
+      ? createStore(join(electronApp.getPath('userData'), 'agentinator.db'))
+      : createStore(':memory:')
   store.append('app.started', { version: electronApp.getVersion() })
   registerEventIpc(store)
 
@@ -93,6 +102,9 @@ export async function bootstrap(
   registerAgentIpc(manager)
 
   createWindow()
+  if (replayPath !== undefined) {
+    void replay(replayPath, store, broadcastEvent)
+  }
   // Quit on last window close on every platform, including macOS. The harness
   // has no background work yet, so a closed window leaving the process (and
   // `npm run dev`) alive is a trap. Revisit as a tray/dock mode once agents
