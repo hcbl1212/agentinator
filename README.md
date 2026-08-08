@@ -24,6 +24,15 @@ npm run typecheck  # tsc --noEmit
 npm run build      # production build to out/
 ```
 
+### Troubleshooting
+
+**`Error: Electron uninstall` on `npm run dev`** — the Electron binary didn't download during
+install (common behind proxies/firewalls or sandboxed installs). Fix:
+
+```sh
+node node_modules/electron/install.js
+```
+
 ## Quality gates
 
 Every commit must pass, locally and in CI:
