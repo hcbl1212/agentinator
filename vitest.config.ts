@@ -9,8 +9,8 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}', 'scripts/**/*.mjs'],
+      exclude: ['**/*.test.*'],
       thresholds: {
         lines: 100,
         functions: 100,

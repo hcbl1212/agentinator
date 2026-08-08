@@ -26,12 +26,9 @@ npm run build      # production build to out/
 
 ### Troubleshooting
 
-**`Error: Electron uninstall` on `npm run dev`** — the Electron binary didn't download during
-install (common behind proxies/firewalls or sandboxed installs). Fix:
-
-```sh
-node node_modules/electron/install.js
-```
+**`Error: Electron uninstall` on `npm run dev`** — the Electron binary didn't download.
+`npm install` runs a postinstall hook that detects and repairs this automatically; re-run
+`npm install` (behind a proxy/firewall, make sure `github.com` release downloads are reachable).
 
 ## Quality gates
 
