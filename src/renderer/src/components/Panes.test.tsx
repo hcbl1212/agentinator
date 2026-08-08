@@ -21,6 +21,7 @@ function drag(sepName: string, fromX: number, toX: number): void {
 
 afterEach(() => {
   delete window.agentinator
+  window.localStorage.clear()
 })
 
 describe('Panes', () => {
@@ -28,6 +29,37 @@ describe('Panes', () => {
     render(<Panes />)
 
     expect(columns()).toBe('52px 6px 1fr 6px 380px')
+  })
+
+  it('restores persisted widths on mount', () => {
+    window.localStorage.setItem('agentinator:panes:rail', '120')
+    window.localStorage.setItem('agentinator:panes:inspector', '300')
+
+    render(<Panes />)
+
+    expect(columns()).toBe('120px 6px 1fr 6px 300px')
+  })
+
+  it('clamps a persisted width that is out of range, and ignores a malformed one', () => {
+    window.localStorage.setItem('agentinator:panes:rail', '9999')
+    window.localStorage.setItem('agentinator:panes:inspector', 'not-a-number')
+
+    render(<Panes />)
+
+    // Rail clamps to its max; the malformed inspector value falls back to default.
+    expect(columns()).toBe('240px 6px 1fr 6px 380px')
+  })
+
+  it('persists a resize so it survives a remount', () => {
+    const { unmount } = render(<Panes />)
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize agent rail' }), {
+      key: 'ArrowRight',
+    })
+    expect(window.localStorage.getItem('agentinator:panes:rail')).toBe('68')
+
+    unmount()
+    render(<Panes />)
+    expect(columns()).toBe('68px 6px 1fr 6px 380px')
   })
 
   it('resizes the rail and inspector with arrow keys', () => {

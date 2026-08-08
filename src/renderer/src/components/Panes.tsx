@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AgentRail } from './AgentRail'
 import { Inspector } from './Inspector'
@@ -10,8 +10,18 @@ const RAIL_MAX = 240
 const INSPECTOR_MIN = 260
 const INSPECTOR_MAX = 680
 
+const RAIL_KEY = 'agentinator:panes:rail'
+const INSPECTOR_KEY = 'agentinator:panes:inspector'
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
+
+/** A persisted width, clamped into range; falls back if missing or malformed. */
+function storedWidth(key: string, fallback: number, min: number, max: number): number {
+  const raw = window.localStorage.getItem(key)
+  const parsed = raw === null ? Number.NaN : Number(raw)
+  return Number.isFinite(parsed) ? clamp(parsed, min, max) : fallback
+}
 
 /**
  * The resizable pane grid: a slim agent rail, the unified stream (the flexible
@@ -20,8 +30,18 @@ const clamp = (value: number, min: number, max: number): number =>
  * either gutter redistributes space across all three.
  */
 export function Panes(): React.JSX.Element {
-  const [railWidth, setRailWidth] = useState(52)
-  const [inspectorWidth, setInspectorWidth] = useState(380)
+  const [railWidth, setRailWidth] = useState(() => storedWidth(RAIL_KEY, 52, RAIL_MIN, RAIL_MAX))
+  const [inspectorWidth, setInspectorWidth] = useState(() =>
+    storedWidth(INSPECTOR_KEY, 380, INSPECTOR_MIN, INSPECTOR_MAX),
+  )
+
+  // Widths survive reloads (the plan's "saved layouts", v1).
+  useEffect(() => {
+    window.localStorage.setItem(RAIL_KEY, String(railWidth))
+  }, [railWidth])
+  useEffect(() => {
+    window.localStorage.setItem(INSPECTOR_KEY, String(inspectorWidth))
+  }, [inspectorWidth])
 
   const resizeRail = (delta: number): void => {
     setRailWidth((width) => clamp(width + delta, RAIL_MIN, RAIL_MAX))
