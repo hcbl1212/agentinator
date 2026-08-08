@@ -52,6 +52,9 @@ export function registerEventIpc(
 ): void {
   handle('events:count', () => store.count())
   handle('events:list', (_event, afterSeq) => store.list(afterSeq as number))
+  handle('events:tail', (_event, limit, beforeSeq) =>
+    store.tail(limit as number, beforeSeq as number | undefined),
+  )
 }
 
 export function registerAgentIpc(

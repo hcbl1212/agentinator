@@ -20,6 +20,7 @@ function stubBridge(count: Promise<number>): BridgeStub {
       events: {
         count: vi.fn(() => count),
         list: vi.fn(() => Promise.resolve([])),
+        tail: vi.fn(() => Promise.resolve([])),
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
           appended = listener
           return unsubscribe as () => void

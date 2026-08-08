@@ -9,6 +9,8 @@ export interface AgentinatorBridge {
   events: {
     count(): Promise<number>
     list(afterSeq?: number): Promise<StoredEvent[]>
+    /** Newest `limit` events oldest-first; with beforeSeq, the page before it. */
+    tail(limit: number, beforeSeq?: number): Promise<StoredEvent[]>
     /** Subscribe to live appends; returns an unsubscribe function. */
     onAppended(listener: (event: StoredEvent) => void): () => void
   }

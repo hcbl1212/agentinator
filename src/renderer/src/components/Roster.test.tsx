@@ -11,6 +11,7 @@ function stubBridge(): AgentinatorBridge {
     events: {
       count: vi.fn(() => Promise.resolve(0)),
       list: vi.fn(() => Promise.resolve([])),
+      tail: vi.fn(() => Promise.resolve([])),
       onAppended: vi.fn(() => () => undefined),
     },
     agent: {

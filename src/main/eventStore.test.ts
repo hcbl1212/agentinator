@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -89,6 +90,63 @@ describe('EventStore', () => {
 
     expect(second.count()).toBe(1)
     expect(second.list()[0]?.type).toBe('app.started')
+  })
+
+  it('tails the newest events oldest-first, and pages backward from a cursor', () => {
+    const store = open()
+    store.append('app.started', { version: '0.1.0' })
+    for (let i = 1; i <= 5; i += 1) {
+      store.append('agent.text', { sessionId: 'session_1', text: `msg ${i}` })
+    }
+
+    const tail = store.tail(3)
+    expect(tail.map((event) => event.seq)).toEqual([4, 5, 6])
+
+    const earlier = store.tail(3, 4)
+    expect(earlier.map((event) => event.seq)).toEqual([1, 2, 3])
+
+    const start = store.tail(3, 1)
+    expect(start).toEqual([])
+  })
+
+  it('lists a single session via the indexed session_id column', () => {
+    const store = open()
+    store.append('app.started', { version: '0.1.0' })
+    store.append('agent.text', { sessionId: 'session_a', text: 'a1' })
+    store.append('agent.text', { sessionId: 'session_b', text: 'b1' })
+    store.append('agent.text', { sessionId: 'session_a', text: 'a2' })
+
+    const events = store.listBySession('session_a')
+
+    expect(events.map((event) => (event.payload as { text: string }).text)).toEqual(['a1', 'a2'])
+  })
+
+  it('migrates a pre-session_id database, backfilling the index from payloads', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentinator-store-'))
+    tmpDirs.push(dir)
+    const dbPath = join(dir, 'events.db')
+
+    // Simulate a slice-1b-era database: no session_id column.
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+      CREATE TABLE events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT NOT NULL,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL
+      )
+    `)
+    legacy
+      .prepare('INSERT INTO events (ts, type, payload) VALUES (?, ?, ?)')
+      .run('t1', 'agent.text', JSON.stringify({ sessionId: 'session_old', text: 'legacy' }))
+    legacy.close()
+
+    const store = open(dbPath)
+
+    expect(store.count()).toBe(1)
+    expect(store.listBySession('session_old')).toHaveLength(1)
+    store.append('agent.text', { sessionId: 'session_old', text: 'fresh' })
+    expect(store.listBySession('session_old')).toHaveLength(2)
   })
 
   it('exposes no way to update or delete events', () => {

@@ -89,6 +89,25 @@ body {
   --err: #e06555;
 }
 
+.load-earlier {
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  margin-bottom: 0.6rem;
+  padding: 0.25rem 0.6rem;
+  width: 100%;
+}
+
+.load-earlier:hover,
+.load-earlier:focus-visible {
+  border-color: var(--soft);
+  color: var(--soft);
+  outline: none;
+}
+
 .timeline-list {
   display: flex;
   flex-direction: column;

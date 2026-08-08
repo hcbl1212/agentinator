@@ -7,6 +7,8 @@ export const bridge: AgentinatorBridge = {
   events: {
     count: () => ipcRenderer.invoke('events:count') as Promise<number>,
     list: (afterSeq = 0) => ipcRenderer.invoke('events:list', afterSeq) as Promise<StoredEvent[]>,
+    tail: (limit, beforeSeq) =>
+      ipcRenderer.invoke('events:tail', limit, beforeSeq) as Promise<StoredEvent[]>,
     onAppended: (listener) => {
       const wrapped = (_event: unknown, stored: StoredEvent): void => {
         listener(stored)

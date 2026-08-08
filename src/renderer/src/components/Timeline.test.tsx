@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
@@ -10,20 +11,30 @@ function stored<T extends EventType>(type: T, payload: EventPayloads[T], seq: nu
   return { seq, ts: 't', type, payload } as StoredEvent
 }
 
+function text(seq: number, body: string): StoredEvent {
+  return stored('agent.text', { sessionId: 's', text: body }, seq)
+}
+
 interface BridgeStub {
   bridge: AgentinatorBridge
+  tail: ReturnType<typeof vi.fn>
   emit: (event: StoredEvent) => void
   unsubscribe: ReturnType<typeof vi.fn>
 }
 
-function stubBridge(list: Promise<StoredEvent[]>): BridgeStub {
+function stubBridge(pages: (limit: number, beforeSeq?: number) => StoredEvent[]): BridgeStub {
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
+  const tail = vi.fn((limit: number, beforeSeq?: number) =>
+    Promise.resolve(pages(limit, beforeSeq)),
+  )
   return {
+    tail,
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
-        list: vi.fn(() => list),
+        list: vi.fn(() => Promise.resolve([])),
+        tail: tail as AgentinatorBridge['events']['tail'],
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
           appended = listener
           return unsubscribe as () => void
@@ -50,27 +61,61 @@ describe('Timeline', () => {
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
   })
 
-  it('renders the fetched log as readable lines', async () => {
-    const stub = stubBridge(
-      Promise.resolve([
-        stored('app.started', { version: '0.1.0' }, 1),
-        stored('agent.text', { sessionId: 's', text: 'Hello from the agent.' }, 2),
-      ]),
-    )
+  it('fetches only the newest window, not the whole log', async () => {
+    const stub = stubBridge(() => [text(1, 'first line')])
     window.agentinator = stub.bridge
 
-    render(<Timeline />)
+    render(<Timeline pageSize={50} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Hello from the agent.')).toBeInTheDocument()
+      expect(screen.getByText('first line')).toBeInTheDocument()
     })
-    expect(screen.getByText('app started v0.1.0')).toBeInTheDocument()
-    expect(screen.queryByText(/Agent activity will stream here/)).not.toBeInTheDocument()
+    expect(stub.tail).toHaveBeenCalledWith(50)
+    expect(stub.bridge.events.list).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument()
   })
 
-  it('appends live events and dedupes ones already in the fetched list', async () => {
-    const listed = stored('agent.text', { sessionId: 's', text: 'first' }, 1)
-    const stub = stubBridge(Promise.resolve([listed]))
+  it('pages backward with Load earlier until the start of the log', async () => {
+    const stub = stubBridge((_limit, beforeSeq) =>
+      beforeSeq === undefined ? [text(3, 'newest')] : [text(1, 'oldest'), text(2, 'middle')],
+    )
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline pageSize={2} />)
+    await waitFor(() => {
+      expect(screen.getByText('newest')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /Load earlier/ }))
+
+    expect(stub.tail).toHaveBeenLastCalledWith(2, 3)
+    await waitFor(() => {
+      expect(screen.getByText('oldest')).toBeInTheDocument()
+    })
+    expect(screen.getByText('middle')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument()
+  })
+
+  it('does nothing when Load earlier is clicked after the bridge vanished', async () => {
+    const stub = stubBridge(() => [text(5, 'windowed')])
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<Timeline pageSize={2} />)
+    await waitFor(() => {
+      expect(screen.getByText('windowed')).toBeInTheDocument()
+    })
+
+    delete window.agentinator
+    await user.click(screen.getByRole('button', { name: /Load earlier/ }))
+
+    expect(stub.tail).toHaveBeenCalledTimes(1)
+  })
+
+  it('appends live events and dedupes ones already in the window', async () => {
+    const listed = text(1, 'first')
+    const stub = stubBridge(() => [listed])
     window.agentinator = stub.bridge
 
     render(<Timeline />)
@@ -80,7 +125,7 @@ describe('Timeline', () => {
 
     act(() => {
       stub.emit(listed)
-      stub.emit(stored('agent.text', { sessionId: 's', text: 'second' }, 2))
+      stub.emit(text(2, 'second'))
     })
 
     expect(screen.getAllByText('first')).toHaveLength(1)
@@ -94,9 +139,7 @@ describe('Timeline', () => {
       configurable: true,
     })
     try {
-      const stub = stubBridge(
-        Promise.resolve([stored('agent.text', { sessionId: 's', text: 'line' }, 1)]),
-      )
+      const stub = stubBridge(() => [text(1, 'line')])
       window.agentinator = stub.bridge
 
       render(<Timeline />)
@@ -110,18 +153,18 @@ describe('Timeline', () => {
     }
   })
 
-  it('unsubscribes on unmount and ignores a late list', async () => {
-    let resolveList: (events: StoredEvent[]) => void = () => undefined
-    const stub = stubBridge(
-      new Promise<StoredEvent[]>((resolve) => {
-        resolveList = resolve
-      }),
-    )
+  it('unsubscribes on unmount and ignores a late window', async () => {
+    let resolveTail: (events: StoredEvent[]) => void = () => undefined
+    const late = new Promise<StoredEvent[]>((resolve) => {
+      resolveTail = resolve
+    })
+    const stub = stubBridge(() => [])
+    stub.tail.mockReturnValue(late)
     window.agentinator = stub.bridge
 
     const { unmount } = render(<Timeline />)
     unmount()
-    resolveList([stored('agent.text', { sessionId: 's', text: 'late' }, 1)])
+    resolveTail([text(1, 'late')])
     await Promise.resolve()
 
     expect(stub.unsubscribe).toHaveBeenCalledOnce()
