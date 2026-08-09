@@ -26,11 +26,11 @@ describe('preload bridge', () => {
   it('routes events.count, events.totalCost, and events.diffs over IPC', async () => {
     await bridge.events.count()
     await bridge.events.totalCost()
-    await bridge.events.diffs()
+    await bridge.events.diffs('session_7')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:count')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:total-cost')
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:diffs')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:diffs', 'session_7')
   })
 
   it('routes settings get/set over IPC', async () => {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useSelection } from '../state/selection'
 import { DiffView } from './DiffView'
 import { Preview } from './Preview'
 
@@ -12,6 +13,8 @@ type Tab = 'diff' | 'preview'
  */
 export function Inspector(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('diff')
+  const { selection } = useSelection()
+  const sessionId = selection?.kind === 'session' ? selection.id : null
 
   return (
     <section className="workspace inspector" aria-label="Inspector">
@@ -35,7 +38,9 @@ export function Inspector(): React.JSX.Element {
           Preview
         </button>
       </div>
-      <div className="workspace-body">{tab === 'diff' ? <DiffView /> : <Preview />}</div>
+      <div className="workspace-body">
+        {tab === 'diff' ? <DiffView sessionId={sessionId} /> : <Preview sessionId={sessionId} />}
+      </div>
     </section>
   )
 }

@@ -269,6 +269,29 @@ describe('EventStore', () => {
     expect(open().latestDiffs()).toEqual([])
   })
 
+  it('scopes the cumulative diff to one session when asked', () => {
+    const store = open()
+    store.append('file.diffed', {
+      sessionId: 's1',
+      path: 'a.ts',
+      additions: 1,
+      deletions: 0,
+      patch: 'a',
+    })
+    store.append('file.diffed', {
+      sessionId: 's2',
+      path: 'b.ts',
+      additions: 1,
+      deletions: 0,
+      patch: 'b',
+    })
+
+    const scoped = store.latestDiffs('s1')
+
+    expect(scoped).toHaveLength(1)
+    expect((scoped[0]?.payload as { path: string }).path).toBe('a.ts')
+  })
+
   it('exposes no way to update or delete events', () => {
     const store = open()
 

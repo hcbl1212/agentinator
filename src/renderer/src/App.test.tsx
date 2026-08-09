@@ -23,10 +23,11 @@ describe('App', () => {
   it('shows the empty states that orient a first-time user', () => {
     render(<App />)
 
-    expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
+    // No agent selected → the stream and diff prompt you to pick one…
+    expect(screen.getByText(/Select an agent, or start a task below/)).toBeInTheDocument()
+    expect(screen.getByText(/Select an agent to see its changes/)).toBeInTheDocument()
+    // …and the composer is ready to launch one.
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
-    // The Diff tab is default; Preview lives behind its tab.
-    expect(screen.getByText(/File changes appear here as agents edit/)).toBeInTheDocument()
   })
 
   it('shows a zeroed cost readout and version in the status bar', () => {

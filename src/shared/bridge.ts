@@ -30,8 +30,9 @@ export interface AgentinatorBridge {
     count(): Promise<number>
     /** Lifetime spend across the whole log, for the status-bar readout. */
     totalCost(): Promise<number>
-    /** The current cumulative diff per file — newest file.diffed per path. */
-    diffs(): Promise<StoredEvent[]>
+    /** The cumulative diff per file — newest file.diffed per path, scoped to a
+     * session when given. */
+    diffs(sessionId?: string): Promise<StoredEvent[]>
     list(afterSeq?: number): Promise<StoredEvent[]>
     /** Newest `limit` events oldest-first; with beforeSeq, the page before it. */
     tail(limit: number, beforeSeq?: number): Promise<StoredEvent[]>

@@ -67,46 +67,71 @@ afterEach(() => {
 })
 
 describe('DiffView', () => {
-  it('shows the empty state without a bridge', () => {
-    render(<DiffView />)
+  it('prompts to pick an agent when none is selected', () => {
+    window.agentinator = stubBridge([diffEvent('a.ts', '+x', 1)]).bridge
+
+    render(<DiffView sessionId={null} />)
+
+    expect(screen.getByText(/Select an agent to see its changes/)).toBeInTheDocument()
+    // No fetch happens with no agent selected.
+    expect(window.agentinator.events.diffs).not.toHaveBeenCalled()
+  })
+
+  it('shows the empty state for a selected agent without a bridge', () => {
+    render(<DiffView sessionId="s" />)
 
     expect(screen.getByText(/File changes appear here/)).toBeInTheDocument()
   })
 
-  it('renders per-file diffs with colored lines and stats', async () => {
-    window.agentinator = stubBridge([diffEvent('src/a.ts', '@@ -1 +1 @@\n-old\n+new', 1, 1)]).bridge
+  it('renders the selected agent’s per-file diffs with colored lines and stats', async () => {
+    const stub = stubBridge([diffEvent('src/a.ts', '@@ -1 +1 @@\n-old\n+new', 1, 1)])
+    window.agentinator = stub.bridge
 
-    render(<DiffView />)
+    render(<DiffView sessionId="s" />)
 
     await waitFor(() => {
       expect(screen.getByText('src/a.ts')).toBeInTheDocument()
     })
+    expect(stub.bridge.events.diffs).toHaveBeenCalledWith('s')
     expect(screen.getByText('+new')).toHaveClass('diff-add')
     expect(screen.getByText('-old')).toHaveClass('diff-del')
     expect(screen.getByText('@@ -1 +1 @@')).toHaveClass('diff-hunk')
     expect(screen.getByText('+1')).toBeInTheDocument()
   })
 
-  it('updates live as file.diffed events land, replacing a path in place', async () => {
+  it('updates live for its own session and ignores other sessions and non-diffs', async () => {
     const stub = stubBridge([diffEvent('a.ts', '+one', 1)])
     window.agentinator = stub.bridge
 
-    render(<DiffView />)
+    render(<DiffView sessionId="s" />)
     await waitFor(() => {
       expect(screen.getByText('+one')).toBeInTheDocument()
     })
 
     act(() => {
       stub.emit(diffEvent('a.ts', '+two', 2))
-      stub.emit(diffEvent('b.ts', '+bee', 3))
+      // A diff for another agent must not appear here.
+      stub.emit({
+        seq: 3,
+        ts: 't',
+        type: 'file.diffed',
+        payload: { sessionId: 'other', path: 'z.ts', additions: 1, deletions: 0, patch: '+zzz' },
+      } as StoredEvent)
+      // A non-diff event is ignored.
+      stub.emit({
+        seq: 4,
+        ts: 't',
+        type: 'agent.text',
+        payload: { sessionId: 's', text: 'x' },
+      } as StoredEvent)
     })
 
     expect(screen.queryByText('+one')).not.toBeInTheDocument()
     expect(screen.getByText('+two')).toBeInTheDocument()
-    expect(screen.getByText('+bee')).toBeInTheDocument()
+    expect(screen.queryByText('+zzz')).not.toBeInTheDocument()
   })
 
-  it('ignores non-diff events and a late load after unmount', async () => {
+  it('ignores a late load after unmount', async () => {
     let resolve: (events: StoredEvent[]) => void = () => undefined
     const stub = stubBridge([])
     ;(stub.bridge.events.diffs as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -116,33 +141,12 @@ describe('DiffView', () => {
     )
     window.agentinator = stub.bridge
 
-    const { unmount } = render(<DiffView />)
+    const { unmount } = render(<DiffView sessionId="s" />)
     unmount()
     resolve([diffEvent('late.ts', '+late', 1)])
     await Promise.resolve()
 
     expect(stub.unsubscribe).toHaveBeenCalledOnce()
     expect(screen.queryByText('+late')).not.toBeInTheDocument()
-  })
-
-  it('does not add a card for a non-diff live event', async () => {
-    const stub = stubBridge([])
-    window.agentinator = stub.bridge
-
-    render(<DiffView />)
-    await waitFor(() => {
-      expect(screen.getByText(/File changes appear here/)).toBeInTheDocument()
-    })
-
-    act(() => {
-      stub.emit({
-        seq: 5,
-        ts: 't',
-        type: 'agent.text',
-        payload: { sessionId: 's', text: 'x' },
-      } as StoredEvent)
-    })
-
-    expect(screen.getByText(/File changes appear here/)).toBeInTheDocument()
   })
 })

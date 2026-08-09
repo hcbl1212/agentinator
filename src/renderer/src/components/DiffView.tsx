@@ -1,29 +1,33 @@
 import { useEffect, useState } from 'react'
 
-import type { StoredEvent } from '../../../shared/events'
+import type { EventPayloads, StoredEvent } from '../../../shared/events'
 import { mergeDiff, toFileDiffs } from '../diff/diffFormat'
 
 /**
- * The cumulative diff of the work so far — one section per file, showing its
- * newest patch with add/delete/hunk coloring. Loads the current diffs and
- * updates live as file.diffed events land.
+ * The cumulative diff of the selected agent's work — one section per file,
+ * showing its newest patch with add/delete/hunk coloring. Scoped to the
+ * highlighted agent; with none selected it shows nothing.
  */
-export function DiffView(): React.JSX.Element {
+export function DiffView({ sessionId }: { sessionId?: string | null }): React.JSX.Element {
   const [events, setEvents] = useState<StoredEvent[]>([])
 
   useEffect(() => {
+    setEvents([])
     const bridge = window.agentinator
-    if (bridge === undefined) {
+    if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return
     }
     let cancelled = false
-    void bridge.events.diffs().then((diffs) => {
+    void bridge.events.diffs(sessionId).then((diffs) => {
       if (!cancelled) {
         setEvents(diffs)
       }
     })
     const unsubscribe = bridge.events.onAppended((event) => {
-      if (event.type === 'file.diffed') {
+      if (
+        event.type === 'file.diffed' &&
+        (event.payload as EventPayloads['file.diffed']).sessionId === sessionId
+      ) {
         setEvents((previous) => mergeDiff(previous, event))
       }
     })
@@ -31,7 +35,7 @@ export function DiffView(): React.JSX.Element {
       cancelled = true
       unsubscribe()
     }
-  }, [])
+  }, [sessionId])
 
   const files = toFileDiffs(events)
 
@@ -39,7 +43,9 @@ export function DiffView(): React.JSX.Element {
     return (
       <section className="pane diff-pane" aria-label="Diff">
         <p className="empty-state">
-          File changes appear here as agents edit — the cumulative diff.
+          {sessionId === null || sessionId === undefined
+            ? 'Select an agent to see its changes.'
+            : 'File changes appear here as the agent edits — the cumulative diff.'}
         </p>
       </section>
     )

@@ -53,6 +53,7 @@ export class EventStore {
   #selectTotalCost: StatementSync
   #selectCostSince: StatementSync
   #selectLatestDiffs: StatementSync
+  #selectLatestDiffsBySession: StatementSync
   #selectOpenSessions: StatementSync
 
   constructor(path = ':memory:') {
@@ -112,6 +113,9 @@ export class EventStore {
     // the columns from the MAX(seq) row (bare-column-from-aggregate rule).
     this.#selectLatestDiffs = this.#db.prepare(
       "SELECT seq, ts, type, payload, MAX(seq) AS _m FROM events WHERE type = 'file.diffed' GROUP BY json_extract(payload, '$.path') ORDER BY seq",
+    )
+    this.#selectLatestDiffsBySession = this.#db.prepare(
+      "SELECT seq, ts, type, payload, MAX(seq) AS _m FROM events WHERE type = 'file.diffed' AND session_id = ? GROUP BY json_extract(payload, '$.path') ORDER BY seq",
     )
     // Sessions that started but never ended — orphaned when the app closed
     // mid-run (handles live in memory and can't survive a restart).
@@ -188,9 +192,12 @@ export class EventStore {
     return row.usd
   }
 
-  /** The current cumulative diff per file — newest file.diffed for each path. */
-  latestDiffs(): StoredEvent[] {
-    const rows = this.#selectLatestDiffs.all() as unknown as EventRow[]
+  /** The cumulative diff per file — newest file.diffed for each path. Scoped
+   * to one session when a sessionId is given, otherwise across the whole log. */
+  latestDiffs(sessionId?: string): StoredEvent[] {
+    const rows = (sessionId === undefined
+      ? this.#selectLatestDiffs.all()
+      : this.#selectLatestDiffsBySession.all(sessionId)) as unknown as EventRow[]
     return rows.map((row) => this.#toEvent(row))
   }
 

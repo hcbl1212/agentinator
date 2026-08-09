@@ -56,7 +56,7 @@ export function registerEventIpc(
 ): void {
   handle('events:count', () => store.count())
   handle('events:total-cost', () => store.totalCostUsd())
-  handle('events:diffs', () => store.latestDiffs())
+  handle('events:diffs', (_event, sessionId) => store.latestDiffs(sessionId as string | undefined))
   handle('events:list', (_event, afterSeq) => store.list(afterSeq as number))
   handle('events:tail', (_event, limit, beforeSeq) =>
     store.tail(limit as number, beforeSeq as number | undefined),

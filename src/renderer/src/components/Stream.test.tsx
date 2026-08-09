@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 describe('Stream', () => {
-  it('unifies the timeline and the composer in one conversation surface', () => {
+  it('prompts to pick an agent when none is selected, and keeps the composer', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
@@ -25,9 +25,8 @@ describe('Stream', () => {
     )
 
     expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
-    // The full timeline is the stream…
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
-    expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
+    expect(screen.getByText(/Select an agent, or start a task below/)).toBeInTheDocument()
     // …and the composer docks at its foot.
     expect(screen.getByLabelText('Composer')).toBeInTheDocument()
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
@@ -72,13 +71,14 @@ describe('Stream', () => {
       </SelectionProvider>,
     )
 
-    // Unscoped: both agents' lines show.
-    expect(await screen.findByText('from Y')).toBeInTheDocument()
+    // No agent selected: the stream is an empty prompt, showing neither line.
+    expect(screen.getByText(/Select an agent, or start a task below/)).toBeInTheDocument()
+    expect(screen.queryByText('from Y')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'pick x' }))
 
-    // Scoped to x: only its line remains.
-    expect(screen.getByText('from X')).toBeInTheDocument()
+    // Scoped to x: only its line shows.
+    expect(await screen.findByText('from X')).toBeInTheDocument()
     expect(screen.queryByText('from Y')).not.toBeInTheDocument()
   })
 })
