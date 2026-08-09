@@ -39,6 +39,7 @@ export function createMockProvider(
       taskBudgets: false,
       batchApi: false,
       nativeSkills: false,
+      meteredAuth: false,
       contextWindowTokens: 200_000,
     },
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {

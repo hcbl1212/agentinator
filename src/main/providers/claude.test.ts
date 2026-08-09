@@ -302,6 +302,24 @@ describe('createClaudeProvider', () => {
     expect(idle?.payload).toEqual({ sessionId: 'session_c' })
   })
 
+  it('forces a metered API key into the subprocess env when context.apiKey is set', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+    provider.startSession({ ...context, apiKey: 'sk-test-123' }, (type, payload) =>
+      events.push({ type, payload }),
+    )
+
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+    expect(queryArgs?.options.env).toMatchObject({ ANTHROPIC_API_KEY: 'sk-test-123' })
+  })
+
   it('maps a rate-limit event to a normalized account.limit', async () => {
     const { events } = await runSession([
       {

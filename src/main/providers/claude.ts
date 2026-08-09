@@ -50,6 +50,8 @@ export interface ClaudeQueryArgs {
     canUseTool?: CanUseTool
     /** SDK session id to resume — reloads the prior conversation. */
     resume?: string
+    /** Replaces the subprocess env — used to force a metered API key. */
+    env?: Record<string, string | undefined>
   }
 }
 
@@ -252,6 +254,7 @@ export function createClaudeProvider(
       taskBudgets: true,
       batchApi: true,
       nativeSkills: true,
+      meteredAuth: true,
       contextWindowTokens: 1_000_000,
     },
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {
@@ -296,6 +299,12 @@ export function createClaudeProvider(
           systemPrompt: assembleSystemPrompt({ stable: [SYSTEM_BASE], volatile: [] }),
           canUseTool,
           resume: context.resume?.token,
+          // Force a metered API key when switching off the subscription. env
+          // replaces the subprocess environment, so carry the rest of it over.
+          env:
+            context.apiKey === undefined
+              ? undefined
+              : { ...process.env, ANTHROPIC_API_KEY: context.apiKey },
         },
       })
 

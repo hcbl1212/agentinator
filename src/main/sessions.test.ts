@@ -18,6 +18,7 @@ function instantProvider(id: string): AgentProvider {
       taskBudgets: false,
       batchApi: false,
       nativeSkills: false,
+      meteredAuth: false,
       contextWindowTokens: 1,
     },
     startSession(context, emit) {

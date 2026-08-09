@@ -13,6 +13,10 @@ export interface ProviderCapabilities {
   taskBudgets: boolean
   batchApi: boolean
   nativeSkills: boolean
+  /** Can run a session under a metered API key instead of its default
+   * (subscription) credential — the basis for "switch to API key" when a plan
+   * limit is hit. Vendor-neutral: each adapter applies the key its own way. */
+  meteredAuth: boolean
   contextWindowTokens: number
 }
 
@@ -43,6 +47,11 @@ export interface SessionContext {
    * turns from the log (for providers that replay). When set, the provider
    * does NOT send an opening prompt — the reply arrives via send(). */
   resume?: { token?: string; turns: ResumeTurn[] }
+  /** A metered API key to authenticate this session with, instead of the
+   * default (subscription) credential — set when switching an agent to the API
+   * after hitting a plan limit. Vendor-neutral; the adapter maps it to its own
+   * auth mechanism. */
+  apiKey?: string
 }
 
 export interface AgentSessionHandle {
