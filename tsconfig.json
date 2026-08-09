@@ -16,9 +16,11 @@
   },
   "include": [
     "src",
+    "e2e",
     "electron.vite.config.ts",
     "vitest.config.ts",
     "vitest.setup.ts",
+    "playwright.config.ts",
     "eslint.config.js"
   ]
 }

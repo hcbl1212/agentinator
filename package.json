@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
+    "test:e2e": "electron-vite build && playwright test",
     "smoke:claude": "CLAUDE_SMOKE=1 vitest run claude.smoke --coverage.enabled=false",
     "smoke:dogfood": "CLAUDE_SMOKE=1 vitest run dogfood.smoke --coverage.enabled=false",
     "replay:demo": "AGENTINATOR_REPLAY=fixtures/demo-session.json electron-vite dev"
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",

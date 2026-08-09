@@ -7,7 +7,7 @@ on:
 
 jobs:
   checks:
-    name: Lint, typecheck, test (100% coverage), build
+    name: Lint, typecheck, test (100% coverage), build, e2e
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: E2E (Playwright drives the built Electron app)
+        run: npx playwright test

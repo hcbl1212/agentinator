@@ -64,23 +64,22 @@ export function registerEventIpc(
   handle('events:search', (_event, query, limit) => store.search(query as string, limit as number))
 }
 
-/** The provider a "Run task" uses. Swapping this (or making it user-selected)
- * is all it takes to point the UI at another vendor — nothing is hardcoded
- * downstream. */
-const TASK_PROVIDER = 'claude'
-
 export function registerAgentIpc(
   manager: SessionManager,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
 ): void {
+  // The provider a "Run task" uses. Swapping this (or making it user-selected)
+  // is all it takes to point the UI at another vendor. The e2e sets
+  // AGENTINATOR_MOCK_TASKS to drive the deterministic mock with no network.
+  const taskProvider = process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'mock' : 'claude'
   handle(
     'agent:current',
     () =>
-      manager.describeProvider(TASK_PROVIDER) ?? {
-        providerId: TASK_PROVIDER,
-        label: TASK_PROVIDER,
+      manager.describeProvider(taskProvider) ?? {
+        providerId: taskProvider,
+        label: taskProvider,
       },
   )
   handle('agent:start-demo', () =>
@@ -93,7 +92,7 @@ export function registerAgentIpc(
   )
   handle('agent:start-task', (_event, prompt, images) =>
     manager.start({
-      providerId: TASK_PROVIDER,
+      providerId: taskProvider,
       title: taskTitle(prompt as string),
       prompt: prompt as string,
       images: images as ImageAttachment[] | undefined,

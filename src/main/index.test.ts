@@ -244,6 +244,19 @@ describe('registerAgentIpc', () => {
     })
   })
 
+  it('drives the mock provider for tasks when AGENTINATOR_MOCK_TASKS is set (e2e mode)', () => {
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    handlers.get('agent:start-task')?.(undefined, 'Add a hello util')
+
+    expect(manager.start).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'mock' }))
+  })
+
   it('routes a follow-up message to the session manager', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()

@@ -52,7 +52,7 @@ function started(sessionId: string, title: string, providerId?: string): StoredE
 }
 
 function modelEvent(sessionId: string, model: string): StoredEvent {
-  return { seq: 1, ts: 't', type: 'session.model', payload: { sessionId, model } } as StoredEvent
+  return { seq: 1, ts: 't', type: 'session.model', payload: { sessionId, model } }
 }
 
 function renderRail(): void {

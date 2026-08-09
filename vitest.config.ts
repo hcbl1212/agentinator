@@ -7,6 +7,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
+    // Unit/integration tests only; the Playwright e2e specs run separately.
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}', 'scripts/**/*.mjs'],
