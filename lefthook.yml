@@ -14,3 +14,17 @@ pre-push:
     # Builds the app, then drives it with Playwright (launches Electron briefly).
     e2e:
       run: npm run test:e2e
+
+# The non-Electron gates, run in parallel — invoked by the CI "checks" job
+# (`lefthook run ci-checks`) so it finishes in test-bound time, not the sum.
+ci-checks:
+  parallel: true
+  commands:
+    lint:
+      run: npm run lint
+    format:
+      run: npm run format:check
+    typecheck:
+      run: npm run typecheck
+    test:
+      run: npm test

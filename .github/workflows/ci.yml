@@ -35,17 +35,10 @@ jobs:
         if: steps.deps.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test with 100% coverage gate
-        run: npm test
+      # lint + format + typecheck + test in parallel — finishes in test-bound
+      # time, not the sum. Same gates as the pre-push hook.
+      - name: Gates (lint, format, typecheck, test — parallel)
+        run: npx lefthook run ci-checks
 
   # The e2e drives the built Electron app, so it needs macOS (the target
   # platform). It carries the build since the two are inseparable here.
