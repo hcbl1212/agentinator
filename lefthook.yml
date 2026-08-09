@@ -1,0 +1,16 @@
+# Run the CI gates locally before a push, so red CI is caught before it ships.
+# The same steps run in .github/workflows/ci.yml. Skip with `git push --no-verify`.
+pre-push:
+  parallel: true
+  commands:
+    lint:
+      run: npm run lint
+    format:
+      run: npm run format:check
+    typecheck:
+      run: npm run typecheck
+    test:
+      run: npm test
+    # Builds the app, then drives it with Playwright (launches Electron briefly).
+    e2e:
+      run: npm run test:e2e

@@ -11,6 +11,7 @@
   "main": "./out/main/entry.js",
   "scripts": {
     "postinstall": "node scripts/ensure-electron.mjs",
+    "prepare": "lefthook install",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
@@ -44,6 +45,7 @@
     "electron-vite": "^5.0.0",
     "eslint": "^10.8.1",
     "jsdom": "^29.1.1",
+    "lefthook": "^2.1.10",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",
