@@ -957,8 +957,8 @@ body {
   display: flex;
   gap: 0.45rem;
   min-width: 0;
-  /* Leave the top-right corner clear for the remove (✕) button. */
-  padding-right: 1.5rem;
+  /* Leave the top-right corner clear for the hover action buttons. */
+  padding-right: 2.6rem;
 }
 
 .rail-agent-vendor {
@@ -998,7 +998,16 @@ body {
 }
 
 /* Reveal the remove button on hover/focus of the row. */
-.rail-agent-remove {
+.rail-agent-actions {
+  display: flex;
+  gap: 0.1rem;
+  opacity: 0;
+  position: absolute;
+  right: 0.3rem;
+  top: 0.3rem;
+}
+
+.rail-agent-action {
   background: transparent;
   border: none;
   border-radius: 4px;
@@ -1007,21 +1016,17 @@ body {
   font: inherit;
   font-size: 0.75rem;
   line-height: 1;
-  opacity: 0;
-  padding: 0.2rem 0.35rem;
-  position: absolute;
-  right: 0.35rem;
-  top: 0.35rem;
+  padding: 0.2rem 0.3rem;
 }
 
-.rail-row:hover .rail-agent-remove,
-.rail-agent-remove:focus-visible {
+.rail-row:hover .rail-agent-actions,
+.rail-agent-actions:focus-within {
   opacity: 1;
 }
 
-.rail-agent-remove:hover,
-.rail-agent-remove:focus-visible {
-  color: var(--err);
+.rail-agent-action:hover,
+.rail-agent-action:focus-visible {
+  color: var(--ink);
   outline: none;
 }
 

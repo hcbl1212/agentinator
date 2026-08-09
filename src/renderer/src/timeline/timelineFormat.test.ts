@@ -76,6 +76,12 @@ describe('describeEvent', () => {
       text: 'session resumed',
       tone: 'accent',
     })
+    expect(describeEvent(stored('session.auth', { sessionId: 's', source: 'none' }))).toMatchObject(
+      { text: 'on subscription', tone: 'soft' },
+    )
+    expect(describeEvent(stored('session.auth', { sessionId: 's', source: 'user' }))).toMatchObject(
+      { text: 'on API key (metered)', tone: 'accent' },
+    )
   })
 
   it('compacts tool inputs: command, path, then truncated JSON', () => {

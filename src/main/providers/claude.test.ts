@@ -320,6 +320,17 @@ describe('createClaudeProvider', () => {
     expect(queryArgs?.options.env).toMatchObject({ ANTHROPIC_API_KEY: 'sk-test-123' })
   })
 
+  it('captures the credential source from the init message once', async () => {
+    const { events } = await runSession([
+      { type: 'system', subtype: 'init', apiKeySource: 'user' },
+      { type: 'system', subtype: 'init', apiKeySource: 'none' }, // ignored (once)
+    ])
+
+    const auth = events.filter((event) => event.type === 'session.auth')
+    expect(auth).toHaveLength(1)
+    expect(auth[0]?.payload).toEqual({ sessionId: 'session_c', source: 'user' })
+  })
+
   it('maps a rate-limit event to a normalized account.limit', async () => {
     const { events } = await runSession([
       {

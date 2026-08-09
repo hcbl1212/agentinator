@@ -48,6 +48,9 @@ export interface EventPayloads {
   /** The model the session is actually running, captured from the provider's
    * stream (the SDK reports it) — shown per agent in the rail. */
   'session.model': { sessionId: string; model: string }
+  /** Which credential the provider authenticated with — surfaced so switching
+   * an agent onto a metered API key is visible. */
+  'session.auth': { sessionId: string; source: string }
   /** A vendor-native token that can reopen this conversation after a restart
    * (e.g. the Claude SDK session id). Persisted so resume survives the app. */
   'session.resumable': { sessionId: string; resumeToken: string }

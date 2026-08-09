@@ -325,6 +325,7 @@ export function createClaudeProvider(
 
       let tokenEmitted = false
       let modelEmitted = false
+      let authEmitted = false
       // Per-session cost accumulator: the SDK reports a running total each turn;
       // this lets the mapper bill only the delta. A resumed session gets a fresh
       // closure (and the SDK restarts its total at 0), so deltas stay correct.
@@ -372,6 +373,17 @@ export function createClaudeProvider(
               ) {
                 modelEmitted = true
                 emit('session.model', { sessionId, model: nested['model'] })
+              }
+              // Capture which credential the SDK authenticated with, once — so a
+              // switch to the API key is visible ('none' = subscription login).
+              if (
+                !authEmitted &&
+                message['type'] === 'system' &&
+                message['subtype'] === 'init' &&
+                typeof message['apiKeySource'] === 'string'
+              ) {
+                authEmitted = true
+                emit('session.auth', { sessionId, source: message['apiKeySource'] })
               }
             }
             if (mapSdkMessage(message, { sessionId, emit, cost })) {

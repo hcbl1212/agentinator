@@ -55,6 +55,15 @@ export function describeEvent(event: StoredEvent): TimelineLine {
     case 'session.resumed': {
       return { marker: '↻', text: 'session resumed', tone: 'accent' }
     }
+    case 'session.auth': {
+      const payload = event.payload as EventPayloads['session.auth']
+      const metered = payload.source !== 'none'
+      return {
+        marker: '⚿',
+        text: metered ? 'on API key (metered)' : 'on subscription',
+        tone: metered ? 'accent' : 'soft',
+      }
+    }
     case 'agent.question': {
       const payload = event.payload as EventPayloads['agent.question']
       const first = payload.questions[0]

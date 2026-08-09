@@ -25,11 +25,14 @@ function stubBridge(): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   dismiss: ReturnType<typeof vi.fn>
+  switchToApiKey: ReturnType<typeof vi.fn>
 } {
   const listeners: ((event: StoredEvent) => void)[] = []
   const dismiss = vi.fn(() => Promise.resolve())
+  const switchToApiKey = vi.fn(() => Promise.resolve())
   return {
     dismiss,
+    switchToApiKey,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
@@ -44,7 +47,7 @@ function stubBridge(): {
           return () => undefined
         }),
       },
-      agent: { dismiss },
+      agent: { dismiss, switchToApiKey },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -251,6 +254,20 @@ describe('AgentRail', () => {
     })
 
     expect(screen.getByText('$0.09')).toBeInTheDocument()
+  })
+
+  it('switches an agent onto the API key from the rail', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files', 'claude'))
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Switch Count files to API key' }))
+
+    expect(stub.switchToApiKey).toHaveBeenCalledWith('session_a')
   })
 
   it('marks a failed agent with an error status and keeps it in the rail', () => {

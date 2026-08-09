@@ -33,6 +33,12 @@ export function AgentRail(): React.JSX.Element {
     }
   }
 
+  // Reconnect this agent onto its provider's stored API key (metered) — the
+  // deliberate, on-demand version of what a plan limit offers.
+  const switchToApiKey = (id: string): void => {
+    void window.agentinator?.agent.switchToApiKey(id)
+  }
+
   return (
     <aside className="pane rail" aria-label="Agents">
       <div className="rail-head">
@@ -69,15 +75,26 @@ export function AgentRail(): React.JSX.Element {
                   </span>
                 )}
               </button>
-              <button
-                type="button"
-                className="rail-agent-remove"
-                aria-label={`Remove ${session.title}`}
-                title="Remove agent"
-                onClick={() => dismiss(session.id)}
-              >
-                ✕
-              </button>
+              <span className="rail-agent-actions">
+                <button
+                  type="button"
+                  className="rail-agent-action"
+                  aria-label={`Switch ${session.title} to API key`}
+                  title="Switch to API key"
+                  onClick={() => switchToApiKey(session.id)}
+                >
+                  ⚿
+                </button>
+                <button
+                  type="button"
+                  className="rail-agent-action"
+                  aria-label={`Remove ${session.title}`}
+                  title="Remove agent"
+                  onClick={() => dismiss(session.id)}
+                >
+                  ✕
+                </button>
+              </span>
             </li>
           ))}
         </ul>
