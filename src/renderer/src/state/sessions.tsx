@@ -13,6 +13,9 @@ export interface SessionInfo {
   providerId?: string
   /** The model it's running (captured from the stream), shown beside the vendor. */
   model?: string
+  /** This agent's own spend so far — per-agent lives here, not the (global)
+   * status bar. */
+  costUsd: number
 }
 
 /**
@@ -36,8 +39,17 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
               title: payload.title,
               status: 'running',
               providerId: payload.providerId,
+              costUsd: 0,
             },
           ]
+    }
+    case 'cost.usage': {
+      const payload = event.payload as EventPayloads['cost.usage']
+      return sessions.map((session) =>
+        session.id === payload.sessionId
+          ? { ...session, costUsd: session.costUsd + payload.usd }
+          : session,
+      )
     }
     case 'user.message': {
       // A new message means the agent is working again.

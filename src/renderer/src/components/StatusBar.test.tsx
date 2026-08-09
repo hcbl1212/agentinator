@@ -91,12 +91,8 @@ describe('StatusBar', () => {
     expect(screen.getByText('budget —')).toBeInTheDocument()
   })
 
-  it('backfills total spend and the session cap on mount', async () => {
-    window.agentinator = stubBridge({
-      count: 3,
-      total: 1.2345,
-      budgets: budgets({ session: 8 }),
-    }).bridge
+  it('backfills total spend and event count on mount', async () => {
+    window.agentinator = stubBridge({ count: 3, total: 1.2345 }).bridge
 
     render(<StatusBar />)
 
@@ -104,20 +100,10 @@ describe('StatusBar', () => {
       expect(screen.getByText('$1.2345')).toBeInTheDocument()
     })
     expect(screen.getByText('log 3 events')).toBeInTheDocument()
-    expect(screen.getByText('session $0.00 / $8.00')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'budgets' })).toBeInTheDocument()
   })
 
-  it('shows session spend without a cap when the session budget is cleared', async () => {
-    window.agentinator = stubBridge({ budgets: budgets({ session: null }) }).bridge
-
-    render(<StatusBar />)
-
-    await waitFor(() => {
-      expect(screen.getByText('session $0.00')).toBeInTheDocument()
-    })
-  })
-
-  it('accumulates spend live into both the total and the current session', async () => {
+  it('accumulates spend and cache health live from cost events (global, not per-session)', async () => {
     const stub = stubBridge({ total: 1 })
     window.agentinator = stub.bridge
 
@@ -132,56 +118,10 @@ describe('StatusBar', () => {
     })
 
     expect(screen.getByText('$1.5000')).toBeInTheDocument()
-    expect(screen.getByText('session $0.50 / $5.00')).toBeInTheDocument()
     expect(screen.getByText('cache 75%')).toBeInTheDocument()
     expect(screen.getByText('log 3 events')).toBeInTheDocument()
-  })
-
-  it('resets the session figure when a new session starts', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<StatusBar />)
-    await waitFor(() => {
-      expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
-    })
-
-    act(() => {
-      stub.emit(cost(2, 2))
-    })
-    expect(screen.getByText('session $2.00 / $5.00')).toBeInTheDocument()
-
-    act(() => {
-      stub.emit(
-        event(3, 'session.started', {
-          sessionId: 's2',
-          agentId: 'a',
-          workspaceId: 'w',
-          title: 'T',
-        }),
-      )
-    })
-    expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
-  })
-
-  it('warms to amber near the cap and red at breach', async () => {
-    const stub = stubBridge({ budgets: budgets({ session: 1 }) })
-    window.agentinator = stub.bridge
-
-    render(<StatusBar />)
-    await waitFor(() => {
-      expect(screen.getByText('session $0.00 / $1.00')).toBeInTheDocument()
-    })
-
-    act(() => {
-      stub.emit(cost(2, 0.85))
-    })
-    expect(screen.getByRole('button', { name: /session/ }).className).toContain('budget-near')
-
-    act(() => {
-      stub.emit(cost(3, 0.2))
-    })
-    expect(screen.getByRole('button', { name: /session/ }).className).toContain('budget-over')
+    // The status bar is global — no per-session dollar chip.
+    expect(screen.queryByText(/session \$/)).not.toBeInTheDocument()
   })
 
   it('opens the budget panel and edits a time-window cap', async () => {
@@ -191,10 +131,10 @@ describe('StatusBar', () => {
 
     render(<StatusBar />)
     await waitFor(() => {
-      expect(screen.getByText('session $0.00 / $5.00')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'budgets' })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /session/ }))
+    await user.click(screen.getByRole('button', { name: 'budgets' }))
     expect(screen.getByRole('dialog', { name: 'Budget settings' })).toBeInTheDocument()
 
     const dayInput = screen.getByRole('spinbutton', { name: 'Day budget in dollars' })

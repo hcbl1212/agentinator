@@ -59,6 +59,9 @@ export function AgentRail(): React.JSX.Element {
                 <span className="rail-agent-head">
                   <span className={`status-dot ${session.status}`} aria-hidden="true" />
                   <span className="rail-agent-title">{session.title}</span>
+                  {session.costUsd > 0 && (
+                    <span className="rail-agent-cost">${session.costUsd.toFixed(2)}</span>
+                  )}
                 </span>
                 {session.providerId !== undefined && (
                   <span className="rail-agent-vendor">

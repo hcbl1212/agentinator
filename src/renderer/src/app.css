@@ -901,9 +901,17 @@ body {
 }
 
 .rail-agent-title {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Per-agent spend, right-aligned on the agent's title row. */
+.rail-agent-cost {
+  color: var(--faint);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .rail-row {

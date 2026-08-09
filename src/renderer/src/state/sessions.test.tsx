@@ -17,8 +17,19 @@ function started(id: string, title: string, providerId?: string): StoredEvent {
 describe('reduceSession', () => {
   it('adds a session on start, keeping its provider, and ignores a duplicate', () => {
     const one = reduceSession([], started('a', 'A', 'claude'))
-    expect(one).toEqual([{ id: 'a', title: 'A', status: 'running', providerId: 'claude' }])
+    expect(one).toEqual([
+      { id: 'a', title: 'A', status: 'running', providerId: 'claude', costUsd: 0 },
+    ])
     expect(reduceSession(one, started('a', 'A', 'claude'))).toEqual(one)
+  })
+
+  it('accumulates per-agent spend on cost.usage, matching only the right id', () => {
+    let list = reduceSession([], started('a', 'A'))
+    list = reduceSession(list, ev('cost.usage', { sessionId: 'a', usd: 0.05 }))
+    list = reduceSession(list, ev('cost.usage', { sessionId: 'a', usd: 0.04 }))
+    expect(list[0]?.costUsd).toBeCloseTo(0.09)
+    // A cost for an unknown session leaves everything untouched.
+    expect(reduceSession(list, ev('cost.usage', { sessionId: 'nope', usd: 1 }))).toEqual(list)
   })
 
   it('flips status on user.message (running) and idle, matching only the right id', () => {
@@ -49,7 +60,7 @@ describe('reduceSession', () => {
     expect(
       reduceSession(list, ev('session.ended', { sessionId: 'a', outcome: 'completed' })),
     ).toEqual([])
-    expect(reduceSession(list, ev('cost.usage', { sessionId: 'a' }))).toEqual(list)
+    expect(reduceSession(list, ev('agent.text', { sessionId: 'a', text: 'hi' }))).toEqual(list)
   })
 })
 

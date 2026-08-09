@@ -18,7 +18,6 @@ export function StatusBar(): React.JSX.Element {
   const [eventCount, setEventCount] = useState<number | null>(null)
   const [tokens, setTokens] = useState({ input: 0, cacheRead: 0 })
   const [totalUsd, setTotalUsd] = useState(0)
-  const [sessionUsd, setSessionUsd] = useState(0)
   const [budgets, setBudgets] = useState<Budgets>(EMPTY_BUDGETS)
   const [usage, setUsage] = useState<AccountUsage | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -44,16 +43,13 @@ export function StatusBar(): React.JSX.Element {
     })
     const unsubscribe = bridge.events.onAppended((event) => {
       setEventCount(event.seq)
-      if (event.type === 'session.started') {
-        setSessionUsd(0)
-      } else if (event.type === 'cost.usage') {
+      if (event.type === 'cost.usage') {
         const payload = event.payload as EventPayloads['cost.usage']
         setTokens((previous) => ({
           input: previous.input + payload.inputTokens,
           cacheRead: previous.cacheRead + payload.cacheReadInputTokens,
         }))
         setTotalUsd((previous) => previous + payload.usd)
-        setSessionUsd((previous) => previous + payload.usd)
       } else if (event.type === 'account.usage') {
         setUsage(event.payload as EventPayloads['account.usage'])
       }
@@ -72,18 +68,6 @@ export function StatusBar(): React.JSX.Element {
     setBudgets((previous) => ({ ...previous, [scope]: usd }))
     void window.agentinator?.settings.setBudget(scope, usd)
   }
-
-  const sessionCap = budgets.session
-  const sessionClass =
-    sessionCap === null || sessionUsd < sessionCap * 0.8
-      ? ''
-      : sessionUsd >= sessionCap
-        ? ' budget-over'
-        : ' budget-near'
-  const sessionLabel =
-    sessionCap === null
-      ? `session $${sessionUsd.toFixed(2)}`
-      : `session $${sessionUsd.toFixed(2)} / $${sessionCap.toFixed(2)}`
 
   // On a subscription the plan windows are the real limit — dollars are only an
   // estimate of what it would have cost on the API.
@@ -110,11 +94,11 @@ export function StatusBar(): React.JSX.Element {
       </span>
       <button
         type="button"
-        className={`budget budget-button${sessionClass}`}
-        title="Time-bound spend ceilings — click to edit"
+        className="budget budget-button"
+        title="Spend ceilings — click to edit"
         onClick={() => setEditing(true)}
       >
-        {loaded ? sessionLabel : 'budget —'}
+        {loaded ? 'budgets' : 'budget —'}
       </button>
       <span className="statusbar-right">v0.1.0</span>
       {editing && loaded && (

@@ -192,11 +192,11 @@ test('a low session budget stops the agent when its cost exceeds the cap', async
   const stream = page.getByRole('region', { name: 'Conversation' })
   try {
     // Set a session cap below the provider's reported cost ($0.10).
-    await page.getByRole('button', { name: /session \$/ }).click()
+    await page.getByRole('button', { name: 'budgets' }).click()
     const cap = page.getByRole('spinbutton', { name: 'Session budget in dollars' })
     await cap.fill('0.05')
     await cap.press('Enter')
-    await expect(page.getByRole('button', { name: /\/ \$0\.05/ })).toBeVisible()
+    await expect(cap).toHaveValue('0.05')
     await page.getByRole('button', { name: 'Close budgets' }).click()
 
     await launchTask(page, 'spend some money')

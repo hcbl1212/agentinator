@@ -53,6 +53,15 @@ function ended(sessionId: string, outcome: 'completed' | 'cancelled' | 'failed')
   return { seq: 1, ts: 't', type: 'session.ended', payload: { sessionId, outcome } }
 }
 
+function costEvent(sessionId: string, usd: number): StoredEvent {
+  return {
+    seq: 1,
+    ts: 't',
+    type: 'cost.usage',
+    payload: { sessionId, inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, usd },
+  }
+}
+
 function started(sessionId: string, title: string, providerId?: string): StoredEvent {
   return {
     seq: 1,
@@ -228,6 +237,20 @@ describe('AgentRail', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it('shows per-agent spend once the agent has run up cost', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+      stub.emit(costEvent('session_a', 0.05))
+      stub.emit(costEvent('session_a', 0.04))
+    })
+
+    expect(screen.getByText('$0.09')).toBeInTheDocument()
   })
 
   it('marks a failed agent with an error status and keeps it in the rail', () => {
