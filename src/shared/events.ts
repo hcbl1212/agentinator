@@ -20,6 +20,13 @@ export interface ImageAttachment {
   data: string
 }
 
+/** One turn of a prior conversation, reconstructed from the log — the
+ * vendor-agnostic material any provider can replay to resume a session. */
+export interface ResumeTurn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
 export interface EventPayloads {
   /** Emitted once per app launch — proves the fabric end-to-end. */
   'app.started': { version: string }
@@ -36,6 +43,11 @@ export interface EventPayloads {
   'agent.thinking': { sessionId: string; summary: string }
   /** A turn finished; the session is alive and awaiting a follow-up message. */
   'session.idle': { sessionId: string }
+  /** A vendor-native token that can reopen this conversation after a restart
+   * (e.g. the Claude SDK session id). Persisted so resume survives the app. */
+  'session.resumable': { sessionId: string; resumeToken: string }
+  /** A dead session was reopened and is live again. */
+  'session.resumed': { sessionId: string }
   /** The agent is asking the user to choose — answered via a follow-up. */
   'agent.question': {
     sessionId: string

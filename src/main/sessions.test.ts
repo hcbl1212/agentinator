@@ -141,6 +141,104 @@ describe('SessionManager', () => {
     await expect(manager.cancel('session_missing')).resolves.toBeUndefined()
   })
 
+  function recordingProvider(id: string): {
+    provider: AgentProvider
+    send: ReturnType<typeof vi.fn>
+    context: () => Parameters<AgentProvider['startSession']>[0] | undefined
+  } {
+    let captured: Parameters<AgentProvider['startSession']>[0] | undefined
+    const send = vi.fn(() => Promise.resolve())
+    return {
+      send,
+      context: () => captured,
+      provider: {
+        ...instantProvider(id),
+        id,
+        startSession(context, emit) {
+          captured = context
+          emit('session.started', {
+            sessionId: context.sessionId,
+            agentId: context.agentId,
+            workspaceId: context.workspaceId,
+            title: context.title,
+          })
+          return { send, cancel: () => Promise.resolve() }
+        },
+      },
+    }
+  }
+
+  function seedConversation(store: EventStore, providerId?: string): void {
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'ag',
+      workspaceId: 'ws',
+      title: 'T',
+      providerId,
+    })
+    store.append('user.message', { sessionId: 's1', text: 'first' })
+    store.append('agent.text', { sessionId: 's1', text: 'answer' })
+  }
+
+  it('reopens a dead session via the provider, replaying its turns and token', async () => {
+    const store = new EventStore()
+    seedConversation(store, 'claude')
+    store.append('session.resumable', { sessionId: 's1', resumeToken: 'sdk-123' })
+    store.append('session.idle', { sessionId: 's1' })
+
+    const rec = recordingProvider('claude')
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+    manager.register(rec.provider)
+
+    // No live handle for s1 (fresh process) → send reopens it.
+    await manager.send('s1', 'continue please')
+
+    expect(rec.context()?.resume).toEqual({
+      token: 'sdk-123',
+      turns: [
+        { role: 'user', text: 'first' },
+        { role: 'assistant', text: 'answer' },
+      ],
+    })
+    expect(rec.send).toHaveBeenCalledWith('continue please', undefined)
+    expect(events.some((event) => event.type === 'session.resumed')).toBe(true)
+    expect(events.filter((event) => event.type === 'user.message').at(-1)?.payload).toMatchObject({
+      sessionId: 's1',
+      text: 'continue please',
+    })
+    expect(manager.activeCount()).toBe(1)
+  })
+
+  it('does not resume a session with no provider id or an unregistered provider', async () => {
+    const noProvider = new EventStore()
+    seedConversation(noProvider)
+    const eventsA: StoredEvent[] = []
+    const managerA = new SessionManager(noProvider, (event) => eventsA.push(event))
+    await managerA.send('s1', 'hi')
+    expect(eventsA.some((event) => event.type === 'user.message')).toBe(false)
+
+    const goneProvider = new EventStore()
+    seedConversation(goneProvider, 'gone')
+    const eventsB: StoredEvent[] = []
+    const managerB = new SessionManager(goneProvider, (event) => eventsB.push(event))
+    await managerB.send('s1', 'hi')
+    expect(eventsB.some((event) => event.type === 'user.message')).toBe(false)
+  })
+
+  it('gives up if the provider ends the session instantly on resume', async () => {
+    const store = new EventStore()
+    seedConversation(store, 'boom')
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+    manager.register(failsInstantlyProvider('boom'))
+
+    await manager.send('s1', 'hi')
+
+    expect(manager.activeCount()).toBe(0)
+    expect(events.some((event) => event.type === 'user.message')).toBe(false)
+  })
+
   it('forwards a follow-up message to the session handle and logs a user.message', async () => {
     const send = vi.fn(() => Promise.resolve())
     const provider: AgentProvider = {

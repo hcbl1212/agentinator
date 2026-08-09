@@ -404,6 +404,49 @@ describe('createClaudeProvider', () => {
     await handle.cancel()
   })
 
+  it('captures the SDK session id once as a resume token', async () => {
+    const { events } = await runSession([
+      { type: 'system', subtype: 'init', session_id: 'sdk-xyz' },
+      { type: 'system', subtype: 'noise', session_id: 'sdk-xyz' },
+      successResult,
+    ])
+
+    const resumable = events.filter((event) => event.type === 'session.resumable')
+    expect(resumable).toHaveLength(1)
+    expect(resumable[0]?.payload).toEqual({ sessionId: 'session_c', resumeToken: 'sdk-xyz' })
+  })
+
+  it('resumes with a token and skips the opening prompt, sending the reply instead', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const seen: unknown[] = []
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      const prompt = args.prompt as AsyncIterable<SdkUserMessage>
+      return (async function* () {
+        for await (const message of prompt) {
+          seen.push(message.message.content)
+          yield { ...successResult }
+        }
+      })() as ReturnType<ClaudeQuery>
+    }
+    const provider = createClaudeProvider(query)
+
+    const handle = provider.startSession(
+      { ...context, resume: { token: 'sdk-abc', turns: [{ role: 'user', text: 'hi' }] } },
+      () => undefined,
+    )
+    await handle.send('the reply')
+    await vi.waitFor(() => {
+      expect(seen).toContain('the reply')
+    })
+
+    expect(queryArgs?.options.resume).toBe('sdk-abc')
+    // The opening task prompt was skipped — the first input is the reply.
+    expect(seen[0]).toBe('the reply')
+
+    await handle.cancel()
+  })
+
   it('ends failed when the stream errors', async () => {
     const query: ClaudeQuery = () =>
       (async function* () {

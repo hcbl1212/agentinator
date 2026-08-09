@@ -1,10 +1,10 @@
 import { BUDGET_SCOPES } from '../shared/budget'
 import type { Budgets, BudgetScope } from '../shared/budget'
 import { createEntityId } from '../shared/events'
-import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
+import type { EventPayloads, ImageAttachment, ResumeTurn, StoredEvent } from '../shared/events'
 import { periodStartIso } from './budgetPeriods'
 import type { EventStore } from './eventStore'
-import type { AgentProvider, AgentSessionHandle } from './providers/types'
+import type { AgentProvider, AgentSessionHandle, EmitEvent } from './providers/types'
 
 export interface StartSession {
   providerId: string
@@ -160,37 +160,7 @@ export class SessionManager {
         model: options.model,
         images: options.images,
       },
-      (type, payload) => {
-        // Stamp the provider onto session.started so the UI can show which
-        // vendor/model each agent runs — the provider stays vendor-blind.
-        const stored =
-          type === 'session.started'
-            ? this.#store.append('session.started', {
-                ...(payload as EventPayloads['session.started']),
-                providerId: options.providerId,
-              })
-            : this.#store.append(type, payload)
-        if (type === 'session.ended') {
-          // May fire before startSession returns (instant failures) — record
-          // it so the handle registered below is cleaned up either way.
-          if (!this.#handles.delete(sessionId)) {
-            this.#endedEarly.add(sessionId)
-          }
-          this.#sessionSpentUsd.delete(sessionId)
-        }
-        this.#emit(stored)
-
-        if (type === 'cost.usage') {
-          const spent =
-            (this.#sessionSpentUsd.get(sessionId) ?? 0) + (payload as { usd: number }).usd
-          this.#sessionSpentUsd.set(sessionId, spent)
-          const over = this.#scopeOverBudget(spent, this.#getBudgets())
-          if (over !== null) {
-            this.#emit(this.#store.append('budget.exceeded', { sessionId, ...over }))
-            void this.cancel(sessionId)
-          }
-        }
-      },
+      this.#sessionEmitter(sessionId, options.providerId),
     )
 
     if (this.#endedEarly.delete(sessionId)) {
@@ -211,9 +181,94 @@ export class SessionManager {
     return sessionId
   }
 
-  /** Send a follow-up message (with any attached images) into a session. */
+  /** The provider-event callback for a session: appends each event (stamping
+   * the provider on session.started), forwards it, cleans up on end, and
+   * enforces the session/window budget on cost. Shared by start and resume. */
+  #sessionEmitter(sessionId: string, providerId: string): EmitEvent {
+    return (type, payload) => {
+      const stored =
+        type === 'session.started'
+          ? this.#store.append('session.started', {
+              ...(payload as EventPayloads['session.started']),
+              providerId,
+            })
+          : this.#store.append(type, payload)
+      if (type === 'session.ended') {
+        // May fire before startSession returns (instant failures) — record it
+        // so the handle registered by the caller is cleaned up either way.
+        if (!this.#handles.delete(sessionId)) {
+          this.#endedEarly.add(sessionId)
+        }
+        this.#sessionSpentUsd.delete(sessionId)
+      }
+      this.#emit(stored)
+
+      if (type === 'cost.usage') {
+        const spent = (this.#sessionSpentUsd.get(sessionId) ?? 0) + (payload as { usd: number }).usd
+        this.#sessionSpentUsd.set(sessionId, spent)
+        const over = this.#scopeOverBudget(spent, this.#getBudgets())
+        if (over !== null) {
+          this.#emit(this.#store.append('budget.exceeded', { sessionId, ...over }))
+          void this.cancel(sessionId)
+        }
+      }
+    }
+  }
+
+  /**
+   * Reopen a session with no live handle (the app restarted, or it was
+   * orphaned). Rebuilds the provider session from the log: the provider gets a
+   * vendor-native resume token when one was captured and the conversation turns
+   * for vendors that replay. Returns the new handle, or undefined when the
+   * session can't be resumed (unknown session or provider no longer registered).
+   */
+  #resume(sessionId: string): AgentSessionHandle | undefined {
+    const events = this.#store.listBySession(sessionId)
+    const started = events.find((event) => event.type === 'session.started')?.payload as
+      EventPayloads['session.started'] | undefined
+    const providerId = started?.providerId
+    if (started === undefined || providerId === undefined) {
+      return undefined
+    }
+    const provider = this.#providers.get(providerId)
+    if (provider === undefined) {
+      return undefined
+    }
+    const resumable = [...events].reverse().find((event) => event.type === 'session.resumable')
+      ?.payload as EventPayloads['session.resumable'] | undefined
+    const turns: ResumeTurn[] = events.flatMap((event): ResumeTurn[] => {
+      if (event.type === 'user.message') {
+        return [{ role: 'user', text: (event.payload as EventPayloads['user.message']).text }]
+      }
+      if (event.type === 'agent.text') {
+        return [{ role: 'assistant', text: (event.payload as EventPayloads['agent.text']).text }]
+      }
+      return []
+    })
+    const handle = provider.startSession(
+      {
+        sessionId,
+        workspaceId: started.workspaceId,
+        agentId: started.agentId,
+        title: started.title,
+        prompt: '',
+        cwd: process.cwd(),
+        resume: { token: resumable?.resumeToken, turns },
+      },
+      this.#sessionEmitter(sessionId, providerId),
+    )
+    if (this.#endedEarly.delete(sessionId)) {
+      return undefined
+    }
+    this.#handles.set(sessionId, handle)
+    this.#emit(this.#store.append('session.resumed', { sessionId }))
+    return handle
+  }
+
+  /** Send a follow-up message (with any attached images) into a session,
+   * reopening it first if its live handle is gone (e.g. after a restart). */
   async send(sessionId: string, text: string, images?: ImageAttachment[]): Promise<void> {
-    const handle = this.#handles.get(sessionId)
+    const handle = this.#handles.get(sessionId) ?? this.#resume(sessionId)
     if (handle !== undefined) {
       const imageCount = images?.length ?? 0
       // Record that images were sent (a count, not the bytes); the model gets

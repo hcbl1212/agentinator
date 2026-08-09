@@ -47,6 +47,8 @@ export interface ClaudeQueryArgs {
     model?: string
     systemPrompt: string
     canUseTool?: CanUseTool
+    /** SDK session id to resume — reloads the prior conversation. */
+    resume?: string
   }
 }
 
@@ -236,7 +238,11 @@ export function createClaudeProvider(
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {
       const { sessionId } = context
       const input = createInputStream()
-      input.push(userMessage(context.prompt, context.images))
+      // On resume the SDK reloads the conversation; the reply arrives via
+      // send(). Fresh sessions open with the task prompt.
+      if (context.resume === undefined) {
+        input.push(userMessage(context.prompt, context.images))
+      }
 
       const canUseTool: CanUseTool = async (toolName, toolInput) => {
         // The agent's own questions are not permission requests — surface them
@@ -270,6 +276,7 @@ export function createClaudeProvider(
           // sections and per-run context joins volatile once they exist.
           systemPrompt: assembleSystemPrompt({ stable: [SYSTEM_BASE], volatile: [] }),
           canUseTool,
+          resume: context.resume?.token,
         },
       })
 
@@ -288,12 +295,19 @@ export function createClaudeProvider(
         }
       }
 
+      let tokenEmitted = false
       const run = async (): Promise<void> => {
         try {
           for await (const message of stream) {
             // A cancel already closed the session — stop mapping late messages.
             if (ended) {
               break
+            }
+            // Capture the SDK session id once — it resumes this conversation
+            // after a restart.
+            if (!tokenEmitted && isRecord(message) && typeof message['session_id'] === 'string') {
+              tokenEmitted = true
+              emit('session.resumable', { sessionId, resumeToken: message['session_id'] })
             }
             mapSdkMessage(message, { sessionId, emit })
           }

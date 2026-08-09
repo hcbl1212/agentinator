@@ -76,6 +76,14 @@ describe('describeEvent', () => {
     expect(
       describeEvent(stored('user.message', { sessionId: 's', text: 'these', imageCount: 2 })),
     ).toMatchObject({ text: 'these [+2 images]' })
+    expect(describeEvent(stored('session.resumed', { sessionId: 's' }))).toMatchObject({
+      marker: '↻',
+      text: 'session resumed',
+      tone: 'accent',
+    })
+    expect(
+      describeEvent(stored('session.resumable', { sessionId: 's', resumeToken: 't' })),
+    ).toMatchObject({ text: 'session saved', tone: 'faint' })
   })
 
   it('compacts tool inputs: command, path, then truncated JSON', () => {

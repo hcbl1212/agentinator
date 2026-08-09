@@ -55,6 +55,13 @@ export function describeEvent(event: StoredEvent): TimelineLine {
     case 'session.idle': {
       return { marker: '⏸', text: 'awaiting your reply', tone: 'warn' }
     }
+    case 'session.resumed': {
+      return { marker: '↻', text: 'session resumed', tone: 'accent' }
+    }
+    case 'session.resumable': {
+      // Internal checkpoint (a resume token was captured) — keep it quiet.
+      return { marker: '·', text: 'session saved', tone: 'faint' }
+    }
     case 'agent.question': {
       const payload = event.payload as EventPayloads['agent.question']
       const first = payload.questions[0]

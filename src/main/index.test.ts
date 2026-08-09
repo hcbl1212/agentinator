@@ -409,18 +409,15 @@ describe('bootstrap', () => {
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
 
-  it('closes sessions left open by a previous run so they are not zombies', async () => {
-    const store = fakeStore(['session_zombie'])
+  it('marks sessions left open by a previous run idle so they are resumable', async () => {
+    const store = fakeStore(['session_open'])
     const createStore = vi.fn(() => store)
 
     await bootstrap(mockApp as never, createStore, undefined, undefined, undefined, () =>
       fakeSettings(),
     )
 
-    expect(store.append).toHaveBeenCalledWith('session.ended', {
-      sessionId: 'session_zombie',
-      outcome: 'failed',
-    })
+    expect(store.append).toHaveBeenCalledWith('session.idle', { sessionId: 'session_open' })
   })
 
   it('defaults to the real electron app and file-backed stores', async () => {

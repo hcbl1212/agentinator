@@ -1,4 +1,4 @@
-import type { EventPayloads, EventType, ImageAttachment } from '../../shared/events'
+import type { EventPayloads, EventType, ImageAttachment, ResumeTurn } from '../../shared/events'
 
 /**
  * The vendor abstraction. Adapters implement AgentProvider and emit ONLY
@@ -38,6 +38,11 @@ export interface SessionContext {
   model?: string
   /** Images attached to the opening message (pasted screenshots). */
   images?: ImageAttachment[]
+  /** Present when reopening a prior session: a vendor-native token (used by
+   * providers that support native resume, e.g. Claude) and the conversation
+   * turns from the log (for providers that replay). When set, the provider
+   * does NOT send an opening prompt — the reply arrives via send(). */
+  resume?: { token?: string; turns: ResumeTurn[] }
 }
 
 export interface AgentSessionHandle {

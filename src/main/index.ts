@@ -175,11 +175,11 @@ export async function bootstrap(
   const store = createStore(inMemory ? ':memory:' : join(userData, 'agentinator.db'))
   const settings = createSettings(inMemory ? ':memory:' : join(userData, 'agentinator-settings.db'))
   store.append('app.started', { version: electronApp.getVersion() })
-  // A session can't survive a restart (handles live in memory), so close any
-  // that were left open — otherwise they'd seed as zombie "running" agents you
-  // can't actually talk to.
+  // Handles don't survive a restart, so sessions left open have no live agent.
+  // Mark them idle (not running) — the rail shows them as awaiting your reply,
+  // and replying reopens them via the provider's resume.
   for (const sessionId of store.openSessionIds()) {
-    store.append('session.ended', { sessionId, outcome: 'failed' })
+    store.append('session.idle', { sessionId })
   }
   registerEventIpc(store)
   registerSettingsIpc(settings)
