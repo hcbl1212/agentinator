@@ -207,6 +207,39 @@ describe('StatusBar', () => {
     expect(screen.queryByRole('dialog', { name: 'Budget settings' })).not.toBeInTheDocument()
   })
 
+  it('shows the plan gauge (incl. per-model windows) and marks spend as an estimate', async () => {
+    const stub = stubBridge({ total: 2.3 })
+    window.agentinator = stub.bridge
+
+    render(<StatusBar />)
+    await waitFor(() => {
+      expect(screen.getByText('$2.3000')).toBeInTheDocument()
+    })
+
+    act(() => {
+      stub.emit(
+        event(10, 'account.usage', {
+          sessionId: 's',
+          mode: 'subscription',
+          plan: null, // an unnamed plan still renders
+          windows: [
+            { key: 'five_hour', label: 'Session · 5h', utilization: 11, resetsAt: null },
+            { key: 'seven_day', label: 'Weekly', utilization: 13, resetsAt: null },
+            // A per-model window has no short alias — its key shows through.
+            { key: 'weekly_opus', label: 'Weekly · Opus', utilization: 20, resetsAt: null },
+          ],
+          overage: null,
+          sessionCostUsd: 0.5,
+        }),
+      )
+    })
+
+    expect(screen.getByLabelText('Plan usage')).toHaveTextContent(
+      '5h 11% · 7d 13% · weekly_opus 20%',
+    )
+    expect(screen.getByText('est. $2.3000')).toBeInTheDocument()
+  })
+
   it('unsubscribes on unmount and ignores a late load', async () => {
     let resolve: (values: [number, number, Budgets]) => void = () => undefined
     const stub = stubBridge()

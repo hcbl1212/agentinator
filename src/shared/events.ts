@@ -5,6 +5,8 @@
  * mutate or repurpose existing ones (old logs must replay forever).
  */
 
+import type { AccountUsage } from './usage'
+
 export const ENTITY_KINDS = ['workspace', 'repo', 'session', 'agent', 'task', 'approval'] as const
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
@@ -77,6 +79,9 @@ export interface EventPayloads {
     cacheReadInputTokens: number
     usd: number
   }
+  /** The account's billing posture (plan/limits/overage), sampled from the
+   * provider — drives the status bar, not the per-session conversation. */
+  'account.usage': { sessionId: string } & AccountUsage
   /** A tool use is waiting on permission — the audit trail starts here. */
   'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }
   'approval.resolved': {

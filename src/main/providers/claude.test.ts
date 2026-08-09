@@ -302,6 +302,37 @@ describe('createClaudeProvider', () => {
     expect(idle?.payload).toEqual({ sessionId: 'session_c' })
   })
 
+  it('samples account usage after a turn and emits it normalized', async () => {
+    const rawUsage = {
+      subscription_type: 'max',
+      rate_limits_available: true,
+      rate_limits: { five_hour: { utilization: 11, resets_at: '2026-08-09T15:30:00Z' } },
+      session: { total_cost_usd: 0.5 },
+    }
+    const query: ClaudeQuery = () => {
+      const stream = streamOf([successResult])
+      ;(
+        stream as unknown as {
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => Promise<unknown>
+        }
+      ).usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET = () => Promise.resolve(rawUsage)
+      return stream
+    }
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+
+    await vi.waitFor(() => {
+      expect(events.some((event) => event.type === 'account.usage')).toBe(true)
+    })
+    const usage = events.find((event) => event.type === 'account.usage')
+    expect(usage?.payload).toMatchObject({
+      sessionId: 'session_c',
+      mode: 'subscription',
+      plan: 'max',
+    })
+  })
+
   it('bills only the per-turn delta of the SDK’s running cost total', async () => {
     const { events } = await runSession([
       { type: 'result', total_cost_usd: 0.12, usage: { input_tokens: 100, output_tokens: 40 } },

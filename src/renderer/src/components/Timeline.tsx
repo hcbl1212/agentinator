@@ -5,7 +5,12 @@ import { describeEvent, matchesQuery, mergeBySeq } from '../timeline/timelineFor
 
 /** Internal state the log records but the conversation view doesn't show: idle
  * turns and the model colour the rail; the resume token is pure plumbing. */
-const INTERNAL_TYPES = new Set(['session.idle', 'session.resumable', 'session.model'])
+const INTERNAL_TYPES = new Set([
+  'session.idle',
+  'session.resumable',
+  'session.model',
+  'account.usage',
+])
 
 /**
  * Renders a bounded window over the append-only log: the newest `pageSize`

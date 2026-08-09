@@ -1,5 +1,6 @@
 import { createEntityId } from '../../shared/events'
 import type { ImageAttachment } from '../../shared/events'
+import { normalizeUsage } from '../../shared/usage'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
   AgentProvider,
@@ -315,6 +316,25 @@ export function createClaudeProvider(
       // this lets the mapper bill only the delta. A resumed session gets a fresh
       // closure (and the SDK restarts its total at 0), so deltas stay correct.
       const cost = { lastTotalUsd: 0 }
+      // Sample the account's billing posture (plan / limits / overage) after a
+      // turn, normalized behind our own type. The method is EXPERIMENTAL and
+      // absent from mocked streams, so it's fully guarded — a usage hiccup must
+      // never disturb the session.
+      const reportUsage = async (): Promise<void> => {
+        const control = stream as unknown as {
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>
+        }
+        const fetchUsage = control.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+        if (typeof fetchUsage !== 'function') {
+          return
+        }
+        try {
+          const raw = await fetchUsage.call(control)
+          emit('account.usage', { sessionId, ...normalizeUsage(raw) })
+        } catch {
+          // Experimental usage API — ignore any failure.
+        }
+      }
       const run = async (): Promise<void> => {
         try {
           for await (const message of stream) {
@@ -341,7 +361,9 @@ export function createClaudeProvider(
                 emit('session.model', { sessionId, model: nested['model'] })
               }
             }
-            mapSdkMessage(message, { sessionId, emit, cost })
+            if (mapSdkMessage(message, { sessionId, emit, cost })) {
+              void reportUsage()
+            }
           }
         } catch {
           endOnce('failed')

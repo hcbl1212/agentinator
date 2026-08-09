@@ -544,6 +544,11 @@ body {
   font-size: 0.85rem;
 }
 
+/* Subscription plan rate-limit gauge in the status bar. */
+.plan-gauge {
+  color: var(--soft);
+}
+
 .status-dot {
   border-radius: 50%;
   height: 0.55rem;

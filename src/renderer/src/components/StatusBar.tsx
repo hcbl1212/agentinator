@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react'
 import { EMPTY_BUDGETS } from '../../../shared/budget'
 import type { Budgets, BudgetScope } from '../../../shared/budget'
 import type { EventPayloads } from '../../../shared/events'
+import type { AccountUsage } from '../../../shared/usage'
 import { BudgetPanel } from './BudgetPanel'
+
+const SHORT_WINDOW: Record<string, string> = { five_hour: '5h', seven_day: '7d' }
 
 /**
  * Live status bar. Total spend is backfilled from the whole log on mount then
@@ -17,6 +20,7 @@ export function StatusBar(): React.JSX.Element {
   const [totalUsd, setTotalUsd] = useState(0)
   const [sessionUsd, setSessionUsd] = useState(0)
   const [budgets, setBudgets] = useState<Budgets>(EMPTY_BUDGETS)
+  const [usage, setUsage] = useState<AccountUsage | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
 
@@ -50,6 +54,8 @@ export function StatusBar(): React.JSX.Element {
         }))
         setTotalUsd((previous) => previous + payload.usd)
         setSessionUsd((previous) => previous + payload.usd)
+      } else if (event.type === 'account.usage') {
+        setUsage(event.payload as EventPayloads['account.usage'])
       }
     })
     return () => {
@@ -79,9 +85,25 @@ export function StatusBar(): React.JSX.Element {
       ? `session $${sessionUsd.toFixed(2)}`
       : `session $${sessionUsd.toFixed(2)} / $${sessionCap.toFixed(2)}`
 
+  // On a subscription the plan windows are the real limit — dollars are only an
+  // estimate of what it would have cost on the API.
+  const onSubscription = usage?.mode === 'subscription'
+  const planGauge =
+    onSubscription && usage.windows.length > 0
+      ? usage.windows.map((w) => `${SHORT_WINDOW[w.key] ?? w.key} ${Math.round(w.utilization)}%`)
+      : null
+  const spendTitle = onSubscription
+    ? `Estimated cost — you're on the ${usage.plan ?? 'subscription'} plan, not billed per token`
+    : 'Lifetime spend across the whole log'
+
   return (
     <footer className="statusbar" aria-label="Status bar">
-      <span title="Lifetime spend across the whole log">${totalUsd.toFixed(4)}</span>
+      <span title={spendTitle}>{`${onSubscription ? 'est. ' : ''}$${totalUsd.toFixed(4)}`}</span>
+      {planGauge !== null && (
+        <span className="plan-gauge" aria-label="Plan usage" title="Plan rate-limit windows used">
+          {planGauge.join(' · ')}
+        </span>
+      )}
       <span>{eventCount === null ? 'log —' : `log ${eventCount} events`}</span>
       <span title="Share of input tokens served from the prompt cache this session">
         {cacheHealth}
