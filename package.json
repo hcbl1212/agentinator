@@ -15,7 +15,7 @@
     "prepare": "lefthook install",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package": "electron-vite build && electron-builder --mac",
+    "package": "electron-vite build && electron-builder --mac --publish never",
     "package:dir": "electron-vite build && electron-builder --mac --dir",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
