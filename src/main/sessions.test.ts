@@ -74,10 +74,11 @@ describe('SessionManager', () => {
 
     const sessionId = manager.start({ providerId: 'a', title: 'T', prompt: 'P', cwd: '/tmp' })
 
-    expect(store.count()).toBe(1)
+    expect(store.count()).toBe(2)
     expect(store.list()[0]?.type).toBe('session.started')
     expect(store.list()[0]?.payload).toMatchObject({ sessionId, title: 'T' })
-    expect(forwarded.map((event) => event.type)).toEqual(['session.started'])
+    // The opening prompt is logged right after the session starts.
+    expect(forwarded.map((event) => event.type)).toEqual(['session.started', 'user.message'])
   })
 
   it('generates workspace and agent ids when not supplied, and honors them when given', () => {
@@ -95,7 +96,7 @@ describe('SessionManager', () => {
       agentId: 'agent_fixed',
     })
 
-    const [generated, fixed] = store.list()
+    const [generated, fixed] = store.list().filter((event) => event.type === 'session.started')
     expect(generated?.payload).toMatchObject({
       workspaceId: expect.stringMatching(/^workspace_/) as unknown,
       agentId: expect.stringMatching(/^agent_/) as unknown,
@@ -164,8 +165,31 @@ describe('SessionManager', () => {
     await manager.send(sessionId, 'keep going')
 
     expect(send).toHaveBeenCalledWith('keep going', undefined)
+    // The opening prompt is logged first, then the reply.
+    const messages = events.filter((event) => event.type === 'user.message')
+    expect(messages.map((event) => (event.payload as { text: string }).text)).toEqual([
+      'P',
+      'keep going',
+    ])
+    expect(messages.at(-1)?.payload).toEqual({ sessionId, text: 'keep going' })
+  })
+
+  it('logs the opening prompt with its attached image count', () => {
+    const store = new EventStore()
+    const events: StoredEvent[] = []
+    const manager = new SessionManager(store, (event) => events.push(event))
+    manager.register(instantProvider('a'))
+
+    const sessionId = manager.start({
+      providerId: 'a',
+      title: 'T',
+      prompt: 'do X',
+      cwd: '/tmp',
+      images: [{ mediaType: 'image/png', data: 'AAA' }],
+    })
+
     const message = events.find((event) => event.type === 'user.message')
-    expect(message?.payload).toEqual({ sessionId, text: 'keep going' })
+    expect(message?.payload).toEqual({ sessionId, text: 'do X', imageCount: 1 })
   })
 
   it('forwards attached images and records their count on the message', async () => {
@@ -193,7 +217,8 @@ describe('SessionManager', () => {
     await manager.send(sessionId, 'look at this', shots)
 
     expect(send).toHaveBeenCalledWith('look at this', shots)
-    const message = events.find((event) => event.type === 'user.message')
+    // The opening prompt logs first (no images), then the image-bearing reply.
+    const message = events.filter((event) => event.type === 'user.message').at(-1)
     expect(message?.payload).toEqual({ sessionId, text: 'look at this', imageCount: 1 })
   })
 
@@ -386,6 +411,7 @@ describe('SessionManager', () => {
       expect(types.at(-1)).toBe('session.ended')
     })
 
-    expect(store.count()).toBe(10)
+    // 10 provider events + the opening prompt logged as a user message.
+    expect(store.count()).toBe(11)
   })
 })

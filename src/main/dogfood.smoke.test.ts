@@ -50,6 +50,7 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('dogfood (live)', () 
 
     console.log('event stream:', types.join(' → '))
 
+    expect(types).toContain('user.message')
     expect(types).toContain('cost.usage')
     expect(types).toContain('session.idle')
     expect(types).toContain('session.ended')

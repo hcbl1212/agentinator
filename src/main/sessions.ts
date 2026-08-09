@@ -187,6 +187,17 @@ export class SessionManager {
     if (this.#endedEarly.delete(sessionId)) {
       return sessionId
     }
+    // Log the opening prompt as a user message so the timeline shows what you
+    // typed, not just the session title.
+    const imageCount = options.images?.length ?? 0
+    this.#emit(
+      this.#store.append(
+        'user.message',
+        imageCount > 0
+          ? { sessionId, text: options.prompt, imageCount }
+          : { sessionId, text: options.prompt },
+      ),
+    )
     this.#handles.set(sessionId, handle)
     return sessionId
   }
