@@ -173,18 +173,12 @@ describe('ComposerDock', () => {
     expect(stub.startTask).not.toHaveBeenCalled()
   })
 
-  it('replies to the selected agent and shows its status', async () => {
+  it('replies to the selected agent', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
     renderDock()
     await activate(stub)
-
-    expect(screen.getByText(/Working…/)).toBeInTheDocument()
-    act(() => {
-      stub.emit(event('session.idle', { sessionId: 'session_task' }))
-    })
-    expect(screen.getByText(/Awaiting your reply/)).toBeInTheDocument()
 
     await userEvent.type(
       screen.getByRole('textbox', { name: 'Reply to the agent' }),

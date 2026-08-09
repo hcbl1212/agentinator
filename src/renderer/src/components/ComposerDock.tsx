@@ -194,15 +194,6 @@ export function ComposerDock(): React.JSX.Element {
       onDrop={onDrop}
       onDragOver={(dragEvent) => dragEvent.preventDefault()}
     >
-      {selected !== undefined && (
-        <div className="session-status" aria-label="Active session">
-          <span className={`status-dot ${selected.status}`} aria-hidden="true" />
-          <span className="session-status-label">
-            {selected.status === 'idle' ? 'Awaiting your reply' : 'Working…'} · {selected.title}
-          </span>
-        </div>
-      )}
-
       {bridge === undefined ? (
         <p className="empty-state">Open a workspace to talk to an agent.</p>
       ) : (
