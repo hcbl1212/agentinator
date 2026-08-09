@@ -218,6 +218,32 @@ test('the Preview tab captures a real screenshot of the sample app', async () =>
   }
 })
 
+test('pointing at a spot on the preview sends it to the agent', async () => {
+  const { app, page } = await launchApp()
+  const stream = page.getByRole('region', { name: 'Conversation' })
+  try {
+    await launchTask(page, 'watch the app')
+    await page.getByRole('tab', { name: 'Preview' }).click()
+    const preview = page.getByRole('region', { name: 'App preview' })
+    await preview.getByRole('button', { name: 'Capture' }).click()
+    await expect(preview.getByRole('img', { name: /screenshot of the target app/i })).toBeVisible()
+
+    // Click a spot on the screenshot, annotate it, and send it to the agent.
+    await preview
+      .getByRole('button', { name: /Point at the app/i })
+      .click({ position: { x: 30, y: 20 } })
+    await preview.getByRole('textbox', { name: 'Note about the marked spot' }).fill('align this')
+    await preview.getByRole('button', { name: 'Send to agent' }).click()
+
+    // The annotation reaches the agent as a message with the screenshot attached
+    // (anchored so it doesn't also match the provider's echo of it).
+    await expect(stream.getByText(/^Pointing at the app preview.*align this/)).toBeVisible()
+    await expect(stream.getByText(/\[\+1 image\]/)).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
 test('a low session budget stops the agent when its cost exceeds the cap', async () => {
   const { app, page } = await launchApp()
   const stream = page.getByRole('region', { name: 'Conversation' })

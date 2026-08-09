@@ -27,6 +27,7 @@ interface Stub {
   search: ReturnType<typeof vi.fn>
   image: ReturnType<typeof vi.fn>
   capture: ReturnType<typeof vi.fn>
+  agentSend: ReturnType<typeof vi.fn>
 }
 
 function stub(options: { captures?: StoredEvent[]; image?: string | null } = {}): Stub {
@@ -36,6 +37,7 @@ function stub(options: { captures?: StoredEvent[]; image?: string | null } = {})
   const search = vi.fn(() => Promise.resolve(captures))
   const imageFn = vi.fn(() => Promise.resolve(image))
   const capture = vi.fn(() => Promise.resolve('shot_new'))
+  const agentSend = vi.fn(() => Promise.resolve())
   const bridge = {
     events: {
       search,
@@ -45,6 +47,7 @@ function stub(options: { captures?: StoredEvent[]; image?: string | null } = {})
       }),
     },
     preview: { capture, image: imageFn },
+    agent: { send: agentSend },
   } as unknown as AgentinatorBridge
   return {
     bridge,
@@ -53,7 +56,19 @@ function stub(options: { captures?: StoredEvent[]; image?: string | null } = {})
     search,
     image: imageFn,
     capture,
+    agentSend,
   }
+}
+
+/** Render, wait for the screenshot, then click it at a known spot (with a
+ * stubbed geometry so jsdom's zero-size layout doesn't break the math). */
+async function renderAndMark(stubbed: Stub): Promise<HTMLElement> {
+  window.agentinator = stubbed.bridge
+  render(<Preview sessionId="s" />)
+  const frame = await screen.findByRole('button', { name: /Point at the app/i })
+  frame.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect
+  fireEvent.click(frame, { clientX: 100, clientY: 50 })
+  return frame
 }
 
 afterEach(() => {
@@ -134,6 +149,63 @@ describe('Preview', () => {
 
     await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument())
     expect(screen.queryByRole('region', { name: 'App console' })).not.toBeInTheDocument()
+  })
+
+  it('points at a spot and sends it, with a note and the screenshot, to the agent', async () => {
+    const stubbed = stub({ captures: [captureEvent('s', 1, 'shot_s')] })
+    const frame = await renderAndMark(stubbed)
+
+    const marker = frame.querySelector<HTMLElement>('.preview-mark')
+    expect(marker).not.toBeNull()
+    expect(marker?.style.left).toBe('50%')
+    expect(marker?.style.top).toBe('50%')
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note about the marked spot' }), {
+      target: { value: 'this button is misaligned' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to agent' }))
+
+    expect(stubbed.agentSend).toHaveBeenCalledWith(
+      's',
+      'Pointing at the app preview at 50% across, 50% down: this button is misaligned.',
+      [{ mediaType: 'image/png', data: 'YWJj' }],
+    )
+    // The mark clears after sending.
+    expect(frame.querySelector('.preview-mark')).toBeNull()
+  })
+
+  it('sends a bare mark with no note, omitting the description', async () => {
+    const stubbed = stub({ captures: [captureEvent('s', 1)] })
+    await renderAndMark(stubbed)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to agent' }))
+
+    expect(stubbed.agentSend).toHaveBeenCalledWith(
+      's',
+      'Pointing at the app preview at 50% across, 50% down.',
+      [{ mediaType: 'image/png', data: 'YWJj' }],
+    )
+  })
+
+  it('cancels a mark without sending', async () => {
+    const stubbed = stub({ captures: [captureEvent('s', 1)] })
+    const frame = await renderAndMark(stubbed)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(frame.querySelector('.preview-mark')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Send to agent' })).not.toBeInTheDocument()
+    expect(stubbed.agentSend).not.toHaveBeenCalled()
+  })
+
+  it('no-ops the send when the bridge has gone away', async () => {
+    const stubbed = stub({ captures: [captureEvent('s', 1)] })
+    await renderAndMark(stubbed)
+
+    delete window.agentinator
+    fireEvent.click(screen.getByRole('button', { name: 'Send to agent' }))
+
+    expect(stubbed.agentSend).not.toHaveBeenCalled()
   })
 
   it('stays empty when no capture belongs to the session', async () => {

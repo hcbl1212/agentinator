@@ -204,10 +204,70 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.preview-frame {
+  background: none;
+  border: 0;
+  cursor: crosshair;
+  display: block;
+  line-height: 0;
+  padding: 0;
+  position: relative;
+}
+
 .preview-shot {
   border: 1px solid var(--line);
   border-radius: 6px;
   max-width: 100%;
+}
+
+.preview-mark {
+  background: var(--accent);
+  border: 2px solid #06251e;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--accent);
+  height: 14px;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 14px;
+}
+
+.preview-annotate {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.preview-note {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+}
+
+.preview-send {
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #06251e;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+}
+
+.preview-cancel-mark {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.7rem;
 }
 
 .preview-console {
