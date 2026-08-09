@@ -8,8 +8,11 @@ import { defineConfig } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: false,
-  workers: 1,
+  // Each test spins up its own Electron app against a throwaway user-data dir,
+  // so they share no state — run them in parallel to cut wall-clock. Electron
+  // launch is largely I/O wait, so oversubscribing the cores pays off.
+  fullyParallel: true,
+  workers: 4,
   timeout: 30_000,
   reporter: 'list',
 })
