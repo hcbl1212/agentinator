@@ -243,9 +243,7 @@ export function ComposerDock(): React.JSX.Element {
               ref={inputRef}
               className="console-input"
               aria-label={replying ? 'Reply to the agent' : 'Task for the agent'}
-              placeholder={
-                replying ? 'Reply to the agent or steer it…' : 'Describe a task for the agent…'
-              }
+              placeholder={replying ? '' : 'Describe a task for the agent…'}
               rows={1}
               value={prompt}
               onChange={(changed) => setPrompt(changed.target.value)}
