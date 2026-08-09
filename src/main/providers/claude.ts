@@ -52,8 +52,54 @@ export interface ClaudeQueryArgs {
     resume?: string
     /** Replaces the subprocess env — used to force a metered API key. */
     env?: Record<string, string | undefined>
+    /** In-process MCP servers exposing harness tools (e.g. the preview capture
+     * tool that lets the agent see the app it's building). */
+    mcpServers?: Record<string, unknown>
   }
 }
+
+/** An image a custom tool hands back to the model (base64, no data-URL prefix)
+ * — the SDK's documented shape for image tool results. */
+export interface SdkImageContent {
+  type: 'image'
+  data: string
+  mimeType: string
+}
+
+export interface SdkToolResult {
+  content: SdkImageContent[]
+}
+
+/** The SDK's `tool()` and `createSdkMcpServer()` builders, injected so this
+ * adapter never imports the SDK (keeping it fully testable offline). */
+export type SdkTool = (
+  name: string,
+  description: string,
+  inputSchema: Record<string, never>,
+  handler: () => Promise<SdkToolResult>,
+) => unknown
+
+export type SdkCreateServer = (config: {
+  name: string
+  version: string
+  tools: unknown[]
+}) => unknown
+
+/**
+ * The visual feedback loop, injected as a capability: capture the app for a
+ * session (bytes to hand the model) plus the SDK builders to expose it as a
+ * tool. Absent for providers/tests that don't wire a preview.
+ */
+export interface PreviewVision {
+  capture: (sessionId: string) => Promise<{ base64: string; mediaType: string }>
+  tool: SdkTool
+  createSdkMcpServer: SdkCreateServer
+}
+
+const PREVIEW_SERVER = 'preview'
+const PREVIEW_TOOL = 'capture_app'
+/** MCP tools are namespaced `mcp__{server}__{tool}` in the SDK. */
+const PREVIEW_TOOL_QUALIFIED = `mcp__${PREVIEW_SERVER}__${PREVIEW_TOOL}`
 
 export type ClaudeQuery = (
   args: ClaudeQueryArgs,
@@ -152,16 +198,35 @@ function mapAssistantBlock(block: unknown, sessionId: string, emit: EmitEvent): 
   }
 }
 
+/** A tool result's content as a log-safe string. Base64 image payloads (agent
+ * screenshots) are redacted so they never bloat the append-only log — the bytes
+ * already live in the artifact store. Non-image content is unchanged. */
+function compactToolOutput(content: unknown): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (Array.isArray(content)) {
+    // Redact base64 image payloads; leave every other block untouched (so
+    // structured non-image results still stringify exactly as before).
+    const redacted: unknown[] = content.map((block: unknown) =>
+      isRecord(block) && block['type'] === 'image'
+        ? { type: 'image', data: '[screenshot]' }
+        : block,
+    )
+    return JSON.stringify(redacted)
+  }
+  return JSON.stringify(content)
+}
+
 function mapUserBlock(block: unknown, sessionId: string, emit: EmitEvent): void {
   if (!isRecord(block) || block['type'] !== 'tool_result') {
     return
   }
-  const content = block['content']
   emit('tool.resulted', {
     sessionId,
     callId: String(block['tool_use_id']),
     ok: block['is_error'] !== true,
-    output: typeof content === 'string' ? content : JSON.stringify(content),
+    output: compactToolOutput(block['content']),
   })
 }
 
@@ -242,6 +307,7 @@ function parseQuestions(input: Record<string, unknown>): Array<{
 export function createClaudeProvider(
   query: ClaudeQuery,
   decide?: PermissionDecider,
+  vision?: PreviewVision,
 ): AgentProvider {
   return {
     id: 'claude',
@@ -267,6 +333,11 @@ export function createClaudeProvider(
       }
 
       const canUseTool: CanUseTool = async (toolName, toolInput) => {
+        // Capturing the app is a safe, read-only look — never gate it behind an
+        // approval card (allowedTools also pre-approves it; this is belt-and-braces).
+        if (toolName === PREVIEW_TOOL_QUALIFIED) {
+          return { behavior: 'allow', updatedInput: toolInput }
+        }
         // The agent's own questions are not permission requests — surface them
         // as an answerable card and have the agent wait for a follow-up.
         if (toolName === 'AskUserQuestion') {
@@ -289,6 +360,31 @@ export function createClaudeProvider(
           : { behavior: 'deny', message: 'Denied from an Agentinator approval card.' }
       }
 
+      // Expose the app-capture tool when a preview is wired, so the agent can
+      // look at what it's building and iterate on it visually. It's approved via
+      // canUseTool (below), NOT allowedTools — a bare allowedTools entry would
+      // auto-approve before the callback and the SDK warns about the shadowing.
+      let mcpServers: Record<string, unknown> | undefined
+      if (vision !== undefined) {
+        const captureTool = vision.tool(
+          PREVIEW_TOOL,
+          'Capture a screenshot of the app you are building and see its current visual state. ' +
+            'Use it to verify UI changes you have made.',
+          {},
+          async () => {
+            const { base64, mediaType } = await vision.capture(sessionId)
+            return { content: [{ type: 'image', data: base64, mimeType: mediaType }] }
+          },
+        )
+        mcpServers = {
+          [PREVIEW_SERVER]: vision.createSdkMcpServer({
+            name: PREVIEW_SERVER,
+            version: '1.0.0',
+            tools: [captureTool],
+          }),
+        }
+      }
+
       const stream = query({
         prompt: input.iterable,
         options: {
@@ -299,6 +395,7 @@ export function createClaudeProvider(
           systemPrompt: assembleSystemPrompt({ stable: [SYSTEM_BASE], volatile: [] }),
           canUseTool,
           resume: context.resume?.token,
+          mcpServers,
           // Force a metered API key when switching off the subscription. env
           // replaces the subprocess environment, so carry the rest of it over.
           env:

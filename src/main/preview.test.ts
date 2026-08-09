@@ -58,6 +58,27 @@ describe('PreviewController', () => {
     expect(browser.capture).toHaveBeenCalledWith('http://localhost:5173/')
   })
 
+  it('captures for the agent, returning base64 PNG and still logging the event', async () => {
+    const { controller, browser, emit } = setup({
+      png: new Uint8Array([10, 20, 30]),
+      width: 640,
+      height: 480,
+    })
+
+    const image = await controller.captureImage('session_1')
+
+    expect(browser.capture).toHaveBeenCalledWith('/app/examples/sample-web/index.html')
+    expect(image).toEqual({
+      base64: Buffer.from([10, 20, 30]).toString('base64'),
+      mediaType: 'image/png',
+    })
+    // The agent capture still surfaces in the pane/timeline like a manual one.
+    expect(emit).toHaveBeenCalledWith(
+      'preview.captured',
+      expect.objectContaining({ sessionId: 'session_1' }),
+    )
+  })
+
   it('reads a captured screenshot back as base64', async () => {
     const { controller } = setup({ png: new Uint8Array([255, 0, 128]), width: 1, height: 1 })
 

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
@@ -17,7 +17,7 @@ import { ElectronPreviewBrowser } from './previewBrowser'
 import type { PreviewBrowser } from './previewBrowser'
 import { SettingsStore } from './settingsStore'
 import { createClaudeProvider } from './providers/claude'
-import type { ClaudeQuery } from './providers/claude'
+import type { ClaudeQuery, SdkCreateServer, SdkTool } from './providers/claude'
 import { createE2eProvider } from './providers/e2e'
 import { createMockProvider } from './providers/mock'
 import { replayFixture } from './replay'
@@ -264,6 +264,19 @@ export async function bootstrap(
   const broker = new PermissionBroker(makeEmitStored(store))
   const decide = broker.decide.bind(broker)
 
+  // The visual-feedback loop: capture the target app into the artifact store
+  // (kept off the event log) and preview it. The sample app ships alongside the
+  // bundled main (out/main → ../../examples), resolved the same way in dev and
+  // inside the packaged asar — getAppPath is unreliable when launched as
+  // `electron out/main/entry.js`. A real workspace dev-server URL becomes the
+  // target later.
+  const preview = new PreviewController(
+    createPreviewBrowser(),
+    createArtifacts(join(userData, 'screenshots')),
+    makeEmitStored(store),
+    join(import.meta.dirname, '../../examples/sample-web/index.html'),
+  )
+
   const vault = new CredentialVault(settings, createEncryptor())
   const manager = new SessionManager(store, broadcastEvent, {
     getBudgets: () => settings.budgets(),
@@ -272,23 +285,20 @@ export async function bootstrap(
     resolveApiKey: (providerId) => (settings.apiKeyMode() ? vault.get(providerId) : undefined),
   })
   manager.register(createMockProvider(undefined, undefined, decide))
-  manager.register(createClaudeProvider(claudeQuery, decide))
+  // Hand Claude the app-capture tool so the agent can see what it builds.
+  manager.register(
+    createClaudeProvider(claudeQuery, decide, {
+      capture: preview.captureImage.bind(preview),
+      // Narrowed to the adapter's own SDK-free types (like `query` above), so
+      // the provider never depends on the SDK's exact generics.
+      tool: tool as unknown as SdkTool,
+      createSdkMcpServer: createSdkMcpServer as unknown as SdkCreateServer,
+    }),
+  )
   // The deterministic, no-network agent the Playwright e2e drives.
   if (env['AGENTINATOR_MOCK_TASKS'] === '1') {
     manager.register(createE2eProvider(decide))
   }
-  // The visual-feedback loop: capture the target app into the artifact store
-  // (kept off the event log) and preview it. The sample app ships with the
-  // build; a real workspace dev-server URL slots in as the target later.
-  // The sample ships alongside the bundled main (out/main → ../../examples),
-  // resolved the same way in dev and inside the packaged asar — getAppPath is
-  // unreliable when launched as `electron out/main/entry.js`.
-  const preview = new PreviewController(
-    createPreviewBrowser(),
-    createArtifacts(join(userData, 'screenshots')),
-    makeEmitStored(store),
-    join(import.meta.dirname, '../../examples/sample-web/index.html'),
-  )
 
   registerAgentIpc(manager)
   registerApprovalIpc(broker)

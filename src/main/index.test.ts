@@ -58,7 +58,11 @@ vi.mock('electron', () => ({
 }))
 
 // The SDK spawns a CLI when queried; tests must never construct the real one.
-vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: vi.fn() }))
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: vi.fn(),
+  tool: vi.fn(),
+  createSdkMcpServer: vi.fn(),
+}))
 
 import type { StoredEvent } from '../shared/events'
 import {

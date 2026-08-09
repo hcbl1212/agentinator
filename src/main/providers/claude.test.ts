@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EventPayloads, EventType } from '../../shared/events'
 import { createClaudeProvider } from './claude'
-import type { ClaudeQuery, SdkUserMessage } from './claude'
-import type { SessionContext } from './types'
+import type { ClaudeQuery, PreviewVision, SdkUserMessage } from './claude'
+import type { PermissionDecider, SessionContext } from './types'
 
 const context: SessionContext = {
   sessionId: 'session_c',
@@ -261,6 +261,7 @@ describe('createClaudeProvider', () => {
           content: [
             { type: 'tool_result', tool_use_id: 'toolu_1', content: 'plain output' },
             { type: 'tool_result', tool_use_id: 'toolu_2', content: [{ ok: 1 }], is_error: true },
+            { type: 'tool_result', tool_use_id: 'toolu_3', content: { done: true } },
             { type: 'text', text: 'ignored' },
           ],
         },
@@ -279,6 +280,35 @@ describe('createClaudeProvider', () => {
       ok: false,
       output: '[{"ok":1}]',
     })
+    // Non-array structured content stringifies whole.
+    expect(results[2]?.payload).toMatchObject({ callId: 'toolu_3', output: '{"done":true}' })
+  })
+
+  it('redacts base64 image tool results so screenshots never bloat the log', async () => {
+    const { events } = await runSession([
+      {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_shot',
+              content: [
+                { type: 'image', source: { data: 'AAAABBBBCCCCDDDD' } },
+                { type: 'text', text: 'the app' },
+              ],
+            },
+          ],
+        },
+      },
+      successResult,
+    ])
+
+    const result = events.find((event) => event.type === 'tool.resulted')
+    const output = (result?.payload as EventPayloads['tool.resulted']).output
+    expect(output).toContain('[screenshot]')
+    expect(output).toContain('the app')
+    expect(output).not.toContain('AAAABBBBCCCCDDDD')
   })
 
   it('maps a result to cost.usage then session.idle — the turn ends, the session lives', async () => {
@@ -628,5 +658,99 @@ describe('createClaudeProvider', () => {
     await vi.waitFor(() => {
       expect(events.at(-1)?.type).toBe('session.ended')
     })
+  })
+})
+
+describe('createClaudeProvider — preview vision', () => {
+  function visionStub(): {
+    vision: PreviewVision
+    capture: ReturnType<typeof vi.fn>
+    tool: ReturnType<typeof vi.fn>
+    createSdkMcpServer: ReturnType<typeof vi.fn>
+  } {
+    const capture = vi.fn(() => Promise.resolve({ base64: 'YmFzZTY0', mediaType: 'image/png' }))
+    const tool = vi.fn(
+      (name: string, description: string, inputSchema: unknown, handler: unknown) => ({
+        name,
+        description,
+        inputSchema,
+        handler,
+      }),
+    )
+    const createSdkMcpServer = vi.fn((config: unknown) => ({ config }))
+    return {
+      capture,
+      tool,
+      createSdkMcpServer,
+      vision: { capture, tool, createSdkMcpServer },
+    }
+  }
+
+  async function runVisionSession(
+    messages: unknown[],
+    decide?: PermissionDecider,
+  ): Promise<{
+    events: Recorded[]
+    queryArgs: Parameters<ClaudeQuery>[0]
+    stub: ReturnType<typeof visionStub>
+  }> {
+    const stub = visionStub()
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf(messages)
+    }
+    const provider = createClaudeProvider(query, decide, stub.vision)
+    const events: Recorded[] = []
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+    return { events, queryArgs: queryArgs as Parameters<ClaudeQuery>[0], stub }
+  }
+
+  it('exposes the app-capture tool as an in-process MCP server', async () => {
+    const { queryArgs, stub } = await runVisionSession([successResult])
+
+    expect(stub.tool).toHaveBeenCalledWith(
+      'capture_app',
+      expect.stringContaining('screenshot'),
+      {},
+      expect.any(Function),
+    )
+    expect(stub.createSdkMcpServer).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'preview', version: '1.0.0' }),
+    )
+    expect(queryArgs.options.mcpServers).toHaveProperty('preview')
+  })
+
+  it('the tool handler captures for the session and returns an SDK image block', async () => {
+    const { stub } = await runVisionSession([successResult])
+
+    const handler = stub.tool.mock.calls[0]?.[3] as () => Promise<{
+      content: Array<{ type: string; data: string; mimeType: string }>
+    }>
+    const result = await handler()
+
+    expect(stub.capture).toHaveBeenCalledWith('session_c')
+    expect(result).toEqual({
+      content: [{ type: 'image', data: 'YmFzZTY0', mimeType: 'image/png' }],
+    })
+  })
+
+  it('auto-allows the capture tool without ever consulting the approval decider', async () => {
+    const decide = vi.fn(() => Promise.resolve(false))
+    const { queryArgs } = await runVisionSession([successResult], decide)
+
+    const decision = await queryArgs.options.canUseTool?.('mcp__preview__capture_app', {})
+
+    expect(decision).toEqual({ behavior: 'allow', updatedInput: {} })
+    expect(decide).not.toHaveBeenCalled()
+  })
+
+  it('omits the preview tool when no vision is wired', async () => {
+    const { queryArgs } = await runSession([successResult])
+
+    expect(queryArgs.options.mcpServers).toBeUndefined()
   })
 })

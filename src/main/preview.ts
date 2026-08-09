@@ -30,6 +30,22 @@ export class PreviewController {
   /** Capture a target (the bundled sample when none is given) for a session,
    * returning the artifact ref. */
   async capture(sessionId: string, url?: string): Promise<string> {
+    return (await this.#snap(sessionId, url)).ref
+  }
+
+  /** Capture for the agent: the same screenshot, returned as a base64 image the
+   * provider can hand to the model, while still surfacing in the pane. */
+  async captureImage(
+    sessionId: string,
+    url?: string,
+  ): Promise<{ base64: string; mediaType: string }> {
+    const { base64 } = await this.#snap(sessionId, url)
+    return { base64, mediaType: 'image/png' }
+  }
+
+  /** Take one screenshot: store it, log a lean event, and hand back the ref and
+   * bytes for whoever asked (the UI needs the ref, the agent needs the bytes). */
+  async #snap(sessionId: string, url?: string): Promise<{ ref: string; base64: string }> {
     const target = url ?? this.#defaultTarget
     const shot = await this.#browser.capture(target)
     const ref = this.#artifacts.put(shot.png)
@@ -40,7 +56,7 @@ export class PreviewController {
       width: shot.width,
       height: shot.height,
     })
-    return ref
+    return { ref, base64: Buffer.from(shot.png).toString('base64') }
   }
 
   /** A captured screenshot's PNG as base64 for the renderer, or null if gone. */

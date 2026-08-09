@@ -27,6 +27,7 @@
     "smoke:claude": "CLAUDE_SMOKE=1 vitest run claude.smoke --coverage.enabled=false",
     "smoke:dogfood": "CLAUDE_SMOKE=1 vitest run dogfood.smoke --coverage.enabled=false",
     "smoke:resume": "CLAUDE_SMOKE=1 vitest run resume.smoke --coverage.enabled=false",
+    "smoke:preview": "CLAUDE_SMOKE=1 vitest run preview.smoke --coverage.enabled=false",
     "smoke:usage": "CLAUDE_SMOKE=1 vitest run usage.smoke --coverage.enabled=false",
     "smoke:auth": "CLAUDE_SMOKE=1 vitest run auth.smoke --coverage.enabled=false",
     "replay:demo": "AGENTINATOR_REPLAY=fixtures/demo-session.json electron-vite dev"
