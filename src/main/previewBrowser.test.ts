@@ -7,12 +7,36 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
   }
   const capturePage = vi.fn(() => Promise.resolve(image))
 
+  type ConsoleListener = (details: { level: string; message: string }) => void
+
   class MockBrowserWindow {
     static instances: MockBrowserWindow[] = []
-    loadURL = vi.fn(() => Promise.resolve())
-    loadFile = vi.fn(() => Promise.resolve())
+    // When set, the next load() rejects with this value instead of resolving.
+    static loadRejection: { value: unknown } | null = null
+    consoleListener: ConsoleListener | undefined
+
+    #load = (level: 'warning' | 'info', message: string): Promise<void> => {
+      if (MockBrowserWindow.loadRejection !== null) {
+        // Intentionally rejects with arbitrary values (incl. non-Errors) to
+        // exercise the adapter's load-failure handling.
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject(MockBrowserWindow.loadRejection.value)
+      }
+      // A real page logs while loading — emit through the registered listener.
+      this.consoleListener?.({ level, message })
+      return Promise.resolve()
+    }
+    loadURL = vi.fn(() => this.#load('warning', 'from url'))
+    loadFile = vi.fn(() => this.#load('info', 'from file'))
     destroy = vi.fn()
-    webContents = { capturePage }
+    webContents = {
+      capturePage,
+      on: (event: string, listener: ConsoleListener): void => {
+        if (event === 'console-message') {
+          this.consoleListener = listener
+        }
+      },
+    }
 
     constructor(public options: Record<string, unknown>) {
       MockBrowserWindow.instances.push(this)
@@ -29,26 +53,53 @@ import { ElectronPreviewBrowser } from './previewBrowser'
 beforeEach(() => {
   vi.clearAllMocks()
   MockBrowserWindow.instances = []
+  MockBrowserWindow.loadRejection = null
 })
 
 describe('ElectronPreviewBrowser', () => {
-  it('loads an http URL, captures the page, and returns PNG + size', async () => {
+  it('loads an http URL, captures the page, and returns PNG + size + console', async () => {
     const shot = await new ElectronPreviewBrowser().capture('http://localhost:5173/')
 
     const window = MockBrowserWindow.instances[0]
     expect(window?.options).toMatchObject({ show: false })
     expect(window?.loadURL).toHaveBeenCalledWith('http://localhost:5173/')
     expect(window?.loadFile).not.toHaveBeenCalled()
-    expect(shot).toEqual({ png: Buffer.from([137, 80, 78, 71]), width: 1280, height: 800 })
+    expect(shot).toEqual({
+      png: Buffer.from([137, 80, 78, 71]),
+      width: 1280,
+      height: 800,
+      console: [{ level: 'warning', text: 'from url' }],
+    })
     expect(window?.destroy).toHaveBeenCalledOnce()
   })
 
   it('loads a local file path when the target is not an http URL', async () => {
-    await new ElectronPreviewBrowser().capture('/app/examples/sample-web/index.html')
+    const shot = await new ElectronPreviewBrowser().capture('/app/examples/sample-web/index.html')
 
     const window = MockBrowserWindow.instances[0]
     expect(window?.loadFile).toHaveBeenCalledWith('/app/examples/sample-web/index.html')
     expect(window?.loadURL).not.toHaveBeenCalled()
+    expect(shot.console).toEqual([{ level: 'info', text: 'from file' }])
+  })
+
+  it('records a load failure as a console error and still returns a shot', async () => {
+    MockBrowserWindow.loadRejection = { value: new Error('ERR_CONNECTION_REFUSED') }
+
+    const shot = await new ElectronPreviewBrowser().capture('http://localhost:9/')
+
+    expect(shot.console).toEqual([
+      { level: 'error', text: 'Failed to load http://localhost:9/: ERR_CONNECTION_REFUSED' },
+    ])
+    expect(shot.png).toEqual(Buffer.from([137, 80, 78, 71]))
+    expect(MockBrowserWindow.instances[0]?.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('stringifies a non-Error load rejection', async () => {
+    MockBrowserWindow.loadRejection = { value: 'boom' }
+
+    const shot = await new ElectronPreviewBrowser().capture('http://x/')
+
+    expect(shot.console).toEqual([{ level: 'error', text: 'Failed to load http://x/: boom' }])
   })
 
   it('destroys the window even when the capture fails', async () => {

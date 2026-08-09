@@ -4,7 +4,14 @@ import type { ArtifactStore } from './artifacts'
 import { PreviewController } from './preview'
 import type { PreviewBrowser, Screenshot } from './previewBrowser'
 
-function setup(shot: Screenshot = { png: new Uint8Array([1, 2, 3]), width: 800, height: 600 }): {
+function setup(
+  shot: Screenshot = {
+    png: new Uint8Array([1, 2, 3]),
+    width: 800,
+    height: 600,
+    console: [{ level: 'warning', text: 'heads up' }],
+  },
+): {
   controller: PreviewController
   browser: { capture: ReturnType<typeof vi.fn> }
   store: Map<string, Uint8Array>
@@ -47,6 +54,7 @@ describe('PreviewController', () => {
       url: '/app/examples/sample-web/index.html',
       width: 800,
       height: 600,
+      console: [{ level: 'warning', text: 'heads up' }],
     })
   })
 
@@ -63,6 +71,7 @@ describe('PreviewController', () => {
       png: new Uint8Array([10, 20, 30]),
       width: 640,
       height: 480,
+      console: [{ level: 'error', text: 'boom' }],
     })
 
     const image = await controller.captureImage('session_1')
@@ -71,6 +80,7 @@ describe('PreviewController', () => {
     expect(image).toEqual({
       base64: Buffer.from([10, 20, 30]).toString('base64'),
       mediaType: 'image/png',
+      console: [{ level: 'error', text: 'boom' }],
     })
     // The agent capture still surfaces in the pane/timeline like a manual one.
     expect(emit).toHaveBeenCalledWith(
@@ -80,7 +90,12 @@ describe('PreviewController', () => {
   })
 
   it('reads a captured screenshot back as base64', async () => {
-    const { controller } = setup({ png: new Uint8Array([255, 0, 128]), width: 1, height: 1 })
+    const { controller } = setup({
+      png: new Uint8Array([255, 0, 128]),
+      width: 1,
+      height: 1,
+      console: [],
+    })
 
     const ref = await controller.capture('session_1')
 

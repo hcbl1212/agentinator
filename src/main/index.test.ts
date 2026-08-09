@@ -605,7 +605,9 @@ describe('bootstrap', () => {
 
   it('wires the preview loop to capture the bundled sample into the store', async () => {
     const store = new EventStore(':memory:')
-    const capture = vi.fn(() => Promise.resolve({ png: new Uint8Array([1]), width: 2, height: 3 }))
+    const capture = vi.fn(() =>
+      Promise.resolve({ png: new Uint8Array([1]), width: 2, height: 3, console: [] }),
+    )
 
     await bootstrap(
       mockApp as never,

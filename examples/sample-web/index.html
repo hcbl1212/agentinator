@@ -57,5 +57,11 @@
       <p id="tagline">The target the harness can see.</p>
       <button id="cta" type="button">Click me</button>
     </main>
+    <script>
+      // Emit console output so the harness's console capture has something to
+      // show — the visual loop's runtime signal alongside the screenshot.
+      console.info('[sample] app ready')
+      console.warn('[sample] demo warning: nothing is actually wrong')
+    </script>
   </body>
 </html>

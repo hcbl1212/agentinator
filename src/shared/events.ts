@@ -22,6 +22,14 @@ export interface ImageAttachment {
   data: string
 }
 
+/** One console line captured from the previewed app — surfaced to the human and
+ * fed to the agent so runtime errors are visible, not just the pixels. A failed
+ * page load is recorded here as an `error` entry too. */
+export interface ConsoleEntry {
+  level: 'info' | 'warning' | 'error' | 'debug'
+  text: string
+}
+
 /** One turn of a prior conversation, reconstructed from the log — the
  * vendor-agnostic material any provider can replay to resume a session. */
 export interface ResumeTurn {
@@ -103,6 +111,9 @@ export interface EventPayloads {
     url: string
     width: number
     height: number
+    /** Console output (and any load failure) captured during the shot. Optional
+     * so older logs without it still replay. */
+    console?: ConsoleEntry[]
   }
   /** A tool use is waiting on permission — the audit trail starts here. */
   'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }

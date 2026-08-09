@@ -188,6 +188,43 @@ describe('describeEvent', () => {
     ).toMatchObject({ marker: '▦', text: 'captured the app preview · 1280×800', tone: 'soft' })
   })
 
+  it('renders a single console error in the singular', () => {
+    expect(
+      describeEvent(
+        stored('preview.captured', {
+          sessionId: 's',
+          ref: 'shot_1',
+          url: 'file:///sample',
+          width: 800,
+          height: 600,
+          console: [{ level: 'error', text: 'boom' }],
+        }),
+      ),
+    ).toMatchObject({ text: 'captured the app preview · 800×600 · 1 console error', tone: 'warn' })
+  })
+
+  it('flags console errors on a preview capture', () => {
+    expect(
+      describeEvent(
+        stored('preview.captured', {
+          sessionId: 's',
+          ref: 'shot_1',
+          url: 'file:///sample',
+          width: 800,
+          height: 600,
+          console: [
+            { level: 'error', text: 'boom' },
+            { level: 'error', text: 'bang' },
+            { level: 'warning', text: 'meh' },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      text: 'captured the app preview · 800×600 · 2 console errors',
+      tone: 'warn',
+    })
+  })
+
   it('renders approvals with warn/ok/err tones and the deciding channel', () => {
     expect(
       describeEvent(

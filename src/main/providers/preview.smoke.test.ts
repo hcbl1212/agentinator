@@ -26,7 +26,9 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('preview vision (live
     'lets the agent call the capture tool and take the image result',
     { timeout: 180_000 },
     async () => {
-      const capture = vi.fn(() => Promise.resolve({ base64: TINY_PNG, mediaType: 'image/png' }))
+      const capture = vi.fn(() =>
+        Promise.resolve({ base64: TINY_PNG, mediaType: 'image/png', console: [] }),
+      )
       const provider = createClaudeProvider(query as unknown as ClaudeQuery, undefined, {
         capture,
         tool: tool as unknown as SdkTool,

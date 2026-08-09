@@ -209,6 +209,10 @@ test('the Preview tab captures a real screenshot of the sample app', async () =>
     const shot = preview.getByRole('img', { name: /screenshot of the target app/i })
     await expect(shot).toBeVisible()
     await expect(shot).toHaveAttribute('src', /^data:image\/png;base64,/)
+
+    // The sample logs on load — real console capture surfaces it in the pane.
+    const console = preview.getByRole('region', { name: 'App console' })
+    await expect(console).toContainText('demo warning')
   } finally {
     await app.close()
   }

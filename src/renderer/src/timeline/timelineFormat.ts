@@ -93,10 +93,12 @@ export function describeEvent(event: StoredEvent): TimelineLine {
     }
     case 'preview.captured': {
       const payload = event.payload as EventPayloads['preview.captured']
+      const errors = (payload.console ?? []).filter((entry) => entry.level === 'error').length
+      const errorNote = errors > 0 ? ` · ${errors} console error${errors > 1 ? 's' : ''}` : ''
       return {
         marker: '▦',
-        text: `captured the app preview · ${payload.width}×${payload.height}`,
-        tone: 'soft',
+        text: `captured the app preview · ${payload.width}×${payload.height}${errorNote}`,
+        tone: errors > 0 ? 'warn' : 'soft',
       }
     }
     case 'file.diffed': {

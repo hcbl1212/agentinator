@@ -1,5 +1,5 @@
 import { createEntityId } from '../../shared/events'
-import type { ImageAttachment } from '../../shared/events'
+import type { ConsoleEntry, ImageAttachment } from '../../shared/events'
 import { normalizeLimit, normalizeUsage } from '../../shared/usage'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
@@ -66,8 +66,13 @@ export interface SdkImageContent {
   mimeType: string
 }
 
+export interface SdkTextContent {
+  type: 'text'
+  text: string
+}
+
 export interface SdkToolResult {
-  content: SdkImageContent[]
+  content: Array<SdkImageContent | SdkTextContent>
 }
 
 /** The SDK's `tool()` and `createSdkMcpServer()` builders, injected so this
@@ -91,7 +96,9 @@ export type SdkCreateServer = (config: {
  * tool. Absent for providers/tests that don't wire a preview.
  */
 export interface PreviewVision {
-  capture: (sessionId: string) => Promise<{ base64: string; mediaType: string }>
+  capture: (
+    sessionId: string,
+  ) => Promise<{ base64: string; mediaType: string; console: ConsoleEntry[] }>
   tool: SdkTool
   createSdkMcpServer: SdkCreateServer
 }
@@ -100,6 +107,16 @@ const PREVIEW_SERVER = 'preview'
 const PREVIEW_TOOL = 'capture_app'
 /** MCP tools are namespaced `mcp__{server}__{tool}` in the SDK. */
 const PREVIEW_TOOL_QUALIFIED = `mcp__${PREVIEW_SERVER}__${PREVIEW_TOOL}`
+
+/** The captured console rendered for the model — a text block it reads next to
+ * the screenshot. Empty console yields no block (nothing to say). */
+function consoleBlock(console: ConsoleEntry[]): SdkTextContent[] {
+  if (console.length === 0) {
+    return []
+  }
+  const lines = console.map((entry) => `[${entry.level}] ${entry.text}`).join('\n')
+  return [{ type: 'text', text: `Console output from the app:\n${lines}` }]
+}
 
 export type ClaudeQuery = (
   args: ClaudeQueryArgs,
@@ -372,8 +389,13 @@ export function createClaudeProvider(
             'Use it to verify UI changes you have made.',
           {},
           async () => {
-            const { base64, mediaType } = await vision.capture(sessionId)
-            return { content: [{ type: 'image', data: base64, mimeType: mediaType }] }
+            const { base64, mediaType, console } = await vision.capture(sessionId)
+            return {
+              content: [
+                ...consoleBlock(console),
+                { type: 'image', data: base64, mimeType: mediaType },
+              ],
+            }
           },
         )
         mcpServers = {

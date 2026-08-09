@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react'
 
-import type { EventPayloads, StoredEvent } from '../../../shared/events'
+import type { ConsoleEntry, EventPayloads, StoredEvent } from '../../../shared/events'
 
 interface Shot {
   ref: string
   width: number
   height: number
+  console: ConsoleEntry[]
 }
 
 function toShot(event: StoredEvent): Shot {
   const payload = event.payload as EventPayloads['preview.captured']
-  return { ref: payload.ref, width: payload.width, height: payload.height }
+  return {
+    ref: payload.ref,
+    width: payload.width,
+    height: payload.height,
+    console: payload.console ?? [],
+  }
 }
 
 function isMine(event: StoredEvent, sessionId: string): boolean {
@@ -108,6 +114,16 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         </p>
       ) : (
         <img className="preview-shot" src={src} alt="Latest screenshot of the target app" />
+      )}
+      {shot !== null && shot.console.length > 0 && (
+        <div className="preview-console" role="region" aria-label="App console">
+          <span className="preview-console-label">Console</span>
+          {shot.console.map((entry, index) => (
+            <p key={index} className={`preview-console-line level-${entry.level}`}>
+              <span className="preview-console-level">{entry.level}</span> {entry.text}
+            </p>
+          ))}
+        </div>
       )}
     </section>
   )

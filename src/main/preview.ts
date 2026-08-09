@@ -1,3 +1,4 @@
+import type { ConsoleEntry } from '../shared/events'
 import type { EmitStored } from './approvals'
 import type { ArtifactStore } from './artifacts'
 import type { PreviewBrowser } from './previewBrowser'
@@ -33,19 +34,24 @@ export class PreviewController {
     return (await this.#snap(sessionId, url)).ref
   }
 
-  /** Capture for the agent: the same screenshot, returned as a base64 image the
-   * provider can hand to the model, while still surfacing in the pane. */
+  /** Capture for the agent: the same screenshot plus the page's console output,
+   * so the model sees runtime errors as well as pixels. Still surfaces in the
+   * pane like a manual capture. */
   async captureImage(
     sessionId: string,
     url?: string,
-  ): Promise<{ base64: string; mediaType: string }> {
-    const { base64 } = await this.#snap(sessionId, url)
-    return { base64, mediaType: 'image/png' }
+  ): Promise<{ base64: string; mediaType: string; console: ConsoleEntry[] }> {
+    const { base64, console } = await this.#snap(sessionId, url)
+    return { base64, mediaType: 'image/png', console }
   }
 
-  /** Take one screenshot: store it, log a lean event, and hand back the ref and
-   * bytes for whoever asked (the UI needs the ref, the agent needs the bytes). */
-  async #snap(sessionId: string, url?: string): Promise<{ ref: string; base64: string }> {
+  /** Take one screenshot: store it, log a lean event (with console output), and
+   * hand back the ref, bytes, and console for whoever asked (the UI needs the
+   * ref, the agent needs the bytes + console). */
+  async #snap(
+    sessionId: string,
+    url?: string,
+  ): Promise<{ ref: string; base64: string; console: ConsoleEntry[] }> {
     const target = url ?? this.#defaultTarget
     const shot = await this.#browser.capture(target)
     const ref = this.#artifacts.put(shot.png)
@@ -55,8 +61,9 @@ export class PreviewController {
       url: target,
       width: shot.width,
       height: shot.height,
+      console: shot.console,
     })
-    return { ref, base64: Buffer.from(shot.png).toString('base64') }
+    return { ref, base64: Buffer.from(shot.png).toString('base64'), console: shot.console }
   }
 
   /** A captured screenshot's PNG as base64 for the renderer, or null if gone. */

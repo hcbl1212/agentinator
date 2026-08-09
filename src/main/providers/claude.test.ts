@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { EventPayloads, EventType } from '../../shared/events'
+import type { ConsoleEntry, EventPayloads, EventType } from '../../shared/events'
 import { createClaudeProvider } from './claude'
 import type { ClaudeQuery, PreviewVision, SdkUserMessage } from './claude'
 import type { PermissionDecider, SessionContext } from './types'
@@ -662,13 +662,17 @@ describe('createClaudeProvider', () => {
 })
 
 describe('createClaudeProvider — preview vision', () => {
-  function visionStub(): {
+  function visionStub(
+    consoleEntries: ConsoleEntry[] = [{ level: 'warning', text: 'hydration mismatch' }],
+  ): {
     vision: PreviewVision
     capture: ReturnType<typeof vi.fn>
     tool: ReturnType<typeof vi.fn>
     createSdkMcpServer: ReturnType<typeof vi.fn>
   } {
-    const capture = vi.fn(() => Promise.resolve({ base64: 'YmFzZTY0', mediaType: 'image/png' }))
+    const capture = vi.fn(() =>
+      Promise.resolve({ base64: 'YmFzZTY0', mediaType: 'image/png', console: consoleEntries }),
+    )
     const tool = vi.fn(
       (name: string, description: string, inputSchema: unknown, handler: unknown) => ({
         name,
@@ -689,12 +693,13 @@ describe('createClaudeProvider — preview vision', () => {
   async function runVisionSession(
     messages: unknown[],
     decide?: PermissionDecider,
+    consoleEntries?: ConsoleEntry[],
   ): Promise<{
     events: Recorded[]
     queryArgs: Parameters<ClaudeQuery>[0]
     stub: ReturnType<typeof visionStub>
   }> {
-    const stub = visionStub()
+    const stub = visionStub(consoleEntries)
     let queryArgs: Parameters<ClaudeQuery>[0] | undefined
     const query: ClaudeQuery = (args) => {
       queryArgs = args
@@ -724,15 +729,31 @@ describe('createClaudeProvider — preview vision', () => {
     expect(queryArgs.options.mcpServers).toHaveProperty('preview')
   })
 
-  it('the tool handler captures for the session and returns an SDK image block', async () => {
+  it('the tool handler captures for the session and returns console text + an image', async () => {
     const { stub } = await runVisionSession([successResult])
 
     const handler = stub.tool.mock.calls[0]?.[3] as () => Promise<{
-      content: Array<{ type: string; data: string; mimeType: string }>
+      content: Array<Record<string, unknown>>
     }>
     const result = await handler()
 
     expect(stub.capture).toHaveBeenCalledWith('session_c')
+    expect(result).toEqual({
+      content: [
+        { type: 'text', text: 'Console output from the app:\n[warning] hydration mismatch' },
+        { type: 'image', data: 'YmFzZTY0', mimeType: 'image/png' },
+      ],
+    })
+  })
+
+  it('returns just the image when the app logged nothing', async () => {
+    const { stub } = await runVisionSession([successResult], undefined, [])
+
+    const handler = stub.tool.mock.calls[0]?.[3] as () => Promise<{
+      content: Array<Record<string, unknown>>
+    }>
+    const result = await handler()
+
     expect(result).toEqual({
       content: [{ type: 'image', data: 'YmFzZTY0', mimeType: 'image/png' }],
     })

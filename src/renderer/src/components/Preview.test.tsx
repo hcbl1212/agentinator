@@ -3,15 +3,20 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
-import type { StoredEvent } from '../../../shared/events'
+import type { ConsoleEntry, StoredEvent } from '../../../shared/events'
 import { Preview } from './Preview'
 
-function captureEvent(sessionId: string, seq: number, ref = `shot_${seq}`): StoredEvent {
+function captureEvent(
+  sessionId: string,
+  seq: number,
+  ref = `shot_${seq}`,
+  console: ConsoleEntry[] = [],
+): StoredEvent {
   return {
     seq,
     ts: 't',
     type: 'preview.captured',
-    payload: { sessionId, ref, url: 'file:///sample', width: 1280, height: 800 },
+    payload: { sessionId, ref, url: 'file:///sample', width: 1280, height: 800, console },
   }
 }
 
@@ -94,6 +99,41 @@ describe('Preview', () => {
     expect(stubbed.search).toHaveBeenCalledWith('preview.captured', 30)
     expect(stubbed.image).toHaveBeenCalledWith('shot_s')
     expect(screen.getByText('1280×800')).toBeInTheDocument()
+  })
+
+  it('shows the captured console output beneath the screenshot', async () => {
+    const stubbed = stub({
+      captures: [
+        captureEvent('s', 2, 'shot_s', [
+          { level: 'error', text: 'Uncaught TypeError: x is undefined' },
+          { level: 'warning', text: 'deprecated API' },
+        ]),
+      ],
+    })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    const console = await screen.findByRole('region', { name: 'App console' })
+    expect(console).toHaveTextContent('Uncaught TypeError: x is undefined')
+    expect(console).toHaveTextContent('deprecated API')
+    expect(console.querySelector('.level-error')).not.toBeNull()
+  })
+
+  it('tolerates a legacy capture with no console field', async () => {
+    const legacy: StoredEvent = {
+      seq: 1,
+      ts: 't',
+      type: 'preview.captured',
+      payload: { sessionId: 's', ref: 'shot_x', url: 'file:///sample', width: 10, height: 10 },
+    }
+    const stubbed = stub({ captures: [legacy] })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument())
+    expect(screen.queryByRole('region', { name: 'App console' })).not.toBeInTheDocument()
   })
 
   it('stays empty when no capture belongs to the session', async () => {
