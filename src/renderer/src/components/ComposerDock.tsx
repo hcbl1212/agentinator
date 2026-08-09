@@ -130,7 +130,8 @@ export function ComposerDock(): React.JSX.Element {
     for (const file of files) {
       const reader = new FileReader()
       reader.onload = (): void => {
-        const dataUrl = String(reader.result)
+        // readAsDataURL always yields a string result.
+        const dataUrl = reader.result as string
         setImages((previous) => [
           ...previous,
           {

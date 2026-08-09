@@ -163,7 +163,7 @@ describe('registerEventIpc', () => {
   it('registers on ipcMain by default', () => {
     registerEventIpc(fakeStore())
 
-    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
       'events:count',
       'events:total-cost',
@@ -271,7 +271,7 @@ describe('registerAgentIpc', () => {
   it('registers on ipcMain by default', () => {
     registerAgentIpc(fakeManager() as unknown as SessionManager)
 
-    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
       'agent:current',
       'agent:start-demo',
@@ -316,7 +316,7 @@ describe('registerSettingsIpc', () => {
   it('registers on ipcMain by default', () => {
     registerSettingsIpc(fakeSettings())
 
-    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual(['settings:get-budgets', 'settings:set-budget'])
   })
 })
@@ -340,7 +340,7 @@ describe('registerApprovalIpc', () => {
   it('registers on ipcMain by default', () => {
     registerApprovalIpc({ pending: vi.fn(), resolve: vi.fn(), undo: vi.fn() } as never)
 
-    const channels = mockIpcMain.handle.mock.calls.map(([channel]) => channel)
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual(['approvals:pending', 'approvals:resolve', 'approvals:undo'])
   })
 })

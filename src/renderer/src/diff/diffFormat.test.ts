@@ -9,7 +9,7 @@ function diffEvent(path: string, patch: string, seq = 1): StoredEvent {
     ts: 't',
     type: 'file.diffed',
     payload: { sessionId: 's', path, additions: 1, deletions: 0, patch },
-  } as StoredEvent
+  }
 }
 
 describe('parseDiffLines', () => {

@@ -49,13 +49,13 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       agent: {
         current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),
         startDemo: vi.fn(() => Promise.resolve('session_1')),
-        startTask: startTask as AgentinatorBridge['agent']['startTask'],
-        send: send as AgentinatorBridge['agent']['send'],
+        startTask: startTask,
+        send: send,
         cancel: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),
-        resolve: resolve as AgentinatorBridge['approvals']['resolve'],
+        resolve: resolve,
         undo: vi.fn(() => Promise.resolve()),
       },
     },
@@ -68,7 +68,7 @@ function started(sessionId: string, title: string): StoredEvent {
     ts: 't',
     type: 'session.started',
     payload: { sessionId, agentId: 'a', workspaceId: 'w', title },
-  } as StoredEvent
+  }
 }
 
 function event(type: StoredEvent['type'], payload: object): StoredEvent {

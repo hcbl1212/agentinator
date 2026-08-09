@@ -41,7 +41,7 @@ function stubBridge(
       },
       settings: {
         getBudgets: vi.fn(() => Promise.resolve(options.budgets ?? budgets())),
-        setBudget: setBudget as AgentinatorBridge['settings']['setBudget'],
+        setBudget: setBudget,
       },
       agent: {
         current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),
@@ -63,7 +63,7 @@ function stubBridge(
 }
 
 function event<T extends EventType>(seq: number, type: T, payload: EventPayloads[T]): StoredEvent {
-  return { seq, ts: 't', type, payload } as StoredEvent
+  return { seq, ts: 't', type, payload }
 }
 
 function cost(seq: number, usd: number): StoredEvent {

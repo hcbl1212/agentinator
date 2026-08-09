@@ -12,7 +12,7 @@ function diffEvent(path: string, patch: string, seq: number, additions = 1): Sto
     ts: 't',
     type: 'file.diffed',
     payload: { sessionId: 's', path, additions, deletions: 0, patch },
-  } as StoredEvent
+  }
 }
 
 interface BridgeStub {
@@ -116,14 +116,14 @@ describe('DiffView', () => {
         ts: 't',
         type: 'file.diffed',
         payload: { sessionId: 'other', path: 'z.ts', additions: 1, deletions: 0, patch: '+zzz' },
-      } as StoredEvent)
+      })
       // A non-diff event is ignored.
       stub.emit({
         seq: 4,
         ts: 't',
         type: 'agent.text',
         payload: { sessionId: 's', text: 'x' },
-      } as StoredEvent)
+      })
     })
 
     expect(screen.queryByText('+one')).not.toBeInTheDocument()

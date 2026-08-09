@@ -209,10 +209,15 @@ function parseQuestions(input: Record<string, unknown>): Array<{
   return raw.map((entry) => {
     const record = isRecord(entry) ? entry : {}
     const options = Array.isArray(record['options']) ? record['options'] : []
+    const question = record['question']
     return {
-      question: String(record['question'] ?? ''),
+      question: typeof question === 'string' ? question : '',
       options: options.map((option) =>
-        isRecord(option) ? String(option['label'] ?? '') : String(option),
+        isRecord(option)
+          ? typeof option['label'] === 'string'
+            ? option['label']
+            : ''
+          : String(option),
       ),
     }
   })

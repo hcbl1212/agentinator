@@ -8,7 +8,7 @@ import type { EventPayloads, EventType, StoredEvent } from '../../../shared/even
 import { Timeline } from './Timeline'
 
 function stored<T extends EventType>(type: T, payload: EventPayloads[T], seq: number): StoredEvent {
-  return { seq, ts: 't', type, payload } as StoredEvent
+  return { seq, ts: 't', type, payload }
 }
 
 function text(seq: number, body: string): StoredEvent {
@@ -42,8 +42,8 @@ function stubBridge(
         totalCost: vi.fn(() => Promise.resolve(0)),
         diffs: vi.fn(() => Promise.resolve([])),
         list: vi.fn(() => Promise.resolve([])),
-        tail: tail as AgentinatorBridge['events']['tail'],
-        search: search as AgentinatorBridge['events']['search'],
+        tail: tail,
+        search: search,
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
           appended = listener
           return unsubscribe as () => void

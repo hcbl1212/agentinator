@@ -60,8 +60,8 @@ async function firstPromptMessage(
   prompt: Parameters<ClaudeQuery>[0]['prompt'],
 ): Promise<SdkUserMessage> {
   const iterator = (prompt as AsyncIterable<SdkUserMessage>)[Symbol.asyncIterator]()
-  const { value } = await iterator.next()
-  return value as SdkUserMessage
+  const next = await iterator.next()
+  return next.value as SdkUserMessage
 }
 
 const successResult = {
@@ -340,9 +340,14 @@ describe('createClaudeProvider', () => {
       const prompt = args.prompt as AsyncIterable<SdkUserMessage>
       return (async function* () {
         for await (const message of prompt) {
+          const content = message.message.content
           yield {
             type: 'assistant',
-            message: { content: [{ type: 'text', text: `echo: ${message.message.content}` }] },
+            message: {
+              content: [
+                { type: 'text', text: `echo: ${typeof content === 'string' ? content : ''}` },
+              ],
+            },
           }
           yield { ...successResult }
         }
@@ -450,6 +455,7 @@ describe('createClaudeProvider', () => {
   it('ends failed when the stream errors', async () => {
     const query: ClaudeQuery = () =>
       (async function* () {
+        await Promise.resolve()
         yield { type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } }
         throw new Error('stream broke')
       })() as ReturnType<ClaudeQuery>

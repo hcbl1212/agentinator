@@ -4,7 +4,7 @@ import type { EventPayloads, EventType, StoredEvent } from '../../../shared/even
 import { describeEvent, matchesQuery, mergeBySeq } from './timelineFormat'
 
 function stored<T extends EventType>(type: T, payload: EventPayloads[T], seq = 1): StoredEvent {
-  return { seq, ts: '2026-08-08T00:00:00.000Z', type, payload } as StoredEvent
+  return { seq, ts: '2026-08-08T00:00:00.000Z', type, payload }
 }
 
 describe('describeEvent', () => {

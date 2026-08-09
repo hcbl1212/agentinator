@@ -56,7 +56,8 @@ describe('PermissionBroker', () => {
 
     await expect(gate.decide('session_1', 'bash', { command: 'npm test' })).resolves.toBe(true)
 
-    gate.decide('session_1', 'bash', { command: 'npm install left-pad' })
+    // Left pending on purpose — it resolves only when a card is decided.
+    void gate.decide('session_1', 'bash', { command: 'npm install left-pad' })
     expect(gate.pending()).toHaveLength(1)
   })
 

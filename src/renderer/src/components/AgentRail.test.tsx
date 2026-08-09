@@ -36,7 +36,7 @@ function started(sessionId: string, title: string, providerId?: string): StoredE
     ts: 't',
     type: 'session.started',
     payload: { sessionId, agentId: 'a', workspaceId: 'w', title, providerId },
-  } as StoredEvent
+  }
 }
 
 function ended(sessionId: string): StoredEvent {
@@ -45,7 +45,7 @@ function ended(sessionId: string): StoredEvent {
     ts: 't',
     type: 'session.ended',
     payload: { sessionId, outcome: 'completed' },
-  } as StoredEvent
+  }
 }
 
 function renderRail(): void {
