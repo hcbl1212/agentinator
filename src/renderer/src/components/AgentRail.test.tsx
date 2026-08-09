@@ -5,9 +5,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { AgentRail } from './AgentRail'
+
+/** Selects an arbitrary id — stands in for the composer selecting a
+ * just-launched session before its session.started has arrived. */
+function Selector({ id }: { id: string }): React.JSX.Element {
+  const { select } = useSelection()
+  return (
+    <button type="button" onClick={() => select({ kind: 'session', id })}>
+      select {id}
+    </button>
+  )
+}
 
 function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) => void } {
   const listeners: ((event: StoredEvent) => void)[] = []
@@ -135,6 +147,37 @@ describe('AgentRail', () => {
     expect(screen.getByRole('button', { name: /Fix header/ })).toHaveAttribute(
       'aria-pressed',
       'true',
+    )
+  })
+
+  it('does not yank a freshly launched agent that has not appeared in the list yet', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <Selector id="session_new" />
+          <AgentRail />
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
+    act(() => {
+      stub.emit(started('session_old', 'Old task'))
+    })
+
+    // Select a session that isn't in the list yet (the launch just happened).
+    await userEvent.click(screen.getByRole('button', { name: 'select session_new' }))
+    // Its session.started arrives a beat later.
+    act(() => {
+      stub.emit(started('session_new', 'New task'))
+    })
+
+    // The new agent stays selected — it was never yanked to the old one.
+    expect(screen.getByRole('button', { name: /New task/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /Old task/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     )
   })
 

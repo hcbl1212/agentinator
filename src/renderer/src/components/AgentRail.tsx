@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { useSelection } from '../state/selection'
+import type { SessionInfo } from '../state/sessions'
 import { useSessions } from '../state/sessions'
 
 /** A vendor id → display label. Until model selection lands this is the
@@ -19,9 +20,16 @@ export function AgentRail(): React.JSX.Element {
   const { sessions } = useSessions()
   const { selection, select, clear } = useSelection()
   const selectedId = selection?.kind === 'session' ? selection.id : null
+  const previous = useRef<SessionInfo[]>([])
 
+  // Follow the selection to the newest agent only when the highlighted one
+  // actually ENDS (was present, now gone). A freshly launched agent is selected
+  // before its session.started broadcast arrives, so "not in the list yet" must
+  // NOT trigger a reselect — otherwise the new agent gets yanked away.
   useEffect(() => {
-    if (selectedId !== null && !sessions.some((session) => session.id === selectedId)) {
+    const wasPresent = previous.current.some((session) => session.id === selectedId)
+    const isPresent = sessions.some((session) => session.id === selectedId)
+    if (selectedId !== null && wasPresent && !isPresent) {
       const newest = sessions.at(-1)
       if (newest !== undefined) {
         select({ kind: 'session', id: newest.id })
@@ -29,6 +37,7 @@ export function AgentRail(): React.JSX.Element {
         clear()
       }
     }
+    previous.current = sessions
   }, [sessions, selectedId, select, clear])
 
   return (
