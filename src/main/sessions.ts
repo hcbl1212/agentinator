@@ -202,7 +202,12 @@ export class SessionManager {
               ...(payload as EventPayloads['session.started']),
               providerId,
             })
-          : this.#store.append(type, payload)
+          : type === 'account.limit'
+            ? this.#store.append('account.limit', {
+                ...(payload as EventPayloads['account.limit']),
+                providerId,
+              })
+            : this.#store.append(type, payload)
       if (type === 'session.ended') {
         // May fire before startSession returns (instant failures) — record it
         // so the handle registered by the caller is cleaned up either way.

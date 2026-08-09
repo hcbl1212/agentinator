@@ -210,6 +210,41 @@ describe('SessionManager', () => {
     store.close()
   })
 
+  it('stamps the provider id onto an account.limit event', () => {
+    const store = new EventStore()
+    const provider: AgentProvider = {
+      ...instantProvider('claude'),
+      id: 'claude',
+      startSession(context, emit) {
+        emit('session.started', {
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          workspaceId: context.workspaceId,
+          title: context.title,
+        })
+        emit('account.limit', {
+          sessionId: context.sessionId,
+          status: 'rejected',
+          window: 'five_hour',
+          resetsAtMs: null,
+          utilization: 100,
+          overageAvailable: false,
+          overageInUse: false,
+        })
+        return { send: () => Promise.resolve(), cancel: () => Promise.resolve() }
+      },
+    }
+    const manager = new SessionManager(store)
+    manager.register(provider)
+    const sessionId = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/tmp' })
+
+    const limitEvent = store
+      .listBySession(sessionId)
+      .find((event) => event.type === 'account.limit')
+    expect(limitEvent?.payload).toMatchObject({ providerId: 'claude', status: 'rejected' })
+    store.close()
+  })
+
   it('switches a session with no live handle by resuming it under the key', async () => {
     const store = new EventStore()
     store.append('session.started', {

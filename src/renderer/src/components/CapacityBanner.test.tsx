@@ -5,12 +5,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
-import type { AccountLimit } from '../../../shared/usage'
 import { CapacityBanner } from './CapacityBanner'
 
-function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) => void } {
+interface Stub {
+  bridge: AgentinatorBridge
+  emit: (event: StoredEvent) => void
+  switchToApiKey: ReturnType<typeof vi.fn>
+  has: ReturnType<typeof vi.fn>
+  set: ReturnType<typeof vi.fn>
+}
+
+function stubBridge(hasKey = false): Stub {
   let appended: ((event: StoredEvent) => void) | undefined
+  const switchToApiKey = vi.fn(() => Promise.resolve())
+  const has = vi.fn(() => Promise.resolve(hasKey))
+  const set = vi.fn(() => Promise.resolve())
   return {
+    switchToApiKey,
+    has,
+    set,
     emit: (event) => appended?.(event),
     bridge: {
       events: {
@@ -19,13 +32,16 @@ function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) =
           return () => undefined
         }),
       },
+      agent: { switchToApiKey },
+      credentials: { has, set },
     } as unknown as AgentinatorBridge,
   }
 }
 
-function limit(overrides: Partial<AccountLimit> = {}): StoredEvent {
+function limit(overrides: Partial<EventPayloads['account.limit']> = {}): StoredEvent {
   const payload: EventPayloads['account.limit'] = {
     sessionId: 's',
+    providerId: 'claude',
     status: 'rejected',
     window: 'five_hour',
     resetsAtMs: 1_700_000_000_000,
@@ -147,5 +163,65 @@ describe('CapacityBanner', () => {
       stub.emit(limit({ status: 'warning' })) // status change → back
     })
     expect(screen.getByRole('status')).toHaveTextContent(/Approaching/)
+  })
+
+  it('switches immediately when a key is already stored', async () => {
+    const stub = stubBridge(true) // has a stored key
+    window.agentinator = stub.bridge
+
+    render(<CapacityBanner />)
+    act(() => {
+      stub.emit(limit())
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue on API key' }))
+
+    expect(stub.has).toHaveBeenCalledWith('claude')
+    expect(stub.switchToApiKey).toHaveBeenCalledWith('s')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument() // banner cleared
+  })
+
+  it('prompts for a key inline, saves it to the keychain, and switches (Enter)', async () => {
+    const stub = stubBridge(false) // no stored key
+    window.agentinator = stub.bridge
+
+    render(<CapacityBanner />)
+    act(() => {
+      stub.emit(limit())
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue on API key' }))
+    await userEvent.type(screen.getByLabelText('API key'), 'sk-live-123{Enter}')
+
+    expect(stub.set).toHaveBeenCalledWith('claude', 'sk-live-123', true)
+    expect(stub.switchToApiKey).toHaveBeenCalledWith('s')
+  })
+
+  it('ignores Continue/Save when the provider, key, or bridge is missing', async () => {
+    const stub = stubBridge(false)
+    window.agentinator = stub.bridge
+
+    render(<CapacityBanner />)
+    // 1. No provider → a no-op (the vendor is unknown).
+    act(() => {
+      stub.emit(limit({ providerId: undefined }))
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Continue on API key' }))
+    expect(stub.has).not.toHaveBeenCalled()
+
+    // 2. Provider present, no stored key → the field opens; an empty save is a no-op.
+    act(() => {
+      stub.emit(limit({ status: 'warning' })) // change status to re-surface
+      stub.emit(limit()) // rejected again, with a provider
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Continue on API key' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save & switch' }))
+    expect(stub.set).not.toHaveBeenCalled()
+
+    // 3. Bridge vanished → Save can neither switch nor crash.
+    await userEvent.type(screen.getByLabelText('API key'), 'sk')
+    delete window.agentinator
+    await userEvent.click(screen.getByRole('button', { name: 'Save & switch' }))
+    expect(stub.switchToApiKey).not.toHaveBeenCalled()
   })
 })

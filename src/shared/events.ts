@@ -83,8 +83,9 @@ export interface EventPayloads {
    * provider — drives the status bar, not the per-session conversation. */
   'account.usage': { sessionId: string } & AccountUsage
   /** A live rate-limit signal (approaching or hit) pushed by the provider —
-   * drives the capacity card. */
-  'account.limit': { sessionId: string } & AccountLimit
+   * drives the capacity card. The manager stamps providerId so the card knows
+   * which vendor's key a switch would use. */
+  'account.limit': { sessionId: string; providerId?: string } & AccountLimit
   /** A tool use is waiting on permission — the audit trail starts here. */
   'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }
   'approval.resolved': {
