@@ -17,6 +17,9 @@ mac:
     - dmg
     - zip
   category: public.app-category.developer-tools
-  # Unsigned for now; signing + notarization credentials arrive later (see
-  # RELEASE.md). electron-builder still produces a runnable local artifact.
+  # Unsigned until a Developer ID cert exists (ad-hoc broke launch with the
+  # unpacked SDK binary). A downloaded unsigned build reads as "damaged"; clear
+  # quarantine to run it (see RELEASE.md). When CSC_LINK/CSC_KEY_PASSWORD are
+  # provided in the release job, drop this line so electron-builder signs, and
+  # add mac.notarize + the Apple secrets for a clean, warning-free download.
   identity: null
