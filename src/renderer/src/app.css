@@ -880,6 +880,8 @@ body {
   display: flex;
   gap: 0.45rem;
   min-width: 0;
+  /* Leave the top-right corner clear for the remove (✕) button. */
+  padding-right: 1.5rem;
 }
 
 .rail-agent-vendor {
