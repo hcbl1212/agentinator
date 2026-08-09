@@ -39,14 +39,18 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('auth source (live)',
     expect(typeof ambient).toBe('string')
     expect(ambient).not.toBe('unknown')
 
-    // If this machine has an API key, forcing it via env should NOT read as oauth.
-    const key = process.env['ANTHROPIC_API_KEY']
+    // Inject a key ONLY via Options.env (from a distinct var, so the ambient
+    // login stays the subscription). If the override works, the forced source
+    // must differ from the ambient one — proving env beats the subscription.
+    const key = process.env['AGENTINATOR_API_KEY']
     if (key !== undefined && key !== '') {
       const forced = await sourceUnder({ ...process.env, ANTHROPIC_API_KEY: key })
       console.log('forced apiKeySource:', forced)
+      expect(forced).not.toBe(ambient)
+      expect(forced).not.toBe('none')
       expect(forced).not.toBe('oauth')
     } else {
-      console.log('(no ANTHROPIC_API_KEY present — override path not exercised live)')
+      console.log('(set AGENTINATOR_API_KEY to exercise the override)')
     }
   })
 })
