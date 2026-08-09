@@ -174,6 +174,20 @@ describe('describeEvent', () => {
     ).toMatchObject({ marker: '$', text: '1200 in / 340 out · cache 900 · $0.0042', tone: 'faint' })
   })
 
+  it('renders a preview capture with its dimensions', () => {
+    expect(
+      describeEvent(
+        stored('preview.captured', {
+          sessionId: 's',
+          ref: 'shot_1',
+          url: 'file:///sample',
+          width: 1280,
+          height: 800,
+        }),
+      ),
+    ).toMatchObject({ marker: '▦', text: 'captured the app preview · 1280×800', tone: 'soft' })
+  })
+
   it('renders approvals with warn/ok/err tones and the deciding channel', () => {
     expect(
       describeEvent(

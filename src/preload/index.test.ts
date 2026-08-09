@@ -134,6 +134,20 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('credentials:clear', 'claude')
   })
 
+  it('routes preview capture (with and without a url) and image over IPC', async () => {
+    await bridge.preview.capture('session_9')
+    await bridge.preview.capture('session_9', 'http://localhost:5173/')
+    await bridge.preview.image('shot_1')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:capture',
+      'session_9',
+      'http://localhost:5173/',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:image', 'shot_1')
+  })
+
   it('routes approvals over IPC', async () => {
     await bridge.approvals.pending()
     await bridge.approvals.resolve('approval_1', true)

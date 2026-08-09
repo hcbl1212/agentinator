@@ -6,6 +6,9 @@ directories:
 files:
   - out/**/*
   - package.json
+  # The sample target app the preview loop renders (loaded via loadFile, which
+  # reads it straight out of the asar).
+  - examples/sample-web/**/*
 # The Claude Agent SDK spawns a CLI subprocess, so keep it on the real
 # filesystem rather than inside the asar archive.
 asarUnpack:

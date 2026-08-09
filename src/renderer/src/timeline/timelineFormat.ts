@@ -91,6 +91,14 @@ export function describeEvent(event: StoredEvent): TimelineLine {
         tone: payload.ok ? 'ok' : 'err',
       }
     }
+    case 'preview.captured': {
+      const payload = event.payload as EventPayloads['preview.captured']
+      return {
+        marker: '▦',
+        text: `captured the app preview · ${payload.width}×${payload.height}`,
+        tone: 'soft',
+      }
+    }
     case 'file.diffed': {
       const payload = event.payload as EventPayloads['file.diffed']
       return {

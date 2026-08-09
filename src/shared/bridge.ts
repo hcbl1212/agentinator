@@ -78,6 +78,15 @@ export interface AgentinatorBridge {
     getApiKeyMode(): Promise<boolean>
     setApiKeyMode(on: boolean): Promise<void>
   }
+  /** The visual feedback loop: capture the target app and read screenshots
+   * back. Bytes stay in the main process; the renderer holds only refs. */
+  preview: {
+    /** Capture the target app (the bundled sample when no url) for a session;
+     * resolves to the artifact ref of the new screenshot. */
+    capture(sessionId: string, url?: string): Promise<string>
+    /** A captured screenshot's PNG as base64, or null if it's gone. */
+    image(ref: string): Promise<string | null>
+  }
   approvals: {
     pending(): Promise<PendingApproval[]>
     /** Schedule a decision; it reaches the agent only after the grace window. */

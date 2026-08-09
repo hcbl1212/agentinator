@@ -93,6 +93,17 @@ export interface EventPayloads {
    * drives the capacity card. The manager stamps providerId so the card knows
    * which vendor's key a switch would use. */
   'account.limit': { sessionId: string; providerId?: string } & AccountLimit
+  /** The harness captured a screenshot of the target app the agent is working
+   * on — the visual feedback loop (Phase 2). The PNG bytes live in the artifact
+   * store, not the log; `ref` points at them, keeping the log lean the same way
+   * user.message keeps image bytes out. */
+  'preview.captured': {
+    sessionId: string
+    ref: string
+    url: string
+    width: number
+    height: number
+  }
   /** A tool use is waiting on permission — the audit trail starts here. */
   'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }
   'approval.resolved': {

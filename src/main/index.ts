@@ -7,9 +7,14 @@ import type { BudgetScope } from '../shared/budget'
 import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
+import { FileArtifactStore } from './artifacts'
+import type { ArtifactStore } from './artifacts'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
+import { PreviewController } from './preview'
+import { ElectronPreviewBrowser } from './previewBrowser'
+import type { PreviewBrowser } from './previewBrowser'
 import { SettingsStore } from './settingsStore'
 import { createClaudeProvider } from './providers/claude'
 import type { ClaudeQuery } from './providers/claude'
@@ -184,6 +189,18 @@ export function registerCredentialsIpc(
   )
 }
 
+export function registerPreviewIpc(
+  preview: PreviewController,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('preview:capture', (_event, sessionId, url) =>
+    preview.capture(sessionId as string, url as string | undefined),
+  )
+  handle('preview:image', (_event, ref) => preview.image(ref as string))
+}
+
 /** Encrypt credentials with the OS keychain via Electron safeStorage. */
 export function safeEncryptor(): Encryptor {
   return {
@@ -216,6 +233,8 @@ export async function bootstrap(
   replay: typeof replayFixture = replayFixture,
   createSettings: (dbPath: string) => SettingsStore = (dbPath) => new SettingsStore(dbPath),
   createEncryptor: () => Encryptor = safeEncryptor,
+  createPreviewBrowser: () => PreviewBrowser = () => new ElectronPreviewBrowser(),
+  createArtifacts: (dir: string) => ArtifactStore = (dir) => new FileArtifactStore(dir),
 ): Promise<EventStore> {
   await electronApp.whenReady()
 
@@ -258,9 +277,23 @@ export async function bootstrap(
   if (env['AGENTINATOR_MOCK_TASKS'] === '1') {
     manager.register(createE2eProvider(decide))
   }
+  // The visual-feedback loop: capture the target app into the artifact store
+  // (kept off the event log) and preview it. The sample app ships with the
+  // build; a real workspace dev-server URL slots in as the target later.
+  // The sample ships alongside the bundled main (out/main → ../../examples),
+  // resolved the same way in dev and inside the packaged asar — getAppPath is
+  // unreliable when launched as `electron out/main/entry.js`.
+  const preview = new PreviewController(
+    createPreviewBrowser(),
+    createArtifacts(join(userData, 'screenshots')),
+    makeEmitStored(store),
+    join(import.meta.dirname, '../../examples/sample-web/index.html'),
+  )
+
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
+  registerPreviewIpc(preview)
 
   createWindow()
   if (replayPath !== undefined) {

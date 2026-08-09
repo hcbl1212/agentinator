@@ -56,6 +56,10 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         switchToApiKey: vi.fn(() => Promise.resolve()),
         switchToSubscription: vi.fn(() => Promise.resolve()),
       },
+      preview: {
+        capture: vi.fn(() => Promise.resolve('shot_1')),
+        image: vi.fn(() => Promise.resolve(null)),
+      },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),
         resolve: vi.fn(() => Promise.resolve()),

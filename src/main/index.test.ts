@@ -36,6 +36,7 @@ const { mockApp, MockBrowserWindow, mockShell, mockIpcMain, mockSafeStorage } = 
       on: vi.fn(),
       quit: vi.fn(),
       getPath: vi.fn(),
+      getAppPath: vi.fn(() => '/app'),
       getVersion: vi.fn(() => '0.1.0-test'),
     },
     mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
@@ -69,10 +70,12 @@ import {
   registerApprovalIpc,
   registerCredentialsIpc,
   registerEventIpc,
+  registerPreviewIpc,
   registerSettingsIpc,
   safeEncryptor,
   taskTitle,
 } from './index'
+import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
 import type { SessionManager } from './sessions'
 import type { SettingsStore } from './settingsStore'
@@ -502,6 +505,36 @@ describe('registerApprovalIpc', () => {
   })
 })
 
+describe('registerPreviewIpc', () => {
+  it('routes capture (with and without a url) and image to the controller', async () => {
+    const preview = {
+      capture: vi.fn(() => Promise.resolve('shot_1')),
+      image: vi.fn(() => 'YWJj'),
+    }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerPreviewIpc(preview as unknown as PreviewController, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(await handlers.get('preview:capture')?.(undefined, 'session_1', undefined)).toBe(
+      'shot_1',
+    )
+    expect(preview.capture).toHaveBeenCalledWith('session_1', undefined)
+    await handlers.get('preview:capture')?.(undefined, 'session_1', 'http://x/')
+    expect(preview.capture).toHaveBeenCalledWith('session_1', 'http://x/')
+    expect(handlers.get('preview:image')?.(undefined, 'shot_1')).toBe('YWJj')
+    expect(preview.image).toHaveBeenCalledWith('shot_1')
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerPreviewIpc({ capture: vi.fn(), image: vi.fn() } as unknown as PreviewController)
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['preview:capture', 'preview:image'])
+  })
+})
+
 describe('makeEmitStored', () => {
   it('appends to the store and broadcasts the result', () => {
     const store = fakeStore()
@@ -564,6 +597,36 @@ describe('bootstrap', () => {
     expect(mockIpcMain.handle).toHaveBeenCalledWith('settings:get-budgets', expect.any(Function))
     expect(returned).toBe(store)
     expect(MockBrowserWindow.instances).toHaveLength(1)
+  })
+
+  it('wires the preview loop to capture the bundled sample into the store', async () => {
+    const store = new EventStore(':memory:')
+    const capture = vi.fn(() => Promise.resolve({ png: new Uint8Array([1]), width: 2, height: 3 }))
+
+    await bootstrap(
+      mockApp as never,
+      () => store,
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+      undefined,
+      () => ({ capture }),
+      () => ({ put: () => 'shot_x', read: () => new Uint8Array([1]) }),
+    )
+
+    const call = (channel: string): ((...args: unknown[]) => unknown) =>
+      mockIpcMain.handle.mock.calls.find(([c]: string[]) => c === channel)?.[1] as (
+        ...args: unknown[]
+      ) => unknown
+    const ref = await call('preview:capture')(undefined, 'session_1', undefined)
+
+    expect(ref).toBe('shot_x')
+    // The default target is the sample resolved next to the bundled main.
+    expect(capture).toHaveBeenCalledWith(expect.stringContaining('examples/sample-web/index.html'))
+    expect(call('preview:image')(undefined, 'shot_x')).toBe(Buffer.from([1]).toString('base64'))
+    expect(store.list().some((event) => event.type === 'preview.captured')).toBe(true)
+    store.close()
   })
 
   it('marks a still-running session left open by a previous run idle', async () => {

@@ -52,6 +52,11 @@ export const bridge: AgentinatorBridge = {
     getApiKeyMode: () => ipcRenderer.invoke('settings:get-api-key-mode') as Promise<boolean>,
     setApiKeyMode: (on) => ipcRenderer.invoke('settings:set-api-key-mode', on) as Promise<void>,
   },
+  preview: {
+    capture: (sessionId, url) =>
+      ipcRenderer.invoke('preview:capture', sessionId, url) as Promise<string>,
+    image: (ref) => ipcRenderer.invoke('preview:image', ref) as Promise<string | null>,
+  },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,
     resolve: (requestId, approved) =>

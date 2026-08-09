@@ -194,6 +194,26 @@ test('removing an agent takes it out of the rail', async () => {
   }
 })
 
+test('the Preview tab captures a real screenshot of the sample app', async () => {
+  const { app, page } = await launchApp()
+  try {
+    // A selected agent scopes the preview; the mock task creates one.
+    await launchTask(page, 'look at the app')
+
+    await page.getByRole('tab', { name: 'Preview' }).click()
+    const preview = page.getByRole('region', { name: 'App preview' })
+    await preview.getByRole('button', { name: 'Capture' }).click()
+
+    // The real Electron capturePage → artifact store → base64 round-trip lands a
+    // PNG data URL in the pane (proves the offscreen capture actually paints).
+    const shot = preview.getByRole('img', { name: /screenshot of the target app/i })
+    await expect(shot).toBeVisible()
+    await expect(shot).toHaveAttribute('src', /^data:image\/png;base64,/)
+  } finally {
+    await app.close()
+  }
+})
+
 test('a low session budget stops the agent when its cost exceeds the cap', async () => {
   const { app, page } = await launchApp()
   const stream = page.getByRole('region', { name: 'Conversation' })

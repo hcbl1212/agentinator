@@ -169,6 +169,47 @@ body {
   max-width: 32ch;
 }
 
+/* Preview pane: the target app's latest screenshot with a capture control. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.preview-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.preview-capture {
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #06251e;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+}
+
+.preview-capture:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.preview-dims {
+  color: var(--faint);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-shot {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-width: 100%;
+}
+
 /* Semantic status colors — status is never encoded by color alone. */
 :root {
   --ok: #47b881;
