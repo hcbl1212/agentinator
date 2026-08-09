@@ -33,10 +33,16 @@ export function AgentRail(): React.JSX.Element {
     }
   }
 
-  // Reconnect this agent onto its provider's stored API key (metered) — the
-  // deliberate, on-demand version of what a plan limit offers.
-  const switchToApiKey = (id: string): void => {
-    void window.agentinator?.agent.switchToApiKey(id)
+  // Toggle this agent between its provider's stored API key (metered) and its
+  // subscription login — the deliberate, on-demand version of what a plan limit
+  // offers, and the way back.
+  const toggleCredential = (session: (typeof sessions)[number]): void => {
+    const agent = window.agentinator?.agent
+    if (session.metered === true) {
+      void agent?.switchToSubscription(session.id)
+    } else {
+      void agent?.switchToApiKey(session.id)
+    }
   }
 
   return (
@@ -79,9 +85,13 @@ export function AgentRail(): React.JSX.Element {
                 <button
                   type="button"
                   className="rail-agent-action"
-                  aria-label={`Switch ${session.title} to API key`}
-                  title="Switch to API key"
-                  onClick={() => switchToApiKey(session.id)}
+                  aria-label={
+                    session.metered === true
+                      ? `Switch ${session.title} to subscription`
+                      : `Switch ${session.title} to API key`
+                  }
+                  title={session.metered === true ? 'Switch to subscription' : 'Switch to API key'}
+                  onClick={() => toggleCredential(session)}
                 >
                   ⚿
                 </button>

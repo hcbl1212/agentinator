@@ -386,6 +386,14 @@ describe('registerCredentialsIpc', () => {
     store.close()
   })
 
+  it('switches a session back to the subscription with no key', async () => {
+    const { manager, handlers } = wire(fakeVault('sk-live'), new EventStore())
+
+    await handlers.get('agent:switch-subscription')?.(undefined, 's1')
+
+    expect(manager.switchCredential).toHaveBeenCalledWith('s1')
+  })
+
   it('does nothing when there is no stored key (or no provider)', async () => {
     const vault = fakeVault(undefined) // no key
     const store = new EventStore()

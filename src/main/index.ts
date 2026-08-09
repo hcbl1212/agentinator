@@ -174,6 +174,10 @@ export function registerCredentialsIpc(
     const key = providerId === undefined ? undefined : vault.get(providerId)
     return key === undefined ? undefined : manager.switchCredential(sessionId as string, key)
   })
+  // Back to the default (subscription) login — no key.
+  handle('agent:switch-subscription', (_event, sessionId) =>
+    manager.switchCredential(sessionId as string),
+  )
 }
 
 /** Encrypt credentials with the OS keychain via Electron safeStorage. */

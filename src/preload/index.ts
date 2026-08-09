@@ -35,6 +35,8 @@ export const bridge: AgentinatorBridge = {
     dismiss: (sessionId) => ipcRenderer.invoke('agent:dismiss', sessionId) as Promise<void>,
     switchToApiKey: (sessionId) =>
       ipcRenderer.invoke('agent:switch-credential', sessionId) as Promise<void>,
+    switchToSubscription: (sessionId) =>
+      ipcRenderer.invoke('agent:switch-subscription', sessionId) as Promise<void>,
   },
   credentials: {
     set: (providerId, key, persist) =>

@@ -26,13 +26,16 @@ function stubBridge(): {
   emit: (event: StoredEvent) => void
   dismiss: ReturnType<typeof vi.fn>
   switchToApiKey: ReturnType<typeof vi.fn>
+  switchToSubscription: ReturnType<typeof vi.fn>
 } {
   const listeners: ((event: StoredEvent) => void)[] = []
   const dismiss = vi.fn(() => Promise.resolve())
   const switchToApiKey = vi.fn(() => Promise.resolve())
+  const switchToSubscription = vi.fn(() => Promise.resolve())
   return {
     dismiss,
     switchToApiKey,
+    switchToSubscription,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
@@ -47,7 +50,7 @@ function stubBridge(): {
           return () => undefined
         }),
       },
-      agent: { dismiss, switchToApiKey },
+      agent: { dismiss, switchToApiKey, switchToSubscription },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -268,6 +271,28 @@ describe('AgentRail', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Switch Count files to API key' }))
 
     expect(stub.switchToApiKey).toHaveBeenCalledWith('session_a')
+  })
+
+  it('toggles a metered agent back to the subscription', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files', 'claude'))
+      stub.emit({
+        seq: 1,
+        ts: 't',
+        type: 'session.auth',
+        payload: { sessionId: 'session_a', source: 'user' },
+      })
+    })
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Switch Count files to subscription' }),
+    )
+
+    expect(stub.switchToSubscription).toHaveBeenCalledWith('session_a')
   })
 
   it('marks a failed agent with an error status and keeps it in the rail', () => {

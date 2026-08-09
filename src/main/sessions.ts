@@ -306,10 +306,11 @@ export class SessionManager {
     }
   }
 
-  /** Reconnect a session under a metered API key (after a plan limit). Stops the
-   * old subscription-authed stream without ending the session, then resumes it
-   * with the key so the agent keeps its place and continues on the API. */
-  async switchCredential(sessionId: string, apiKey: string): Promise<void> {
+  /** Reconnect a session under a different credential without ending it: pass a
+   * metered API key to switch onto the API, or omit it to return to the
+   * default (subscription) login. The old stream is stopped quietly so the
+   * agent keeps its place. */
+  async switchCredential(sessionId: string, apiKey?: string): Promise<void> {
     const handle = this.#handles.get(sessionId)
     if (handle !== undefined) {
       this.#switching.add(sessionId)

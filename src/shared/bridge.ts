@@ -58,6 +58,8 @@ export interface AgentinatorBridge {
     /** Reconnect an agent onto its provider's stored metered API key (after a
      * plan limit), keeping its place in the fleet. */
     switchToApiKey(sessionId: string): Promise<void>
+    /** Reconnect an agent back onto its subscription login. */
+    switchToSubscription(sessionId: string): Promise<void>
   }
   /** Metered API keys for switching off a subscription. Write-only from the
    * renderer — keys go in and are checked, but can never be read back out. */

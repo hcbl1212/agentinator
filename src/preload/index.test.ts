@@ -118,11 +118,13 @@ describe('preload bridge', () => {
 
   it('routes credential set/has/clear and the API-key switch over IPC', async () => {
     await bridge.agent.switchToApiKey('session_9')
+    await bridge.agent.switchToSubscription('session_9')
     await bridge.credentials.set('claude', 'sk-123', true)
     await bridge.credentials.has('claude')
     await bridge.credentials.clear('claude')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:switch-credential', 'session_9')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:switch-subscription', 'session_9')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('credentials:set', 'claude', 'sk-123', true)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('credentials:has', 'claude')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('credentials:clear', 'claude')

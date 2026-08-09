@@ -23,6 +23,18 @@ describe('reduceSession', () => {
     expect(reduceSession(one, started('a', 'A', 'claude'))).toEqual(one)
   })
 
+  it('marks a session metered on session.auth and clears it on subscription', () => {
+    let list = reduceSession([], started('a', 'A'))
+    list = reduceSession(list, ev('session.auth', { sessionId: 'a', source: 'user' }))
+    expect(list[0]?.metered).toBe(true)
+    list = reduceSession(list, ev('session.auth', { sessionId: 'a', source: 'none' }))
+    expect(list[0]?.metered).toBe(false)
+    // An auth event for an unknown session is a no-op.
+    expect(reduceSession(list, ev('session.auth', { sessionId: 'nope', source: 'user' }))).toEqual(
+      list,
+    )
+  })
+
   it('accumulates per-agent spend on cost.usage, matching only the right id', () => {
     let list = reduceSession([], started('a', 'A'))
     list = reduceSession(list, ev('cost.usage', { sessionId: 'a', usd: 0.05 }))

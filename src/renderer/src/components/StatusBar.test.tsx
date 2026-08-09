@@ -51,6 +51,7 @@ function stubBridge(
         cancel: vi.fn(() => Promise.resolve()),
         dismiss: vi.fn(() => Promise.resolve()),
         switchToApiKey: vi.fn(() => Promise.resolve()),
+        switchToSubscription: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),

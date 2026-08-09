@@ -16,6 +16,9 @@ export interface SessionInfo {
   /** This agent's own spend so far — per-agent lives here, not the (global)
    * status bar. */
   costUsd: number
+  /** True once the agent is running on a metered API key rather than the
+   * subscription — drives the rail's switch toggle. */
+  metered?: boolean
 }
 
 /**
@@ -62,6 +65,14 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
       const payload = event.payload as EventPayloads['session.model']
       return sessions.map((session) =>
         session.id === payload.sessionId ? { ...session, model: payload.model } : session,
+      )
+    }
+    case 'session.auth': {
+      const payload = event.payload as EventPayloads['session.auth']
+      return sessions.map((session) =>
+        session.id === payload.sessionId
+          ? { ...session, metered: payload.source !== 'none' }
+          : session,
       )
     }
     case 'session.ended': {
