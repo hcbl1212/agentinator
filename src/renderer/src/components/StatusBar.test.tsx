@@ -50,11 +50,17 @@ function stubBridge(
         send: vi.fn(() => Promise.resolve()),
         cancel: vi.fn(() => Promise.resolve()),
         dismiss: vi.fn(() => Promise.resolve()),
+        switchToApiKey: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),
         resolve: vi.fn(() => Promise.resolve()),
         undo: vi.fn(() => Promise.resolve()),
+      },
+      credentials: {
+        set: vi.fn(() => Promise.resolve()),
+        has: vi.fn(() => Promise.resolve(false)),
+        clear: vi.fn(() => Promise.resolve()),
       },
     },
     emit: (event) => appended?.(event),

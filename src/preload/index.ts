@@ -33,6 +33,14 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('agent:send', sessionId, text, images) as Promise<void>,
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
     dismiss: (sessionId) => ipcRenderer.invoke('agent:dismiss', sessionId) as Promise<void>,
+    switchToApiKey: (sessionId) =>
+      ipcRenderer.invoke('agent:switch-credential', sessionId) as Promise<void>,
+  },
+  credentials: {
+    set: (providerId, key, persist) =>
+      ipcRenderer.invoke('credentials:set', providerId, key, persist) as Promise<void>,
+    has: (providerId) => ipcRenderer.invoke('credentials:has', providerId) as Promise<boolean>,
+    clear: (providerId) => ipcRenderer.invoke('credentials:clear', providerId) as Promise<void>,
   },
   settings: {
     getBudgets: () =>

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EventStore } from './eventStore'
 
-const { mockApp, MockBrowserWindow, mockShell, mockIpcMain } = vi.hoisted(() => {
+const { mockApp, MockBrowserWindow, mockShell, mockIpcMain, mockSafeStorage } = vi.hoisted(() => {
   type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
 
   class MockBrowserWindow {
@@ -40,6 +40,11 @@ const { mockApp, MockBrowserWindow, mockShell, mockIpcMain } = vi.hoisted(() => 
     },
     mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
     mockIpcMain: { handle: vi.fn() },
+    mockSafeStorage: {
+      isEncryptionAvailable: vi.fn(() => true),
+      encryptString: vi.fn((s: string) => Buffer.from(s, 'utf8')),
+      decryptString: vi.fn((b: Buffer) => b.toString('utf8')),
+    },
   }
 })
 
@@ -48,6 +53,7 @@ vi.mock('electron', () => ({
   BrowserWindow: MockBrowserWindow,
   shell: mockShell,
   ipcMain: mockIpcMain,
+  safeStorage: mockSafeStorage,
 }))
 
 // The SDK spawns a CLI when queried; tests must never construct the real one.
@@ -61,10 +67,13 @@ import {
   makeEmitStored,
   registerAgentIpc,
   registerApprovalIpc,
+  registerCredentialsIpc,
   registerEventIpc,
   registerSettingsIpc,
+  safeEncryptor,
   taskTitle,
 } from './index'
+import type { CredentialVault } from './credentials'
 import type { SessionManager } from './sessions'
 import type { SettingsStore } from './settingsStore'
 
@@ -94,6 +103,10 @@ function fakeSettings(): SettingsStore {
   return {
     budgets: vi.fn(() => ({ session: 5, hour: null, day: null, week: null, month: null })),
     setBudget: vi.fn(),
+    secrets: vi.fn(() => []),
+    saveSecret: vi.fn(),
+    readSecret: vi.fn(),
+    deleteSecret: vi.fn(),
     close: vi.fn(),
   } as unknown as SettingsStore
 }
@@ -185,6 +198,7 @@ describe('registerAgentIpc', () => {
     send: ReturnType<typeof vi.fn>
     cancel: ReturnType<typeof vi.fn>
     dismiss: ReturnType<typeof vi.fn>
+    switchCredential: ReturnType<typeof vi.fn>
     describeProvider: ReturnType<typeof vi.fn>
   } {
     return {
@@ -192,6 +206,7 @@ describe('registerAgentIpc', () => {
       send: vi.fn(() => Promise.resolve()),
       cancel: vi.fn(() => Promise.resolve()),
       dismiss: vi.fn(() => Promise.resolve()),
+      switchCredential: vi.fn(() => Promise.resolve()),
       describeProvider: vi.fn(() => ({ providerId: 'claude', label: 'Claude' })),
     }
   }
@@ -311,6 +326,93 @@ describe('registerAgentIpc', () => {
     handlers.get('agent:dismiss')?.(undefined, 'session_x')
 
     expect(manager.dismiss).toHaveBeenCalledWith('session_x')
+  })
+})
+
+describe('registerCredentialsIpc', () => {
+  function fakeVault(key: string | undefined): {
+    set: ReturnType<typeof vi.fn>
+    has: ReturnType<typeof vi.fn>
+    get: ReturnType<typeof vi.fn>
+    clear: ReturnType<typeof vi.fn>
+  } {
+    return {
+      set: vi.fn(),
+      has: vi.fn(() => true),
+      get: vi.fn(() => key),
+      clear: vi.fn(),
+    }
+  }
+
+  function wire(vault: ReturnType<typeof fakeVault>, store: EventStore) {
+    const manager = { switchCredential: vi.fn(() => Promise.resolve()) }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+    registerCredentialsIpc(
+      vault as unknown as CredentialVault,
+      manager as unknown as SessionManager,
+      store,
+      (channel, listener) => handlers.set(channel, listener),
+    )
+    return { manager, handlers }
+  }
+
+  it('sets, checks, and clears credentials', () => {
+    const vault = fakeVault('sk-live')
+    const { handlers } = wire(vault, new EventStore())
+
+    handlers.get('credentials:set')?.(undefined, 'claude', 'sk-123', true)
+    expect(vault.set).toHaveBeenCalledWith('claude', 'sk-123', true)
+    expect(handlers.get('credentials:has')?.(undefined, 'claude')).toBe(true)
+    handlers.get('credentials:clear')?.(undefined, 'claude')
+    expect(vault.clear).toHaveBeenCalledWith('claude')
+  })
+
+  it('switches a session onto its provider’s stored key', async () => {
+    const store = new EventStore()
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+    })
+    const vault = fakeVault('sk-live')
+    const { manager, handlers } = wire(vault, store)
+
+    await handlers.get('agent:switch-credential')?.(undefined, 's1')
+
+    expect(vault.get).toHaveBeenCalledWith('claude')
+    expect(manager.switchCredential).toHaveBeenCalledWith('s1', 'sk-live')
+    store.close()
+  })
+
+  it('does nothing when there is no stored key (or no provider)', async () => {
+    const vault = fakeVault(undefined) // no key
+    const store = new EventStore()
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+    })
+    const withKey = wire(vault, store)
+    await withKey.handlers.get('agent:switch-credential')?.(undefined, 's1')
+    expect(withKey.manager.switchCredential).not.toHaveBeenCalled()
+
+    // No session.started (unknown provider) → also a no-op.
+    const noProvider = wire(fakeVault('sk-live'), new EventStore())
+    await noProvider.handlers.get('agent:switch-credential')?.(undefined, 'missing')
+    expect(noProvider.manager.switchCredential).not.toHaveBeenCalled()
+    store.close()
+  })
+})
+
+describe('safeEncryptor', () => {
+  it('round-trips through the OS keychain (safeStorage)', () => {
+    const enc = safeEncryptor()
+    expect(enc.available).toBe(true)
+    expect(enc.decrypt(enc.encrypt('sk-secret'))).toBe('sk-secret')
   })
 })
 

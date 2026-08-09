@@ -55,6 +55,18 @@ export interface AgentinatorBridge {
     /** Remove an agent from the fleet: stop it if live, then drop it from the
      * rail (records the close so a restart doesn't resurrect it). */
     dismiss(sessionId: string): Promise<void>
+    /** Reconnect an agent onto its provider's stored metered API key (after a
+     * plan limit), keeping its place in the fleet. */
+    switchToApiKey(sessionId: string): Promise<void>
+  }
+  /** Metered API keys for switching off a subscription. Write-only from the
+   * renderer — keys go in and are checked, but can never be read back out. */
+  credentials: {
+    /** Store a key for a provider; `persist` also saves it to the OS keychain. */
+    set(providerId: string, key: string, persist: boolean): Promise<void>
+    /** Whether a key is available for a provider (never returns the key). */
+    has(providerId: string): Promise<boolean>
+    clear(providerId: string): Promise<void>
   }
   settings: {
     /** Spend ceilings per scope (session + time windows). */

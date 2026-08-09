@@ -1,12 +1,14 @@
 import { join } from 'node:path'
 
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
-import type { ImageAttachment, StoredEvent } from '../shared/events'
+import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
+import { CredentialVault } from './credentials'
+import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
 import { SettingsStore } from './settingsStore'
 import { createClaudeProvider } from './providers/claude'
@@ -143,6 +145,46 @@ export function registerApprovalIpc(
   })
 }
 
+/** The provider id a session ran under, from its opening event. */
+function providerIdForSession(store: EventStore, sessionId: string): string | undefined {
+  const started = store.listBySession(sessionId).find((event) => event.type === 'session.started')
+    ?.payload as EventPayloads['session.started'] | undefined
+  return started?.providerId
+}
+
+export function registerCredentialsIpc(
+  vault: CredentialVault,
+  manager: SessionManager,
+  store: EventStore,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('credentials:set', (_event, providerId, key, persist) => {
+    vault.set(providerId as string, key as string, persist === true)
+  })
+  handle('credentials:has', (_event, providerId) => vault.has(providerId as string))
+  handle('credentials:clear', (_event, providerId) => {
+    vault.clear(providerId as string)
+  })
+  // Switch an agent onto its provider's stored key — the key stays in the main
+  // process; the renderer only names the session.
+  handle('agent:switch-credential', (_event, sessionId) => {
+    const providerId = providerIdForSession(store, sessionId as string)
+    const key = providerId === undefined ? undefined : vault.get(providerId)
+    return key === undefined ? undefined : manager.switchCredential(sessionId as string, key)
+  })
+}
+
+/** Encrypt credentials with the OS keychain via Electron safeStorage. */
+export function safeEncryptor(): Encryptor {
+  return {
+    available: safeStorage.isEncryptionAvailable(),
+    encrypt: (plain) => safeStorage.encryptString(plain).toString('base64'),
+    decrypt: (cipher) => safeStorage.decryptString(Buffer.from(cipher, 'base64')),
+  }
+}
+
 export function broadcastEvent(event: StoredEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('events:appended', event)
@@ -165,6 +207,7 @@ export async function bootstrap(
   env: Record<string, string | undefined> = process.env,
   replay: typeof replayFixture = replayFixture,
   createSettings: (dbPath: string) => SettingsStore = (dbPath) => new SettingsStore(dbPath),
+  createEncryptor: () => Encryptor = safeEncryptor,
 ): Promise<EventStore> {
   await electronApp.whenReady()
 
@@ -205,6 +248,7 @@ export async function bootstrap(
   }
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
+  registerCredentialsIpc(new CredentialVault(settings, createEncryptor()), manager, store)
 
   createWindow()
   if (replayPath !== undefined) {
