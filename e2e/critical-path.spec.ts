@@ -13,8 +13,15 @@ import type { ElectronApplication, Page } from '@playwright/test'
  */
 async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
   const userData = mkdtempSync(join(tmpdir(), 'agentinator-e2e-'))
+  // Against the dev build (out/) by default, or the packaged .app binary when
+  // AGENTINATOR_E2E_BINARY is set — the release pipeline's gate on the shipped
+  // artifact.
+  const binary = process.env['AGENTINATOR_E2E_BINARY']
+  const launch = binary
+    ? { executablePath: binary, args: [`--user-data-dir=${userData}`] }
+    : { args: ['out/main/entry.js', `--user-data-dir=${userData}`] }
   const app = await electron.launch({
-    args: ['out/main/entry.js', `--user-data-dir=${userData}`],
+    ...launch,
     env: { ...process.env, AGENTINATOR_MOCK_TASKS: '1' },
   })
   const page = await app.firstWindow()

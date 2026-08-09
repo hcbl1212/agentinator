@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "The visual harness for developing with AI — a mission-control cockpit for AI coding agents.",
   "license": "GPL-3.0-only",
+  "author": "hcbl1212",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hcbl1212/agentinator.git"
@@ -14,6 +15,8 @@
     "prepare": "lefthook install",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "package": "electron-vite build && electron-builder --mac",
+    "package:dir": "electron-vite build && electron-builder --mac --dir",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -45,6 +48,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "^4.1.10",
     "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^10.8.1",
     "jsdom": "^29.1.1",

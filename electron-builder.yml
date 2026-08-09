@@ -1,0 +1,22 @@
+appId: com.hcbl1212.agentinator
+productName: Agentinator
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# The Claude Agent SDK spawns a CLI subprocess, so keep it on the real
+# filesystem rather than inside the asar archive.
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk/**
+# node:sqlite is built in — nothing to rebuild against Electron's ABI.
+npmRebuild: false
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  # Unsigned for now; signing + notarization credentials arrive later (see
+  # RELEASE.md). electron-builder still produces a runnable local artifact.
+  identity: null

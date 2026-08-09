@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package + release (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Unsigned for now (electron-builder.yml sets mac.identity: null). Signing
+      # + notarization plug in here once credentials exist — see RELEASE.md.
+      - name: Build + package
+        run: npm run package
+
+      # Gate the release on the SHIPPED artifact, not just the dev build.
+      - name: E2E against the packaged app
+        run: |
+          binary=$(find dist -type f -path '*/MacOS/Agentinator' | head -1)
+          echo "Driving $binary"
+          AGENTINATOR_E2E_BINARY="$PWD/$binary" npx playwright test
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
