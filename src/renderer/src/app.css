@@ -779,7 +779,8 @@ body {
   position: relative;
 }
 
-.budget-panel {
+.budget-panel,
+.credentials-panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -790,6 +791,59 @@ body {
   right: 0.9rem;
   width: 15rem;
   z-index: 5;
+}
+
+.credentials-panel {
+  width: 18rem;
+}
+
+.credential-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+
+.credential-label {
+  color: var(--soft);
+  font-size: 0.8rem;
+}
+
+.credential-saved {
+  color: var(--ok);
+  font-size: 0.7rem;
+}
+
+.credential-input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.credential-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.credential-save,
+.credential-clear {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.credential-save:hover,
+.credential-clear:hover {
+  border-color: var(--soft);
 }
 
 .budget-panel-head {

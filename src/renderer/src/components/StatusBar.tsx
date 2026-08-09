@@ -5,6 +5,7 @@ import type { Budgets, BudgetScope } from '../../../shared/budget'
 import type { EventPayloads } from '../../../shared/events'
 import type { AccountUsage } from '../../../shared/usage'
 import { BudgetPanel } from './BudgetPanel'
+import { CredentialsPanel } from './CredentialsPanel'
 
 const SHORT_WINDOW: Record<string, string> = { five_hour: '5h', seven_day: '7d' }
 
@@ -22,6 +23,7 @@ export function StatusBar(): React.JSX.Element {
   const [usage, setUsage] = useState<AccountUsage | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [editingKeys, setEditingKeys] = useState(false)
 
   useEffect(() => {
     const bridge = window.agentinator
@@ -100,10 +102,19 @@ export function StatusBar(): React.JSX.Element {
       >
         {loaded ? 'budgets' : 'budget —'}
       </button>
+      <button
+        type="button"
+        className="budget budget-button"
+        title="API keys — for switching an agent off its subscription"
+        onClick={() => setEditingKeys(true)}
+      >
+        keys
+      </button>
       <span className="statusbar-right">v0.1.0</span>
       {editing && loaded && (
         <BudgetPanel budgets={budgets} onChange={changeBudget} onClose={() => setEditing(false)} />
       )}
+      {editingKeys && <CredentialsPanel onClose={() => setEditingKeys(false)} />}
     </footer>
   )
 }

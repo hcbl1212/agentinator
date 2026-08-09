@@ -153,6 +153,23 @@ describe('StatusBar', () => {
     expect(screen.queryByRole('dialog', { name: 'Budget settings' })).not.toBeInTheDocument()
   })
 
+  it('opens the API keys panel', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+    const user = userEvent.setup()
+
+    render(<StatusBar />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'keys' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'keys' }))
+    expect(screen.getByRole('dialog', { name: 'API keys' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Close API keys' }))
+    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument()
+  })
+
   it('shows the plan gauge (incl. per-model windows) and marks spend as an estimate', async () => {
     const stub = stubBridge({ total: 2.3 })
     window.agentinator = stub.bridge
