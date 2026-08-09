@@ -75,11 +75,16 @@ describe('SessionManager', () => {
 
     const sessionId = manager.start({ providerId: 'a', title: 'T', prompt: 'P', cwd: '/tmp' })
 
-    expect(store.count()).toBe(2)
+    expect(store.count()).toBe(3)
     expect(store.list()[0]?.type).toBe('session.started')
     expect(store.list()[0]?.payload).toMatchObject({ sessionId, title: 'T' })
-    // The opening prompt is logged right after the session starts.
-    expect(forwarded.map((event) => event.type)).toEqual(['session.started', 'user.message'])
+    // The opening prompt, then the credential the session runs on.
+    expect(forwarded.map((event) => event.type)).toEqual([
+      'session.started',
+      'user.message',
+      'session.credential',
+    ])
+    expect(forwarded[2]?.payload).toMatchObject({ sessionId, metered: false })
   })
 
   it('generates workspace and agent ids when not supplied, and honors them when given', () => {
@@ -632,7 +637,7 @@ describe('SessionManager', () => {
       expect(types.at(-1)).toBe('session.ended')
     })
 
-    // 10 provider events + the opening prompt logged as a user message.
-    expect(store.count()).toBe(11)
+    // 10 provider events + the opening prompt + the credential mode.
+    expect(store.count()).toBe(12)
   })
 })

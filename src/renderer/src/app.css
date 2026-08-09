@@ -971,9 +971,28 @@ body {
 }
 
 .rail-agent-vendor {
+  align-items: center;
   color: var(--faint);
+  display: flex;
   font-size: 0.7rem;
+  gap: 0.4rem;
   padding-left: 0.95rem;
+}
+
+/* Per-agent credential mode — plan (faint) vs API key (accent). */
+.rail-agent-mode {
+  background: var(--line);
+  border-radius: 3px;
+  color: var(--faint);
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  padding: 0 0.28rem;
+  text-transform: uppercase;
+}
+
+.rail-agent-mode.is-metered {
+  background: rgba(53, 194, 165, 0.18);
+  color: var(--accent);
 }
 
 .rail-agent:hover,

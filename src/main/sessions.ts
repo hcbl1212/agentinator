@@ -160,6 +160,7 @@ export class SessionManager {
       return sessionId
     }
 
+    const apiKey = this.#resolveApiKey(options.providerId)
     const handle = provider.startSession(
       {
         sessionId,
@@ -170,7 +171,7 @@ export class SessionManager {
         cwd: options.cwd,
         model: options.model,
         images: options.images,
-        apiKey: this.#resolveApiKey(options.providerId),
+        apiKey,
       },
       this.#sessionEmitter(sessionId, options.providerId),
     )
@@ -188,6 +189,9 @@ export class SessionManager {
           ? { sessionId, text: options.prompt, imageCount }
           : { sessionId, text: options.prompt },
       ),
+    )
+    this.#emit(
+      this.#store.append('session.credential', { sessionId, metered: apiKey !== undefined }),
     )
     this.#handles.set(sessionId, handle)
     return sessionId
@@ -269,6 +273,9 @@ export class SessionManager {
       }
       return []
     })
+    // An explicit switch wins; otherwise a reopened session follows the global
+    // "run on the API key" setting (undefined = subscription).
+    const apiKey = override === undefined ? this.#resolveApiKey(providerId) : override.apiKey
     const handle = provider.startSession(
       {
         sessionId,
@@ -280,7 +287,7 @@ export class SessionManager {
         resume: { token: resumable?.resumeToken, turns },
         // An explicit switch wins; otherwise a reopened session follows the
         // global "run on the API key" setting (undefined = subscription).
-        apiKey: override === undefined ? this.#resolveApiKey(providerId) : override.apiKey,
+        apiKey,
       },
       this.#sessionEmitter(sessionId, providerId),
     )
@@ -289,6 +296,9 @@ export class SessionManager {
     }
     this.#handles.set(sessionId, handle)
     this.#emit(this.#store.append('session.resumed', { sessionId }))
+    this.#emit(
+      this.#store.append('session.credential', { sessionId, metered: apiKey !== undefined }),
+    )
     return handle
   }
 

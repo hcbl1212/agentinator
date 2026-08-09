@@ -51,6 +51,10 @@ export interface EventPayloads {
   /** Which credential the provider authenticated with — surfaced so switching
    * an agent onto a metered API key is visible. */
   'session.auth': { sessionId: string; source: string }
+  /** The credential the manager handed the session — emitted immediately on
+   * start/resume/switch so the rail toggle reflects the choice at once, before
+   * the provider confirms it via session.auth. */
+  'session.credential': { sessionId: string; metered: boolean }
   /** A vendor-native token that can reopen this conversation after a restart
    * (e.g. the Claude SDK session id). Persisted so resume survives the app. */
   'session.resumable': { sessionId: string; resumeToken: string }

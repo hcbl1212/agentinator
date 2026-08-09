@@ -11,6 +11,7 @@ const INTERNAL_TYPES = new Set([
   'session.model',
   'account.usage',
   'account.limit',
+  'session.credential',
 ])
 
 /**

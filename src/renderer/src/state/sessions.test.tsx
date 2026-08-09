@@ -35,6 +35,18 @@ describe('reduceSession', () => {
     )
   })
 
+  it('reflects the credential mode from session.credential (immediate)', () => {
+    let list = reduceSession([], started('a', 'A'))
+    list = reduceSession(list, ev('session.credential', { sessionId: 'a', metered: true }))
+    expect(list[0]?.metered).toBe(true)
+    list = reduceSession(list, ev('session.credential', { sessionId: 'a', metered: false }))
+    expect(list[0]?.metered).toBe(false)
+    // A credential event for an unknown session is a no-op.
+    expect(
+      reduceSession(list, ev('session.credential', { sessionId: 'nope', metered: true })),
+    ).toEqual(list)
+  })
+
   it('accumulates per-agent spend on cost.usage, matching only the right id', () => {
     let list = reduceSession([], started('a', 'A'))
     list = reduceSession(list, ev('cost.usage', { sessionId: 'a', usd: 0.05 }))

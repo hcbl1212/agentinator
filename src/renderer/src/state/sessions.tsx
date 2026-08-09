@@ -75,6 +75,12 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
           : session,
       )
     }
+    case 'session.credential': {
+      const payload = event.payload as EventPayloads['session.credential']
+      return sessions.map((session) =>
+        session.id === payload.sessionId ? { ...session, metered: payload.metered } : session,
+      )
+    }
     case 'session.ended': {
       const payload = event.payload as EventPayloads['session.ended']
       // A failure stays in the rail (red) so it's noticed; the user clears it

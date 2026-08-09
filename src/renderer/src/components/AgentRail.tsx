@@ -77,7 +77,12 @@ export function AgentRail(): React.JSX.Element {
                 </span>
                 {session.providerId !== undefined && (
                   <span className="rail-agent-vendor">
-                    {vendorLabel(session.providerId, session.model)}
+                    <span>{vendorLabel(session.providerId, session.model)}</span>
+                    <span
+                      className={`rail-agent-mode${session.metered === true ? ' is-metered' : ''}`}
+                    >
+                      {session.metered === true ? 'API key' : 'plan'}
+                    </span>
                   </span>
                 )}
               </button>
