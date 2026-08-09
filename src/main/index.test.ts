@@ -244,7 +244,7 @@ describe('registerAgentIpc', () => {
     })
   })
 
-  it('drives the mock provider for tasks when AGENTINATOR_MOCK_TASKS is set (e2e mode)', () => {
+  it('drives the e2e provider for tasks when AGENTINATOR_MOCK_TASKS is set (e2e mode)', () => {
     vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -254,7 +254,7 @@ describe('registerAgentIpc', () => {
     })
     handlers.get('agent:start-task')?.(undefined, 'Add a hello util')
 
-    expect(manager.start).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'mock' }))
+    expect(manager.start).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'e2e' }))
   })
 
   it('routes a follow-up message to the session manager', () => {
@@ -486,6 +486,27 @@ describe('bootstrap', () => {
     const sessionId = startDemo(undefined)
     expect(settings.budgets).toHaveBeenCalled()
     await cancel(undefined, sessionId) // stop the scripted session's timers
+  })
+
+  it('registers the e2e provider and routes tasks to it under AGENTINATOR_MOCK_TASKS', async () => {
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const store = await bootstrap(
+      mockApp as never,
+      (path) => new EventStore(path),
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+    )
+
+    try {
+      const current = mockIpcMain.handle.mock.calls.find(
+        ([channel]) => channel === 'agent:current',
+      )?.[1] as (event: unknown) => unknown
+      expect(current(undefined)).toEqual({ providerId: 'e2e', label: 'E2E' })
+    } finally {
+      store.close()
+    }
   })
 
   it('quits the app when the last window closes, on every platform', async () => {

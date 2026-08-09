@@ -11,6 +11,7 @@ import { EventStore } from './eventStore'
 import { SettingsStore } from './settingsStore'
 import { createClaudeProvider } from './providers/claude'
 import type { ClaudeQuery } from './providers/claude'
+import { createE2eProvider } from './providers/e2e'
 import { createMockProvider } from './providers/mock'
 import { replayFixture } from './replay'
 import { SessionManager } from './sessions'
@@ -73,7 +74,7 @@ export function registerAgentIpc(
   // The provider a "Run task" uses. Swapping this (or making it user-selected)
   // is all it takes to point the UI at another vendor. The e2e sets
   // AGENTINATOR_MOCK_TASKS to drive the deterministic mock with no network.
-  const taskProvider = process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'mock' : 'claude'
+  const taskProvider = process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'e2e' : 'claude'
   handle(
     'agent:current',
     () =>
@@ -191,6 +192,10 @@ export async function bootstrap(
   })
   manager.register(createMockProvider(undefined, undefined, decide))
   manager.register(createClaudeProvider(claudeQuery, decide))
+  // The deterministic, no-network agent the Playwright e2e drives.
+  if (env['AGENTINATOR_MOCK_TASKS'] === '1') {
+    manager.register(createE2eProvider(decide))
+  }
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
 
