@@ -52,6 +52,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         startTask: startTask,
         send: send,
         cancel: vi.fn(() => Promise.resolve()),
+        dismiss: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),

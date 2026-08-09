@@ -72,7 +72,10 @@ import type { SettingsStore } from './settingsStore'
 // before any code can open a store: every getPath call lands in a temp dir.
 mockApp.getPath.mockReturnValue(mkdtempSync(join(tmpdir(), 'agentinator-test-')))
 
-function fakeStore(openSessions: string[] = []): EventStore {
+function fakeStore(
+  openSessions: string[] = [],
+  sessionEvents: Record<string, { type: string }[]> = {},
+): EventStore {
   return {
     append: vi.fn(),
     count: vi.fn(() => 42),
@@ -82,6 +85,7 @@ function fakeStore(openSessions: string[] = []): EventStore {
     tail: vi.fn(() => []),
     search: vi.fn(() => []),
     openSessionIds: vi.fn(() => openSessions),
+    listBySession: vi.fn((id: string) => sessionEvents[id] ?? []),
     close: vi.fn(),
   } as unknown as EventStore
 }
@@ -180,12 +184,14 @@ describe('registerAgentIpc', () => {
     start: ReturnType<typeof vi.fn>
     send: ReturnType<typeof vi.fn>
     cancel: ReturnType<typeof vi.fn>
+    dismiss: ReturnType<typeof vi.fn>
     describeProvider: ReturnType<typeof vi.fn>
   } {
     return {
       start: vi.fn(() => 'session_new'),
       send: vi.fn(() => Promise.resolve()),
       cancel: vi.fn(() => Promise.resolve()),
+      dismiss: vi.fn(() => Promise.resolve()),
       describeProvider: vi.fn(() => ({ providerId: 'claude', label: 'Claude' })),
     }
   }
@@ -291,7 +297,20 @@ describe('registerAgentIpc', () => {
       'agent:start-task',
       'agent:send',
       'agent:cancel',
+      'agent:dismiss',
     ])
+  })
+
+  it('routes a dismiss to the session manager', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    handlers.get('agent:dismiss')?.(undefined, 'session_x')
+
+    expect(manager.dismiss).toHaveBeenCalledWith('session_x')
   })
 })
 
@@ -422,8 +441,8 @@ describe('bootstrap', () => {
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
 
-  it('marks sessions left open by a previous run idle so they are resumable', async () => {
-    const store = fakeStore(['session_open'])
+  it('marks a still-running session left open by a previous run idle', async () => {
+    const store = fakeStore(['session_open'], { session_open: [{ type: 'user.message' }] })
     const createStore = vi.fn(() => store)
 
     await bootstrap(mockApp as never, createStore, undefined, undefined, undefined, () =>
@@ -431,6 +450,17 @@ describe('bootstrap', () => {
     )
 
     expect(store.append).toHaveBeenCalledWith('session.idle', { sessionId: 'session_open' })
+  })
+
+  it('leaves an already-idle open session alone across a restart', async () => {
+    const store = fakeStore(['session_idle'], { session_idle: [{ type: 'session.idle' }] })
+    const createStore = vi.fn(() => store)
+
+    await bootstrap(mockApp as never, createStore, undefined, undefined, undefined, () =>
+      fakeSettings(),
+    )
+
+    expect(store.append).not.toHaveBeenCalledWith('session.idle', { sessionId: 'session_idle' })
   })
 
   it('defaults to the real electron app and file-backed stores', async () => {

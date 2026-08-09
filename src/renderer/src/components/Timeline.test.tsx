@@ -61,6 +61,7 @@ function stubBridge(
         startTask: vi.fn(() => Promise.resolve('s')),
         send: vi.fn(() => Promise.resolve()),
         cancel: vi.fn(() => Promise.resolve()),
+        dismiss: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),

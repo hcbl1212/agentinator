@@ -32,6 +32,7 @@ export const bridge: AgentinatorBridge = {
     send: (sessionId, text, images) =>
       ipcRenderer.invoke('agent:send', sessionId, text, images) as Promise<void>,
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
+    dismiss: (sessionId) => ipcRenderer.invoke('agent:dismiss', sessionId) as Promise<void>,
   },
   settings: {
     getBudgets: () =>

@@ -91,12 +91,13 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith('events:appended', wrapped)
   })
 
-  it('routes agent.current, startDemo, startTask, send, and cancel over IPC', async () => {
+  it('routes agent.current, startDemo, startTask, send, cancel, and dismiss over IPC', async () => {
     await bridge.agent.current()
     await bridge.agent.startDemo()
     await bridge.agent.startTask('do the thing')
     await bridge.agent.send('session_9', 'keep going')
     await bridge.agent.cancel('session_9')
+    await bridge.agent.dismiss('session_9')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:current')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:start-demo')
@@ -112,6 +113,7 @@ describe('preload bridge', () => {
       undefined,
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:dismiss', 'session_9')
   })
 
   it('routes approvals over IPC', async () => {

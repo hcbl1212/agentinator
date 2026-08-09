@@ -21,9 +21,15 @@ function Selector({ id }: { id: string }): React.JSX.Element {
   )
 }
 
-function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) => void } {
+function stubBridge(): {
+  bridge: AgentinatorBridge
+  emit: (event: StoredEvent) => void
+  dismiss: ReturnType<typeof vi.fn>
+} {
   const listeners: ((event: StoredEvent) => void)[] = []
+  const dismiss = vi.fn(() => Promise.resolve())
   return {
+    dismiss,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
@@ -38,8 +44,13 @@ function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) =
           return () => undefined
         }),
       },
+      agent: { dismiss },
     } as unknown as AgentinatorBridge,
   }
+}
+
+function ended(sessionId: string, outcome: 'completed' | 'cancelled' | 'failed'): StoredEvent {
+  return { seq: 1, ts: 't', type: 'session.ended', payload: { sessionId, outcome } }
 }
 
 function started(sessionId: string, title: string, providerId?: string): StoredEvent {
@@ -91,12 +102,12 @@ describe('AgentRail', () => {
 
     // The provider shows per agent (capitalized); agents without one omit it.
     expect(screen.getByText('Claude')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Count files/ })).toBeInTheDocument()
-    const second = screen.getByRole('button', { name: /Fix header/ })
+    expect(screen.getByRole('button', { name: /^Count files/ })).toBeInTheDocument()
+    const second = screen.getByRole('button', { name: /^Fix header/ })
     await userEvent.click(second)
 
     expect(second).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -110,14 +121,14 @@ describe('AgentRail', () => {
     act(() => {
       stub.emit(started('session_a', 'Count files'))
     })
-    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
-    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+    await userEvent.click(screen.getByRole('button', { name: /^Count files/ }))
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'New agent' }))
-    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -164,10 +175,74 @@ describe('AgentRail', () => {
     })
 
     // The new agent stays selected — never yanked to the old one.
-    expect(screen.getByRole('button', { name: /New task/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /Old task/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^New task/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^Old task/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
+  })
+
+  it('removes an agent and drops the selection when it was the one showing', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+    })
+    await userEvent.click(screen.getByRole('button', { name: /^Count files/ }))
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Count files' }))
+
+    expect(stub.dismiss).toHaveBeenCalledWith('session_a')
+    // Selection was released, so the row is no longer highlighted.
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('removing a different agent leaves the current selection intact', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+      stub.emit(started('session_b', 'Fix header'))
+    })
+    await userEvent.click(screen.getByRole('button', { name: /^Count files/ }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Fix header' }))
+
+    expect(stub.dismiss).toHaveBeenCalledWith('session_b')
+    // The selected agent stays selected — only the other one was removed.
+    expect(screen.getByRole('button', { name: /^Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('marks a failed agent with an error status and keeps it in the rail', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+      stub.emit(ended('session_a', 'failed'))
+    })
+
+    // Still listed (so the failure is visible), now with the error dot.
+    const row = screen.getByRole('button', { name: /^Count files/ })
+    expect(row).toBeInTheDocument()
+    expect(row.querySelector('.status-dot.error')).not.toBeNull()
   })
 })

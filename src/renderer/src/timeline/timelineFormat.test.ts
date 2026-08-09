@@ -45,12 +45,7 @@ describe('describeEvent', () => {
     ).toMatchObject({ text: 'thinking · Planning.', tone: 'soft' })
   })
 
-  it('renders idle turns, agent questions, and user replies', () => {
-    expect(describeEvent(stored('session.idle', { sessionId: 's' }))).toMatchObject({
-      marker: '⏸',
-      text: 'awaiting your reply',
-      tone: 'warn',
-    })
+  it('renders agent questions and user replies', () => {
     expect(
       describeEvent(
         stored('agent.question', {

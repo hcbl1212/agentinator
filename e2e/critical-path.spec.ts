@@ -39,7 +39,7 @@ test('launching a task shows it in the timeline, scoped to the new agent', async
     await expect(stream.getByText(/session started · hello there/)).toBeVisible()
     await expect(stream.getByText('hello there', { exact: true })).toBeVisible()
 
-    const agent = page.getByRole('button', { name: /hello there/ })
+    const agent = page.getByRole('button', { name: /^hello there/ })
     await expect(agent).toBeVisible()
     await expect(agent).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByText(/Select an agent, or start a task below/)).toHaveCount(0)
@@ -66,7 +66,7 @@ test('running two agents and switching scopes the stream to each (focus-follows)
     await expect(stream.getByText(/session started · task alpha/)).toHaveCount(0)
 
     // Switch back to the first agent — the stream follows the selection.
-    await page.getByRole('button', { name: /task alpha/ }).click()
+    await page.getByRole('button', { name: /^task alpha/ }).click()
     await expect(stream.getByText(/session started · task alpha/)).toBeVisible()
     await expect(stream.getByText(/session started · task beta/)).toHaveCount(0)
   } finally {
@@ -79,7 +79,8 @@ test('replying to an idle agent shows the follow-up and its echo', async () => {
   const stream = page.getByRole('region', { name: 'Conversation' })
   try {
     await launchTask(page, 'first task')
-    await expect(stream.getByText('awaiting your reply')).toBeVisible()
+    // The turn's output settles the agent (idle is internal state, not a line).
+    await expect(stream.getByText('Ready.')).toBeVisible()
 
     const reply = page.getByRole('textbox', { name: 'Reply to the agent' })
     await reply.fill('are you there')
@@ -148,7 +149,7 @@ test('/clear drops the agent and returns to a fresh task prompt', async () => {
   const { app, page } = await launchApp()
   try {
     await launchTask(page, 'some task')
-    await expect(page.getByRole('button', { name: /some task/ })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: /^some task/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -160,10 +161,27 @@ test('/clear drops the agent and returns to a fresh task prompt', async () => {
     // Selection dropped → back to the empty stream and a task prompt.
     await expect(page.getByText(/Select an agent, or start a task below/)).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Task for the agent' })).toBeVisible()
-    await expect(page.getByRole('button', { name: /some task/ })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: /^some task/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
+  } finally {
+    await app.close()
+  }
+})
+
+test('removing an agent takes it out of the rail', async () => {
+  const { app, page } = await launchApp()
+  try {
+    await launchTask(page, 'throwaway task')
+    await expect(page.getByRole('button', { name: /^throwaway task/ })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Remove throwaway task' }).click()
+
+    // Gone from the fleet, and the stream returns to the empty prompt.
+    await expect(page.getByRole('button', { name: /^throwaway task/ })).toHaveCount(0)
+    await expect(page.getByText('No agents yet.')).toBeVisible()
+    await expect(page.getByText(/Select an agent, or start a task below/)).toBeVisible()
   } finally {
     await app.close()
   }

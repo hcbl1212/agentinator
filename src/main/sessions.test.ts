@@ -141,6 +141,35 @@ describe('SessionManager', () => {
     await expect(manager.cancel('session_missing')).resolves.toBeUndefined()
   })
 
+  it('dismissing a live session cancels it, dropping it from the fleet', async () => {
+    const manager = new SessionManager(new EventStore())
+    manager.register(instantProvider('a'))
+
+    const sessionId = manager.start({ providerId: 'a', title: 'T', prompt: 'P', cwd: '/tmp' })
+    expect(manager.activeCount()).toBe(1)
+
+    await manager.dismiss(sessionId)
+    expect(manager.activeCount()).toBe(0)
+  })
+
+  it('dismissing a session with no live handle records its close', async () => {
+    const store = new EventStore()
+    store.append('session.started', {
+      sessionId: 'session_orphan',
+      workspaceId: 'w',
+      agentId: 'a',
+      title: 'T',
+    })
+    const manager = new SessionManager(store)
+
+    await manager.dismiss('session_orphan')
+
+    const ended = store
+      .listBySession('session_orphan')
+      .find((event) => event.type === 'session.ended')
+    expect(ended?.payload).toMatchObject({ outcome: 'cancelled' })
+  })
+
   function recordingProvider(id: string): {
     provider: AgentProvider
     send: ReturnType<typeof vi.fn>

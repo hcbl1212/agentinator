@@ -24,6 +24,15 @@ export function AgentRail(): React.JSX.Element {
   const { selection, select, clear } = useSelection()
   const selectedId = selection?.kind === 'session' ? selection.id : null
 
+  // Remove an agent from the fleet: stop it if it's live, drop it from the rail,
+  // and let go of the selection if it was the one showing.
+  const dismiss = (id: string): void => {
+    void window.agentinator?.agent.dismiss(id)
+    if (id === selectedId) {
+      clear()
+    }
+  }
+
   return (
     <aside className="pane rail" aria-label="Agents">
       <div className="rail-head">
@@ -39,7 +48,7 @@ export function AgentRail(): React.JSX.Element {
       ) : (
         <ul className="rail-list">
           {sessions.map((session) => (
-            <li key={session.id}>
+            <li key={session.id} className="rail-row">
               <button
                 type="button"
                 className={`rail-agent${session.id === selectedId ? ' is-selected' : ''}`}
@@ -56,6 +65,15 @@ export function AgentRail(): React.JSX.Element {
                     {vendorLabel(session.providerId, session.model)}
                   </span>
                 )}
+              </button>
+              <button
+                type="button"
+                className="rail-agent-remove"
+                aria-label={`Remove ${session.title}`}
+                title="Remove agent"
+                onClick={() => dismiss(session.id)}
+              >
+                ✕
               </button>
             </li>
           ))}

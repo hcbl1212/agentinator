@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import type { EventPayloads, StoredEvent } from '../../../shared/events'
 
-export type SessionStatus = 'running' | 'idle'
+export type SessionStatus = 'running' | 'idle' | 'error'
 
 /** A live agent session as the fleet rail and composer see it. */
 export interface SessionInfo {
@@ -17,8 +17,9 @@ export interface SessionInfo {
 
 /**
  * Folds one event into the session list. Sessions appear on start, flip
- * between running/idle as turns come and go, and drop off when they end — so
- * the list is always the set of live agents, newest last.
+ * between running/idle as turns come and go, stay (marked error) on a failure
+ * so the issue is visible, and drop off when completed, cancelled, or dismissed
+ * — so the list is the set of agents still worth showing, newest last.
  */
 export function reduceSession(sessions: SessionInfo[], event: StoredEvent): SessionInfo[] {
   const withStatus = (id: string, status: SessionStatus): SessionInfo[] =>
@@ -53,7 +54,11 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
     }
     case 'session.ended': {
       const payload = event.payload as EventPayloads['session.ended']
-      return sessions.filter((session) => session.id !== payload.sessionId)
+      // A failure stays in the rail (red) so it's noticed; the user clears it
+      // with the row's remove button. Completed/cancelled sessions drop off.
+      return payload.outcome === 'failed'
+        ? withStatus(payload.sessionId, 'error')
+        : sessions.filter((session) => session.id !== payload.sessionId)
     }
     default:
       return sessions

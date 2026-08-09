@@ -106,6 +106,7 @@ export function registerAgentIpc(
     manager.send(sessionId as string, text as string, images as ImageAttachment[] | undefined),
   )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
+  handle('agent:dismiss', (_event, sessionId) => manager.dismiss(sessionId as string))
 }
 
 /** A short one-line title from a task prompt for the roster and timeline. */
@@ -175,11 +176,17 @@ export async function bootstrap(
   const store = createStore(inMemory ? ':memory:' : join(userData, 'agentinator.db'))
   const settings = createSettings(inMemory ? ':memory:' : join(userData, 'agentinator-settings.db'))
   store.append('app.started', { version: electronApp.getVersion() })
-  // Handles don't survive a restart, so sessions left open have no live agent.
-  // Mark them idle (not running) — the rail shows them as awaiting your reply,
-  // and replying reopens them via the provider's resume.
+  // Handles don't survive a restart, so a session left *running* has no live
+  // agent — mark it idle so the rail shows it as done, and replying reopens it
+  // via the provider's resume. A session that was already idle is left alone;
+  // re-marking it every restart would pile up meaningless idle events.
   for (const sessionId of store.openSessionIds()) {
-    store.append('session.idle', { sessionId })
+    const recentStatus = [...store.listBySession(sessionId)]
+      .reverse()
+      .find((event) => event.type === 'session.idle' || event.type === 'user.message')
+    if (recentStatus?.type !== 'session.idle') {
+      store.append('session.idle', { sessionId })
+    }
   }
   registerEventIpc(store)
   registerSettingsIpc(settings)

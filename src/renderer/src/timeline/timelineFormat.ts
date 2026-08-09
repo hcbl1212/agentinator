@@ -52,9 +52,6 @@ export function describeEvent(event: StoredEvent): TimelineLine {
       const payload = event.payload as EventPayloads['agent.thinking']
       return { marker: '…', text: `thinking · ${payload.summary}`, tone: 'soft' }
     }
-    case 'session.idle': {
-      return { marker: '⏸', text: 'awaiting your reply', tone: 'warn' }
-    }
     case 'session.resumed': {
       return { marker: '↻', text: 'session resumed', tone: 'accent' }
     }

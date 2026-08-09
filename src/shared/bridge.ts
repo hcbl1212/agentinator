@@ -52,6 +52,9 @@ export interface AgentinatorBridge {
     /** Send a follow-up message (with any attached images) into a session. */
     send(sessionId: string, text: string, images?: ImageAttachment[]): Promise<void>
     cancel(sessionId: string): Promise<void>
+    /** Remove an agent from the fleet: stop it if live, then drop it from the
+     * rail (records the close so a restart doesn't resurrect it). */
+    dismiss(sessionId: string): Promise<void>
   }
   settings: {
     /** Spend ceilings per scope (session + time windows). */

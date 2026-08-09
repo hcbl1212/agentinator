@@ -289,4 +289,17 @@ export class SessionManager {
       await handle.cancel()
     }
   }
+
+  /** Remove an agent from the fleet. A live session is cancelled (its provider
+   * ends it); one with no live handle (idle after a restart, or already failed)
+   * is closed by recording the end directly, so it drops off the rail and a
+   * later restart won't reopen it. */
+  async dismiss(sessionId: string): Promise<void> {
+    const handle = this.#handles.get(sessionId)
+    if (handle !== undefined) {
+      await handle.cancel()
+    } else {
+      this.#emit(this.#store.append('session.ended', { sessionId, outcome: 'cancelled' }))
+    }
+  }
 }

@@ -72,13 +72,16 @@ export function Timeline({
 
   const searching = query !== ''
   const inWindow = searching ? searchResults : windowEvents
-  // Focus-follows: when an agent is highlighted, show only its events.
-  const visible =
+  // Focus-follows: when an agent is highlighted, show only its events. Idle
+  // turns are internal state (they colour the rail dot), not conversation — so
+  // they never appear as timeline lines, including the ones a restart records.
+  const visible = (
     sessionId === null
       ? inWindow
       : inWindow.filter(
           (event) => (event.payload as { sessionId?: string }).sessionId === sessionId,
         )
+  ).filter((event) => event.type !== 'session.idle')
 
   const scrollToEnd = (): void => {
     const end = endRef.current
