@@ -6,19 +6,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import { CredentialsPanel } from './CredentialsPanel'
 
-function stubBridge(options: { hasKey?: boolean } = {}): {
+function stubBridge(options: { hasKey?: boolean; mode?: boolean } = {}): {
   bridge: AgentinatorBridge
   set: ReturnType<typeof vi.fn>
   clear: ReturnType<typeof vi.fn>
+  setApiKeyMode: ReturnType<typeof vi.fn>
 } {
   const set = vi.fn(() => Promise.resolve())
   const clear = vi.fn(() => Promise.resolve())
+  const setApiKeyMode = vi.fn(() => Promise.resolve())
   return {
     set,
     clear,
+    setApiKeyMode,
     bridge: {
       agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
       credentials: { has: vi.fn(() => Promise.resolve(options.hasKey ?? false)), set, clear },
+      settings: {
+        getApiKeyMode: vi.fn(() => Promise.resolve(options.mode ?? false)),
+        setApiKeyMode,
+      },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -69,6 +76,19 @@ describe('CredentialsPanel', () => {
     await waitFor(() => {
       expect(screen.queryByText('saved')).not.toBeInTheDocument()
     })
+  })
+
+  it('reflects and toggles the run-on-API-key setting', async () => {
+    const stub = stubBridge({ mode: true })
+    window.agentinator = stub.bridge
+
+    render(<CredentialsPanel onClose={vi.fn()} />)
+    const toggle = await screen.findByRole('checkbox', { name: /Run all agents on the API key/ })
+    expect(toggle).toBeChecked()
+
+    await userEvent.click(toggle)
+    expect(toggle).not.toBeChecked()
+    expect(stub.setApiKeyMode).toHaveBeenCalledWith(false)
   })
 
   it('ignores an empty save and a vanished bridge', async () => {

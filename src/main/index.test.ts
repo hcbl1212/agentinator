@@ -103,6 +103,8 @@ function fakeSettings(): SettingsStore {
   return {
     budgets: vi.fn(() => ({ session: 5, hour: null, day: null, week: null, month: null })),
     setBudget: vi.fn(),
+    apiKeyMode: vi.fn(() => false),
+    setApiKeyMode: vi.fn(),
     secrets: vi.fn(() => []),
     saveSecret: vi.fn(),
     readSecret: vi.fn(),
@@ -443,7 +445,12 @@ describe('taskTitle', () => {
 describe('registerSettingsIpc', () => {
   it('serves and updates per-scope budgets', () => {
     const budgets = { session: 5, hour: null, day: null, week: null, month: null }
-    const settings = { budgets: vi.fn(() => budgets), setBudget: vi.fn() }
+    const settings = {
+      budgets: vi.fn(() => budgets),
+      setBudget: vi.fn(),
+      apiKeyMode: vi.fn(() => true),
+      setApiKeyMode: vi.fn(),
+    }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerSettingsIpc(settings as unknown as SettingsStore, (channel, listener) => {
@@ -453,13 +460,21 @@ describe('registerSettingsIpc', () => {
     expect(handlers.get('settings:get-budgets')?.(undefined)).toBe(budgets)
     handlers.get('settings:set-budget')?.(undefined, 'day', 12)
     expect(settings.setBudget).toHaveBeenCalledWith('day', 12)
+    expect(handlers.get('settings:get-api-key-mode')?.(undefined)).toBe(true)
+    handlers.get('settings:set-api-key-mode')?.(undefined, true)
+    expect(settings.setApiKeyMode).toHaveBeenCalledWith(true)
   })
 
   it('registers on ipcMain by default', () => {
     registerSettingsIpc(fakeSettings())
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
-    expect(channels).toEqual(['settings:get-budgets', 'settings:set-budget'])
+    expect(channels).toEqual([
+      'settings:get-budgets',
+      'settings:set-budget',
+      'settings:get-api-key-mode',
+      'settings:set-api-key-mode',
+    ])
   })
 })
 
@@ -626,6 +641,30 @@ describe('bootstrap', () => {
     const sessionId = startDemo(undefined)
     expect(settings.budgets).toHaveBeenCalled()
     await cancel(undefined, sessionId) // stop the scripted session's timers
+  })
+
+  it('consults the run-on-API-key toggle when a session starts', async () => {
+    const settings = fakeSettings()
+    ;(settings.apiKeyMode as ReturnType<typeof vi.fn>).mockReturnValue(true)
+    await bootstrap(
+      mockApp as never,
+      (path) => new EventStore(path),
+      undefined,
+      undefined,
+      undefined,
+      () => settings,
+    )
+
+    const startDemo = mockIpcMain.handle.mock.calls.find(
+      ([channel]) => channel === 'agent:start-demo',
+    )?.[1] as (event: unknown) => string
+    const cancel = mockIpcMain.handle.mock.calls.find(
+      ([channel]) => channel === 'agent:cancel',
+    )?.[1] as (event: unknown, sessionId: string) => Promise<void>
+
+    const sessionId = startDemo(undefined)
+    expect(settings.apiKeyMode).toHaveBeenCalled() // the resolveApiKey path ran
+    await cancel(undefined, sessionId)
   })
 
   it('registers the e2e provider and routes tasks to it under AGENTINATOR_MOCK_TASKS', async () => {

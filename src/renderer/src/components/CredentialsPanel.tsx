@@ -77,6 +77,7 @@ function CredentialRow({
 export function CredentialsPanel({ onClose }: { onClose: () => void }): React.JSX.Element {
   const [provider, setProvider] = useState<AgentDescriptor | null>(null)
   const [saved, setSaved] = useState(false)
+  const [mode, setMode] = useState(false)
 
   useEffect(() => {
     const bridge = window.agentinator
@@ -87,15 +88,22 @@ export function CredentialsPanel({ onClose }: { onClose: () => void }): React.JS
     void (async () => {
       const descriptor = await bridge.agent.current()
       const has = await bridge.credentials.has(descriptor.providerId)
+      const apiKeyMode = await bridge.settings.getApiKeyMode()
       if (!cancelled) {
         setProvider(descriptor)
         setSaved(has)
+        setMode(apiKeyMode)
       }
     })()
     return () => {
       cancelled = true
     }
   }, [])
+
+  const toggleMode = (on: boolean): void => {
+    setMode(on)
+    void window.agentinator?.settings.setApiKeyMode(on)
+  }
 
   return (
     <div className="credentials-panel" role="dialog" aria-label="API keys">
@@ -118,9 +126,17 @@ export function CredentialsPanel({ onClose }: { onClose: () => void }): React.JS
           onSaved={setSaved}
         />
       )}
+      <label className="credential-toggle">
+        <input
+          type="checkbox"
+          checked={mode}
+          onChange={(changed) => toggleMode(changed.target.checked)}
+        />
+        Run all agents on the API key
+      </label>
       <p className="budget-panel-note">
-        Used when you switch an agent off its subscription. Stored in your OS keychain — never in
-        the project.
+        The key is used when you switch an agent off its subscription. Stored in your OS keychain —
+        never in the project. New agents start on the plan unless the box above is checked.
       </p>
     </div>
   )

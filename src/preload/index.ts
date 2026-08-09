@@ -49,6 +49,8 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('settings:get-budgets') as Promise<import('../shared/budget').Budgets>,
     setBudget: (scope, usd) =>
       ipcRenderer.invoke('settings:set-budget', scope, usd) as Promise<void>,
+    getApiKeyMode: () => ipcRenderer.invoke('settings:get-api-key-mode') as Promise<boolean>,
+    setApiKeyMode: (on) => ipcRenderer.invoke('settings:set-api-key-mode', on) as Promise<void>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,

@@ -69,6 +69,20 @@ export class SettingsStore {
     return result
   }
 
+  /** Whether new/reopened agents should run on the metered API key rather than
+   * the subscription. Off by default — the plan is always the starting point. */
+  apiKeyMode(): boolean {
+    return (this.#get.get('apiKeyMode') as { value: string } | undefined)?.value === '1'
+  }
+
+  setApiKeyMode(on: boolean): void {
+    if (on) {
+      this.#set.run('apiKeyMode', '1')
+    } else {
+      this.#delete.run('apiKeyMode')
+    }
+  }
+
   /** Set (positive number) or clear (null) the cap for one scope. */
   setBudget(scope: BudgetScope, usd: number | null): void {
     if (usd === null || !Number.isFinite(usd) || usd <= 0) {

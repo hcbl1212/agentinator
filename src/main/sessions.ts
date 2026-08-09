@@ -42,17 +42,25 @@ export class SessionManager {
   readonly #onEvent: (event: StoredEvent) => void
   readonly #getBudgets: () => Budgets
   readonly #now: () => Date
+  /** The credential a fresh/reopened session of a provider should use — a key
+   * when "run on the API key" is on and one is stored, else undefined (plan). */
+  readonly #resolveApiKey: (providerId: string) => string | undefined
 
   constructor(
     store: EventStore,
     onEvent: (event: StoredEvent) => void = () => undefined,
-    options: { getBudgets?: () => Budgets; now?: () => Date } = {},
+    options: {
+      getBudgets?: () => Budgets
+      now?: () => Date
+      resolveApiKey?: (providerId: string) => string | undefined
+    } = {},
   ) {
     this.#store = store
     this.#onEvent = onEvent
     // Read at start()/cost time so a settings change takes immediate effect.
     this.#getBudgets = options.getBudgets ?? (() => NO_BUDGETS)
     this.#now = options.now ?? (() => new Date())
+    this.#resolveApiKey = options.resolveApiKey ?? (() => undefined)
   }
 
   register(provider: AgentProvider): void {
@@ -162,6 +170,7 @@ export class SessionManager {
         cwd: options.cwd,
         model: options.model,
         images: options.images,
+        apiKey: this.#resolveApiKey(options.providerId),
       },
       this.#sessionEmitter(sessionId, options.providerId),
     )
@@ -237,7 +246,7 @@ export class SessionManager {
    * for vendors that replay. Returns the new handle, or undefined when the
    * session can't be resumed (unknown session or provider no longer registered).
    */
-  #resume(sessionId: string, apiKey?: string): AgentSessionHandle | undefined {
+  #resume(sessionId: string, override?: { apiKey?: string }): AgentSessionHandle | undefined {
     const events = this.#store.listBySession(sessionId)
     const started = events.find((event) => event.type === 'session.started')?.payload as
       EventPayloads['session.started'] | undefined
@@ -269,7 +278,9 @@ export class SessionManager {
         prompt: '',
         cwd: process.cwd(),
         resume: { token: resumable?.resumeToken, turns },
-        apiKey,
+        // An explicit switch wins; otherwise a reopened session follows the
+        // global "run on the API key" setting (undefined = subscription).
+        apiKey: override === undefined ? this.#resolveApiKey(providerId) : override.apiKey,
       },
       this.#sessionEmitter(sessionId, providerId),
     )
@@ -317,7 +328,7 @@ export class SessionManager {
       await handle.cancel()
       this.#switching.delete(sessionId)
     }
-    this.#resume(sessionId, apiKey)
+    this.#resume(sessionId, { apiKey })
   }
 
   /** Remove an agent from the fleet. A live session is cancelled (its provider

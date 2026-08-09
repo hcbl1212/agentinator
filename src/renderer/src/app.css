@@ -846,6 +846,15 @@ body {
   border-color: var(--soft);
 }
 
+.credential-toggle {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
 .budget-panel-head {
   align-items: center;
   display: flex;

@@ -103,6 +103,17 @@ describe('SettingsStore', () => {
     expect(open(dbPath).budgets().month).toBe(150)
   })
 
+  it('persists the run-on-API-key toggle, defaulting off', () => {
+    const store = new SettingsStore()
+
+    expect(store.apiKeyMode()).toBe(false)
+    store.setApiKeyMode(true)
+    expect(store.apiKeyMode()).toBe(true)
+    store.setApiKeyMode(false)
+    expect(store.apiKeyMode()).toBe(false)
+    store.close()
+  })
+
   it('stores, reads, lists, and deletes credential ciphertext', () => {
     const store = new SettingsStore()
 

@@ -74,6 +74,9 @@ export interface AgentinatorBridge {
     /** Spend ceilings per scope (session + time windows). */
     getBudgets(): Promise<import('./budget').Budgets>
     setBudget(scope: import('./budget').BudgetScope, usd: number | null): Promise<void>
+    /** Whether all agents run on the metered API key (vs the subscription). */
+    getApiKeyMode(): Promise<boolean>
+    setApiKeyMode(on: boolean): Promise<void>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

@@ -128,6 +128,10 @@ export function registerSettingsIpc(
   handle('settings:set-budget', (_event, scope, usd) => {
     settings.setBudget(scope as BudgetScope, usd as number | null)
   })
+  handle('settings:get-api-key-mode', () => settings.apiKeyMode())
+  handle('settings:set-api-key-mode', (_event, on) => {
+    settings.setApiKeyMode(on === true)
+  })
 }
 
 export function registerApprovalIpc(
@@ -241,8 +245,12 @@ export async function bootstrap(
   const broker = new PermissionBroker(makeEmitStored(store))
   const decide = broker.decide.bind(broker)
 
+  const vault = new CredentialVault(settings, createEncryptor())
   const manager = new SessionManager(store, broadcastEvent, {
     getBudgets: () => settings.budgets(),
+    // Fresh/reopened sessions run on the API key only when the global toggle is
+    // on and a key is stored for the provider — otherwise the plan.
+    resolveApiKey: (providerId) => (settings.apiKeyMode() ? vault.get(providerId) : undefined),
   })
   manager.register(createMockProvider(undefined, undefined, decide))
   manager.register(createClaudeProvider(claudeQuery, decide))
@@ -252,7 +260,7 @@ export async function bootstrap(
   }
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
-  registerCredentialsIpc(new CredentialVault(settings, createEncryptor()), manager, store)
+  registerCredentialsIpc(vault, manager, store)
 
   createWindow()
   if (replayPath !== undefined) {
