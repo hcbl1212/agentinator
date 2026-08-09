@@ -302,6 +302,29 @@ describe('createClaudeProvider', () => {
     expect(idle?.payload).toEqual({ sessionId: 'session_c' })
   })
 
+  it('maps a rate-limit event to a normalized account.limit', async () => {
+    const { events } = await runSession([
+      {
+        type: 'rate_limit_event',
+        session_id: 's',
+        rate_limit_info: {
+          status: 'rejected',
+          rateLimitType: 'five_hour',
+          resetsAt: 1_700_000_000,
+          overageStatus: 'allowed',
+        },
+      },
+    ])
+
+    const limit = events.find((event) => event.type === 'account.limit')
+    expect(limit?.payload).toMatchObject({
+      sessionId: 'session_c',
+      status: 'rejected',
+      window: 'five_hour',
+      overageAvailable: true,
+    })
+  })
+
   it('samples account usage after a turn and emits it normalized', async () => {
     const rawUsage = {
       subscription_type: 'max',

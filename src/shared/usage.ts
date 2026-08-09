@@ -34,6 +34,21 @@ export interface AccountUsage {
   sessionCostUsd: number
 }
 
+/** A live rate-limit signal, normalized from a provider's push event. */
+export type LimitStatus = 'ok' | 'warning' | 'rejected'
+
+export interface AccountLimit {
+  status: LimitStatus
+  /** Which window bound (e.g. 'five_hour'), or null. */
+  window: string | null
+  /** When it frees up, epoch ms, or null. */
+  resetsAtMs: number | null
+  utilization: number | null
+  /** Whether overage/credits could keep work moving past the limit. */
+  overageAvailable: boolean
+  overageInUse: boolean
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -44,6 +59,48 @@ function num(value: unknown): number {
 
 function str(value: unknown): string | null {
   return typeof value === 'string' ? value : null
+}
+
+function numOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+const STATUS: Record<string, LimitStatus> = {
+  allowed: 'ok',
+  allowed_warning: 'warning',
+  rejected: 'rejected',
+}
+
+/**
+ * Normalize a provider's push rate-limit signal into {@link AccountLimit}. Epoch
+ * resets come back in seconds or milliseconds depending on the field; anything
+ * below the year-2001-in-ms mark is treated as seconds.
+ */
+export function normalizeLimit(raw: unknown): AccountLimit {
+  if (!isRecord(raw)) {
+    return {
+      status: 'ok',
+      window: null,
+      resetsAtMs: null,
+      utilization: null,
+      overageAvailable: false,
+      overageInUse: false,
+    }
+  }
+  const status = str(raw['status'])
+  const resets = numOrNull(raw['resetsAt'])
+  const overageStatus = str(raw['overageStatus'])
+  return {
+    status: (status !== null && STATUS[status]) || 'ok',
+    window: str(raw['rateLimitType']),
+    resetsAtMs: resets === null ? null : resets < 1e12 ? resets * 1000 : resets,
+    utilization: numOrNull(raw['utilization']),
+    overageAvailable:
+      overageStatus === 'allowed' ||
+      overageStatus === 'allowed_warning' ||
+      raw['canUserPurchaseCredits'] === true,
+    overageInUse: raw['isUsingOverage'] === true || raw['overageInUse'] === true,
+  }
 }
 
 /** The stable windows we surface, in display order. */

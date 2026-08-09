@@ -549,6 +549,44 @@ body {
   color: var(--soft);
 }
 
+/* Account-wide capacity notice (approaching / hit a plan limit). */
+.capacity-banner {
+  align-items: center;
+  background: rgba(224, 168, 60, 0.12);
+  border-bottom: 1px solid var(--warn);
+  color: var(--ink);
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.capacity-banner.is-rejected {
+  background: rgba(224, 101, 85, 0.12);
+  border-bottom-color: var(--err);
+}
+
+.capacity-text {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.capacity-dismiss {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.capacity-dismiss:hover,
+.capacity-dismiss:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
 .status-dot {
   border-radius: 50%;
   height: 0.55rem;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeUsage } from './usage'
+import { normalizeLimit, normalizeUsage } from './usage'
 
 describe('normalizeUsage', () => {
   it('maps a subscription with plan windows, overage, and a running cost', () => {
@@ -110,5 +110,71 @@ describe('normalizeUsage', () => {
 
     expect(usage.windows).toEqual([])
     expect(usage.overage).toEqual({ enabled: false, usedUsd: 0, limitUsd: null })
+  })
+})
+
+describe('normalizeLimit', () => {
+  it('maps a rejection with a seconds reset and active-overage availability', () => {
+    expect(
+      normalizeLimit({
+        status: 'rejected',
+        rateLimitType: 'five_hour',
+        resetsAt: 1_700_000_000, // seconds → *1000
+        utilization: 100,
+        overageStatus: 'allowed',
+        isUsingOverage: false,
+      }),
+    ).toEqual({
+      status: 'rejected',
+      window: 'five_hour',
+      resetsAtMs: 1_700_000_000_000,
+      utilization: 100,
+      overageAvailable: true,
+      overageInUse: false,
+    })
+  })
+
+  it('maps a warning with a millisecond reset and purchasable credits', () => {
+    expect(
+      normalizeLimit({
+        status: 'allowed_warning',
+        rateLimitType: 'seven_day',
+        resetsAt: 1_700_000_000_000, // already ms → as-is
+        overageStatus: 'rejected',
+        canUserPurchaseCredits: true,
+        overageInUse: true,
+      }),
+    ).toMatchObject({
+      status: 'warning',
+      resetsAtMs: 1_700_000_000_000,
+      utilization: null,
+      overageAvailable: true,
+      overageInUse: true,
+    })
+  })
+
+  it('treats allowed as ok and reads overage from allowed_warning + isUsingOverage', () => {
+    expect(
+      normalizeLimit({ status: 'allowed', overageStatus: 'allowed_warning', isUsingOverage: true }),
+    ).toMatchObject({
+      status: 'ok',
+      window: null,
+      resetsAtMs: null,
+      overageAvailable: true,
+      overageInUse: true,
+    })
+  })
+
+  it('defaults for a non-record and an unknown/absent status', () => {
+    expect(normalizeLimit(null)).toEqual({
+      status: 'ok',
+      window: null,
+      resetsAtMs: null,
+      utilization: null,
+      overageAvailable: false,
+      overageInUse: false,
+    })
+    expect(normalizeLimit({ status: 'bananas' }).status).toBe('ok')
+    expect(normalizeLimit({}).overageAvailable).toBe(false)
   })
 })

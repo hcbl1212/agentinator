@@ -10,6 +10,7 @@ const INTERNAL_TYPES = new Set([
   'session.resumable',
   'session.model',
   'account.usage',
+  'account.limit',
 ])
 
 /**

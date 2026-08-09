@@ -1,3 +1,4 @@
+import { CapacityBanner } from './components/CapacityBanner'
 import { Panes } from './components/Panes'
 import { StatusBar } from './components/StatusBar'
 import { SelectionProvider } from './state/selection'
@@ -20,6 +21,7 @@ function AppShell(): React.JSX.Element {
         <span className="titlebar-name">Agentinator</span>
         <span className="titlebar-context">no workspace open</span>
       </header>
+      <CapacityBanner />
       <Panes />
       <StatusBar />
     </div>

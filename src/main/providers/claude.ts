@@ -1,6 +1,6 @@
 import { createEntityId } from '../../shared/events'
 import type { ImageAttachment } from '../../shared/events'
-import { normalizeUsage } from '../../shared/usage'
+import { normalizeLimit, normalizeUsage } from '../../shared/usage'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
   AgentProvider,
@@ -187,6 +187,10 @@ function mapSdkMessage(message: unknown, { sessionId, emit, cost }: MapContext):
     for (const block of nested['content']) {
       mapUserBlock(block, sessionId, emit)
     }
+    return false
+  }
+  if (message['type'] === 'rate_limit_event') {
+    emit('account.limit', { sessionId, ...normalizeLimit(message['rate_limit_info']) })
     return false
   }
   if (message['type'] === 'result') {
