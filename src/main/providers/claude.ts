@@ -165,10 +165,13 @@ function mapUserBlock(block: unknown, sessionId: string, emit: EmitEvent): void 
 interface MapContext {
   sessionId: string
   emit: EmitEvent
+  /** Running total the SDK last reported for this session (see the result
+   * handler) — mutated in place so each turn can bill only its delta. */
+  cost: { lastTotalUsd: number }
 }
 
 /** Maps one SDK message; returns true on a turn boundary (a `result`). */
-function mapSdkMessage(message: unknown, { sessionId, emit }: MapContext): boolean {
+function mapSdkMessage(message: unknown, { sessionId, emit, cost }: MapContext): boolean {
   if (!isRecord(message)) {
     return false
   }
@@ -187,12 +190,18 @@ function mapSdkMessage(message: unknown, { sessionId, emit }: MapContext): boole
   }
   if (message['type'] === 'result') {
     const usage = isRecord(message['usage']) ? message['usage'] : {}
+    // total_cost_usd is the session's *running total*, not this turn's cost, so
+    // bill the delta — otherwise every downstream sum (status bar, budgets)
+    // double-counts. A zeroed crash/startup result won't drag the total back.
+    const runningTotal = toNumber(message['total_cost_usd'])
+    const turnUsd = Math.max(0, runningTotal - cost.lastTotalUsd)
+    cost.lastTotalUsd = Math.max(cost.lastTotalUsd, runningTotal)
     emit('cost.usage', {
       sessionId,
       inputTokens: toNumber(usage['input_tokens']),
       outputTokens: toNumber(usage['output_tokens']),
       cacheReadInputTokens: toNumber(usage['cache_read_input_tokens']),
-      usd: toNumber(message['total_cost_usd']),
+      usd: turnUsd,
     })
     emit('session.idle', { sessionId })
     return true
@@ -302,6 +311,10 @@ export function createClaudeProvider(
 
       let tokenEmitted = false
       let modelEmitted = false
+      // Per-session cost accumulator: the SDK reports a running total each turn;
+      // this lets the mapper bill only the delta. A resumed session gets a fresh
+      // closure (and the SDK restarts its total at 0), so deltas stay correct.
+      const cost = { lastTotalUsd: 0 }
       const run = async (): Promise<void> => {
         try {
           for await (const message of stream) {
@@ -328,7 +341,7 @@ export function createClaudeProvider(
                 emit('session.model', { sessionId, model: nested['model'] })
               }
             }
-            mapSdkMessage(message, { sessionId, emit })
+            mapSdkMessage(message, { sessionId, emit, cost })
           }
         } catch {
           endOnce('failed')

@@ -302,6 +302,23 @@ describe('createClaudeProvider', () => {
     expect(idle?.payload).toEqual({ sessionId: 'session_c' })
   })
 
+  it('bills only the per-turn delta of the SDK’s running cost total', async () => {
+    const { events } = await runSession([
+      { type: 'result', total_cost_usd: 0.12, usage: { input_tokens: 100, output_tokens: 40 } },
+      { type: 'result', total_cost_usd: 0.2, usage: { input_tokens: 2, output_tokens: 46 } },
+      // A zeroed crash result must not bill a negative amount.
+      { type: 'result', subtype: 'error', total_cost_usd: 0, usage: {} },
+    ])
+
+    const costs = events
+      .filter((event) => event.type === 'cost.usage')
+      .map((event) => (event.payload as { usd: number }).usd)
+    expect(costs).toHaveLength(3)
+    expect(costs[0]).toBeCloseTo(0.12)
+    expect(costs[1]).toBeCloseTo(0.08)
+    expect(costs[2]).toBe(0)
+  })
+
   it('defaults missing usage counts to zero on the cost event', async () => {
     const { events } = await runSession([
       { type: 'result', subtype: 'error_during_execution', usage: { input_tokens: 5 } },
