@@ -7,8 +7,14 @@ coverage/
 *.db-shm
 *.db-wal
 .DS_Store
+
+# Secrets — never commit credentials of any kind
 .env
+.env.*
 *.local
+*.key
+*.pem
+secrets.json
 
 # Playwright
 test-results/
