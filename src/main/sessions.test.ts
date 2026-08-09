@@ -171,6 +171,64 @@ describe('SessionManager', () => {
     expect(ended?.payload).toMatchObject({ outcome: 'cancelled' })
   })
 
+  it('switches a live session onto a metered key without ending it', async () => {
+    const store = new EventStore()
+    const contexts: Parameters<AgentProvider['startSession']>[0][] = []
+    const cancel = vi.fn(() => Promise.resolve())
+    const provider: AgentProvider = {
+      ...instantProvider('claude'),
+      id: 'claude',
+      startSession(context, emit) {
+        contexts.push(context)
+        emit('session.started', {
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          workspaceId: context.workspaceId,
+          title: context.title,
+        })
+        return {
+          send: () => Promise.resolve(),
+          cancel: () => {
+            emit('session.ended', { sessionId: context.sessionId, outcome: 'cancelled' })
+            return cancel()
+          },
+        }
+      },
+    }
+    const types: string[] = []
+    const manager = new SessionManager(store, (event) => types.push(event.type))
+    manager.register(provider)
+    const sessionId = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/tmp' })
+
+    await manager.switchCredential(sessionId, 'sk-live')
+
+    expect(cancel).toHaveBeenCalledOnce() // old stream stopped
+    expect(types).not.toContain('session.ended') // ...but not ended — no rail drop
+    expect(types).toContain('session.resumed')
+    expect(manager.activeCount()).toBe(1)
+    expect(contexts.at(-1)?.apiKey).toBe('sk-live') // resumed under the key
+    store.close()
+  })
+
+  it('switches a session with no live handle by resuming it under the key', async () => {
+    const store = new EventStore()
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+    })
+    const recording = recordingProvider('claude')
+    const manager = new SessionManager(store)
+    manager.register(recording.provider)
+
+    await manager.switchCredential('s1', 'sk-live')
+
+    expect(recording.context()?.apiKey).toBe('sk-live')
+    store.close()
+  })
+
   function recordingProvider(id: string): {
     provider: AgentProvider
     send: ReturnType<typeof vi.fn>

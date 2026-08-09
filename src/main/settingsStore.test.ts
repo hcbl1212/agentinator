@@ -102,4 +102,25 @@ describe('SettingsStore', () => {
 
     expect(open(dbPath).budgets().month).toBe(150)
   })
+
+  it('stores, reads, lists, and deletes credential ciphertext', () => {
+    const store = new SettingsStore()
+
+    store.saveSecret('claude', 'cipher-a')
+    store.saveSecret('openai', 'cipher-b')
+
+    expect(store.readSecret('claude')).toBe('cipher-a')
+    expect(
+      store
+        .secrets()
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(['claude', 'openai'])
+    expect(store.readSecret('missing')).toBeUndefined()
+
+    store.deleteSecret('claude')
+    expect(store.readSecret('claude')).toBeUndefined()
+    expect(store.secrets()).toEqual([{ id: 'openai', ciphertext: 'cipher-b' }])
+    store.close()
+  })
 })

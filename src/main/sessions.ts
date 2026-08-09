@@ -35,6 +35,9 @@ export class SessionManager {
   #handles = new Map<string, AgentSessionHandle>()
   #endedEarly = new Set<string>()
   #sessionSpentUsd = new Map<string, number>()
+  /** Sessions mid credential-switch: their old handle's session.ended is
+   * suppressed so the agent keeps its place while it reconnects under a key. */
+  #switching = new Set<string>()
   readonly #store: EventStore
   readonly #onEvent: (event: StoredEvent) => void
   readonly #getBudgets: () => Budgets
@@ -186,6 +189,13 @@ export class SessionManager {
    * enforces the session/window budget on cost. Shared by start and resume. */
   #sessionEmitter(sessionId: string, providerId: string): EmitEvent {
     return (type, payload) => {
+      if (type === 'session.ended' && this.#switching.has(sessionId)) {
+        // A credential switch stops the old stream; the session lives on under a
+        // new key, so drop the end — don't record it or remove it from the rail.
+        this.#handles.delete(sessionId)
+        this.#sessionSpentUsd.delete(sessionId)
+        return
+      }
       const stored =
         type === 'session.started'
           ? this.#store.append('session.started', {
@@ -222,7 +232,7 @@ export class SessionManager {
    * for vendors that replay. Returns the new handle, or undefined when the
    * session can't be resumed (unknown session or provider no longer registered).
    */
-  #resume(sessionId: string): AgentSessionHandle | undefined {
+  #resume(sessionId: string, apiKey?: string): AgentSessionHandle | undefined {
     const events = this.#store.listBySession(sessionId)
     const started = events.find((event) => event.type === 'session.started')?.payload as
       EventPayloads['session.started'] | undefined
@@ -254,6 +264,7 @@ export class SessionManager {
         prompt: '',
         cwd: process.cwd(),
         resume: { token: resumable?.resumeToken, turns },
+        apiKey,
       },
       this.#sessionEmitter(sessionId, providerId),
     )
@@ -288,6 +299,19 @@ export class SessionManager {
     if (handle !== undefined) {
       await handle.cancel()
     }
+  }
+
+  /** Reconnect a session under a metered API key (after a plan limit). Stops the
+   * old subscription-authed stream without ending the session, then resumes it
+   * with the key so the agent keeps its place and continues on the API. */
+  async switchCredential(sessionId: string, apiKey: string): Promise<void> {
+    const handle = this.#handles.get(sessionId)
+    if (handle !== undefined) {
+      this.#switching.add(sessionId)
+      await handle.cancel()
+      this.#switching.delete(sessionId)
+    }
+    this.#resume(sessionId, apiKey)
   }
 
   /** Remove an agent from the fleet. A live session is cancelled (its provider

@@ -16,6 +16,7 @@ export class SettingsStore {
   #get: StatementSync
   #set: StatementSync
   #delete: StatementSync
+  #selectSecrets: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -26,6 +27,32 @@ export class SettingsStore {
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     )
     this.#delete = this.#db.prepare('DELETE FROM settings WHERE key = ?')
+    this.#selectSecrets = this.#db.prepare(
+      "SELECT key, value FROM settings WHERE key LIKE 'credential.%'",
+    )
+  }
+
+  /**
+   * Encrypted-credential storage. The store only ever holds ciphertext handed
+   * to it by the CredentialVault — it never sees or produces a plaintext key.
+   */
+  saveSecret(id: string, ciphertext: string): void {
+    this.#set.run(`credential.${id}`, ciphertext)
+  }
+
+  readSecret(id: string): string | undefined {
+    const row = this.#get.get(`credential.${id}`) as { value: string } | undefined
+    return row?.value
+  }
+
+  deleteSecret(id: string): void {
+    this.#delete.run(`credential.${id}`)
+  }
+
+  /** Every stored credential as (providerId, ciphertext) — for loading on boot. */
+  secrets(): { id: string; ciphertext: string }[] {
+    const rows = this.#selectSecrets.all() as unknown as { key: string; value: string }[]
+    return rows.map((row) => ({ id: row.key.slice('credential.'.length), ciphertext: row.value }))
   }
 
   /**
