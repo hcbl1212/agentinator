@@ -86,8 +86,12 @@ function imageFile(): File {
   return new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })
 }
 
-function paste(input: HTMLElement, items: unknown[]): void {
-  fireEvent.paste(input, { clipboardData: { items } })
+function paste(input: HTMLElement, items: unknown[], files: File[] = []): void {
+  fireEvent.paste(input, { clipboardData: { items, files } })
+}
+
+function drop(node: HTMLElement, items: unknown[], files: File[] = []): void {
+  fireEvent.drop(node, { dataTransfer: { items, files } })
 }
 
 afterEach(() => {
@@ -198,6 +202,34 @@ describe('ComposerDock', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove image' }))
     expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('falls back to clipboard files when there are no image items', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    // No usable items; the image rides in on the file list instead.
+    paste(input, [], [imageFile(), new File(['x'], 'note.txt', { type: 'text/plain' })])
+
+    const thumbs = await screen.findAllByAltText('pasted screenshot')
+    expect(thumbs).toHaveLength(1)
+  })
+
+  it('accepts an image dropped onto the composer, and ignores a non-image drop', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<ComposerDock />)
+    const dock = screen.getByLabelText('Composer')
+    fireEvent.dragOver(dock)
+
+    drop(dock, [], [new File(['x'], 'note.txt', { type: 'text/plain' })])
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+
+    drop(dock, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
+    expect(await screen.findByAltText('pasted screenshot')).toBeInTheDocument()
   })
 
   it('enters reply mode after a task launches and sends a follow-up to that session', async () => {

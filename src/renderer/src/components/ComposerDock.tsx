@@ -118,16 +118,7 @@ export function ComposerDock(): React.JSX.Element {
     setImages([])
   }
 
-  // Capture pasted images as attachments (kept out of the text field).
-  const onPaste = (pasteEvent: React.ClipboardEvent): void => {
-    const files = Array.from(pasteEvent.clipboardData.items)
-      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => file !== null)
-    if (files.length === 0) {
-      return
-    }
-    pasteEvent.preventDefault()
+  const addImageFiles = (files: File[]): void => {
     for (const file of files) {
       const reader = new FileReader()
       reader.onload = (): void => {
@@ -144,6 +135,36 @@ export function ComposerDock(): React.JSX.Element {
       }
       reader.readAsDataURL(file)
     }
+  }
+
+  // Images arrive two ways: pasted (clipboard items) or dropped/copied as
+  // files. Prefer items, fall back to the file list.
+  const imageFilesFrom = (data: DataTransfer): File[] => {
+    const fromItems = Array.from(data.items)
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
+    return fromItems.length > 0
+      ? fromItems
+      : Array.from(data.files).filter((file) => file.type.startsWith('image/'))
+  }
+
+  const onPaste = (pasteEvent: React.ClipboardEvent): void => {
+    const files = imageFilesFrom(pasteEvent.clipboardData)
+    if (files.length === 0) {
+      return
+    }
+    pasteEvent.preventDefault()
+    addImageFiles(files)
+  }
+
+  const onDrop = (dropEvent: React.DragEvent): void => {
+    const files = imageFilesFrom(dropEvent.dataTransfer)
+    if (files.length === 0) {
+      return
+    }
+    dropEvent.preventDefault()
+    addImageFiles(files)
   }
 
   const removeImage = (id: string): void => {
@@ -169,7 +190,12 @@ export function ComposerDock(): React.JSX.Element {
   const who = agentLabel ?? 'the agent'
 
   return (
-    <div className="composer-dock" aria-label="Composer">
+    <div
+      className="composer-dock"
+      aria-label="Composer"
+      onDrop={onDrop}
+      onDragOver={(dragEvent) => dragEvent.preventDefault()}
+    >
       {activeSessionId !== null && (
         <div className="session-status" aria-label="Active session">
           <span className={`status-dot ${status}`} aria-hidden="true" />
@@ -237,7 +263,7 @@ export function ComposerDock(): React.JSX.Element {
               placeholder={
                 replying
                   ? `Reply to ${who} or steer it…  (Enter to send, Shift+Enter for a newline)`
-                  : `Describe a task for ${who} to do in this repo…  (paste a screenshot too)`
+                  : `Describe a task for ${who} to do in this repo…  (paste or drop a screenshot too)`
               }
               rows={1}
               value={prompt}
