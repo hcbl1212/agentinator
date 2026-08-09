@@ -51,15 +51,6 @@ function started(sessionId: string, title: string, providerId?: string): StoredE
   }
 }
 
-function ended(sessionId: string): StoredEvent {
-  return {
-    seq: 1,
-    ts: 't',
-    type: 'session.ended',
-    payload: { sessionId, outcome: 'completed' },
-  }
-}
-
 function renderRail(): void {
   render(
     <SelectionProvider>
@@ -128,29 +119,7 @@ describe('AgentRail', () => {
     )
   })
 
-  it('follows the selection to the newest agent when the highlighted one ends', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    renderRail()
-    act(() => {
-      stub.emit(started('session_a', 'Count files'))
-      stub.emit(started('session_b', 'Fix header'))
-    })
-    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
-
-    act(() => {
-      stub.emit(ended('session_a'))
-    })
-
-    // A is gone; the selection follows to the newest remaining agent, B.
-    expect(screen.getByRole('button', { name: /Fix header/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-  })
-
-  it('does not yank a freshly launched agent that has not appeared in the list yet', async () => {
+  it('keeps a freshly launched agent selected even before it appears in the list', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
@@ -173,28 +142,11 @@ describe('AgentRail', () => {
       stub.emit(started('session_new', 'New task'))
     })
 
-    // The new agent stays selected — it was never yanked to the old one.
+    // The new agent stays selected — never yanked to the old one.
     expect(screen.getByRole('button', { name: /New task/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: /Old task/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
-  })
-
-  it('clears the selection when the last agent ends', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    renderRail()
-    act(() => {
-      stub.emit(started('session_a', 'Count files'))
-    })
-    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
-
-    act(() => {
-      stub.emit(ended('session_a'))
-    })
-
-    expect(screen.getByLabelText('No active agents')).toBeInTheDocument()
   })
 })

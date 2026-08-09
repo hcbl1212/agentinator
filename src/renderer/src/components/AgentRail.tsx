@@ -1,7 +1,4 @@
-import { useEffect, useRef } from 'react'
-
 import { useSelection } from '../state/selection'
-import type { SessionInfo } from '../state/sessions'
 import { useSessions } from '../state/sessions'
 
 /** A vendor id → display label. Until model selection lands this is the
@@ -13,32 +10,14 @@ function vendorLabel(providerId: string): string {
 /**
  * The fleet rail: every live agent as a selectable row. Clicking one highlights
  * it, and the stream/inspector follow the selection. "New agent" clears the
- * selection so the composer starts a fresh task. If the highlighted agent ends,
- * the selection follows to the newest remaining one (or clears).
+ * selection so the composer starts a fresh task. The selection is sticky — it
+ * stays on the highlighted agent even if that agent ends, so its final state
+ * (including a failure) stays visible in the stream.
  */
 export function AgentRail(): React.JSX.Element {
   const { sessions } = useSessions()
   const { selection, select, clear } = useSelection()
   const selectedId = selection?.kind === 'session' ? selection.id : null
-  const previous = useRef<SessionInfo[]>([])
-
-  // Follow the selection to the newest agent only when the highlighted one
-  // actually ENDS (was present, now gone). A freshly launched agent is selected
-  // before its session.started broadcast arrives, so "not in the list yet" must
-  // NOT trigger a reselect — otherwise the new agent gets yanked away.
-  useEffect(() => {
-    const wasPresent = previous.current.some((session) => session.id === selectedId)
-    const isPresent = sessions.some((session) => session.id === selectedId)
-    if (selectedId !== null && wasPresent && !isPresent) {
-      const newest = sessions.at(-1)
-      if (newest !== undefined) {
-        select({ kind: 'session', id: newest.id })
-      } else {
-        clear()
-      }
-    }
-    previous.current = sessions
-  }, [sessions, selectedId, select, clear])
 
   return (
     <aside className="pane rail" aria-label="Agents">
