@@ -175,6 +175,12 @@ export async function bootstrap(
   const store = createStore(inMemory ? ':memory:' : join(userData, 'agentinator.db'))
   const settings = createSettings(inMemory ? ':memory:' : join(userData, 'agentinator-settings.db'))
   store.append('app.started', { version: electronApp.getVersion() })
+  // A session can't survive a restart (handles live in memory), so close any
+  // that were left open — otherwise they'd seed as zombie "running" agents you
+  // can't actually talk to.
+  for (const sessionId of store.openSessionIds()) {
+    store.append('session.ended', { sessionId, outcome: 'failed' })
+  }
   registerEventIpc(store)
   registerSettingsIpc(settings)
 

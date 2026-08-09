@@ -53,6 +53,7 @@ export class EventStore {
   #selectTotalCost: StatementSync
   #selectCostSince: StatementSync
   #selectLatestDiffs: StatementSync
+  #selectOpenSessions: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -112,6 +113,11 @@ export class EventStore {
     this.#selectLatestDiffs = this.#db.prepare(
       "SELECT seq, ts, type, payload, MAX(seq) AS _m FROM events WHERE type = 'file.diffed' GROUP BY json_extract(payload, '$.path') ORDER BY seq",
     )
+    // Sessions that started but never ended — orphaned when the app closed
+    // mid-run (handles live in memory and can't survive a restart).
+    this.#selectOpenSessions = this.#db.prepare(
+      "SELECT DISTINCT session_id AS id FROM events WHERE type = 'session.started' AND session_id IS NOT NULL AND session_id NOT IN (SELECT session_id FROM events WHERE type = 'session.ended' AND session_id IS NOT NULL)",
+    )
   }
 
   append<T extends EventType>(type: T, payload: EventPayloads[T]): StoredEvent<T> {
@@ -156,6 +162,12 @@ export class EventStore {
     const like = `%${query}%`
     const rows = this.#selectSearch.all(like, like, limit) as unknown as EventRow[]
     return rows.reverse().map((row) => this.#toEvent(row))
+  }
+
+  /** Session ids with a start but no end — left running when the app closed. */
+  openSessionIds(): string[] {
+    const rows = this.#selectOpenSessions.all() as unknown as { id: string }[]
+    return rows.map((row) => row.id)
   }
 
   count(): number {

@@ -197,6 +197,20 @@ describe('ComposerDock', () => {
     expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests', [])
   })
 
+  it('"/clear" drops the selected agent and returns to launch mode without sending', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    await activate(stub)
+
+    const reply = screen.getByRole('textbox', { name: 'Reply to the agent' })
+    await userEvent.type(reply, '/clear{Enter}')
+
+    expect(stub.send).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
+  })
+
   it('renders the selected agent’s question as a card and answers via a follow-up', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge

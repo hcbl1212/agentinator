@@ -72,7 +72,7 @@ import type { SettingsStore } from './settingsStore'
 // before any code can open a store: every getPath call lands in a temp dir.
 mockApp.getPath.mockReturnValue(mkdtempSync(join(tmpdir(), 'agentinator-test-')))
 
-function fakeStore(): EventStore {
+function fakeStore(openSessions: string[] = []): EventStore {
   return {
     append: vi.fn(),
     count: vi.fn(() => 42),
@@ -81,6 +81,7 @@ function fakeStore(): EventStore {
     list: vi.fn(() => []),
     tail: vi.fn(() => []),
     search: vi.fn(() => []),
+    openSessionIds: vi.fn(() => openSessions),
     close: vi.fn(),
   } as unknown as EventStore
 }
@@ -408,6 +409,20 @@ describe('bootstrap', () => {
     expect(MockBrowserWindow.instances).toHaveLength(1)
   })
 
+  it('closes sessions left open by a previous run so they are not zombies', async () => {
+    const store = fakeStore(['session_zombie'])
+    const createStore = vi.fn(() => store)
+
+    await bootstrap(mockApp as never, createStore, undefined, undefined, undefined, () =>
+      fakeSettings(),
+    )
+
+    expect(store.append).toHaveBeenCalledWith('session.ended', {
+      sessionId: 'session_zombie',
+      outcome: 'failed',
+    })
+  })
+
   it('defaults to the real electron app and file-backed stores', async () => {
     const store = await bootstrap()
 
@@ -464,8 +479,13 @@ describe('bootstrap', () => {
   })
 
   it('quits the app when the last window closes, on every platform', async () => {
-    await bootstrap(mockApp as never, fakeStore, undefined, undefined, undefined, () =>
-      fakeSettings(),
+    await bootstrap(
+      mockApp as never,
+      () => fakeStore(),
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
     )
 
     const call = mockApp.on.mock.calls.find(([event]) => event === 'window-all-closed')

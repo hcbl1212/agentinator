@@ -26,7 +26,7 @@ interface PastedImage {
 export function ComposerDock(): React.JSX.Element {
   const bridge = window.agentinator
   const { sessions } = useSessions()
-  const { selection, select } = useSelection()
+  const { selection, select, clear } = useSelection()
   const [prompt, setPrompt] = useState('')
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
@@ -100,6 +100,13 @@ export function ComposerDock(): React.JSX.Element {
 
   const submit = (): void => {
     const trimmed = prompt.trim()
+    // "/clear" drops the current agent and starts a fresh prompt.
+    if (trimmed === '/clear') {
+      clear()
+      setPrompt('')
+      setImages([])
+      return
+    }
     // A screenshot with no words is still worth sending.
     if (bridge === undefined || (trimmed === '' && images.length === 0)) {
       return

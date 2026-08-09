@@ -66,6 +66,26 @@ describe('EventStore', () => {
     expect(store.list()[0]?.payload).toEqual(payload)
   })
 
+  it('reports sessions that started but never ended', () => {
+    const store = open()
+    store.append('app.started', { version: '0.1.0' })
+    store.append('session.started', {
+      sessionId: 'open_1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'A',
+    })
+    store.append('session.started', {
+      sessionId: 'closed_1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'B',
+    })
+    store.append('session.ended', { sessionId: 'closed_1', outcome: 'completed' })
+
+    expect(store.openSessionIds()).toEqual(['open_1'])
+  })
+
   it('lists events after a given sequence number, in order', () => {
     const store = open()
     store.append('app.started', { version: '0.1.0' })
