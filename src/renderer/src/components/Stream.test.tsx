@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { AgentinatorBridge } from '../../../shared/bridge'
+import type { StoredEvent } from '../../../shared/events'
+import { useSelection } from '../state/selection'
+import { SelectionProvider } from '../state/selection'
+import { SessionsProvider } from '../state/sessions'
 import { Stream } from './Stream'
 
 afterEach(() => {
@@ -10,7 +16,13 @@ afterEach(() => {
 
 describe('Stream', () => {
   it('unifies the timeline and the composer in one conversation surface', () => {
-    render(<Stream />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <Stream />
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
 
     expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
     // The full timeline is the stream…
@@ -19,5 +31,54 @@ describe('Stream', () => {
     // …and the composer docks at its foot.
     expect(screen.getByLabelText('Composer')).toBeInTheDocument()
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
+  })
+
+  it('scopes the timeline to the highlighted agent', async () => {
+    const tail = vi.fn(() =>
+      Promise.resolve([
+        { seq: 1, ts: 't', type: 'agent.text', payload: { sessionId: 'x', text: 'from X' } },
+        { seq: 2, ts: 't', type: 'agent.text', payload: { sessionId: 'y', text: 'from Y' } },
+      ] as StoredEvent[]),
+    )
+    window.agentinator = {
+      events: {
+        count: vi.fn(() => Promise.resolve(0)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
+        diffs: vi.fn(() => Promise.resolve([])),
+        list: vi.fn(() => Promise.resolve([])),
+        tail: tail as AgentinatorBridge['events']['tail'],
+        search: vi.fn(() => Promise.resolve([])),
+        onAppended: vi.fn(() => () => undefined),
+      },
+      agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
+    } as unknown as AgentinatorBridge
+
+    function Selector(): React.JSX.Element {
+      const { select } = useSelection()
+      return (
+        <button type="button" onClick={() => select({ kind: 'session', id: 'x' })}>
+          pick x
+        </button>
+      )
+    }
+
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <Selector />
+          <Stream />
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
+
+    // Unscoped: both agents' lines show.
+    expect(await screen.findByText('from Y')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'pick x' }))
+
+    // Scoped to x: only its line remains.
+    expect(screen.getByText('from X')).toBeInTheDocument()
+    expect(screen.queryByText('from Y')).not.toBeInTheDocument()
   })
 })

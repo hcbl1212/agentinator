@@ -13,7 +13,13 @@ import { describeEvent, matchesQuery, mergeBySeq } from '../timeline/timelineFor
  * pinned-to-bottom semantics: reading history never gets yanked by a live
  * append; “↓ Latest” re-pins.
  */
-export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.Element {
+export function Timeline({
+  pageSize = 200,
+  sessionId = null,
+}: {
+  pageSize?: number
+  sessionId?: string | null
+}): React.JSX.Element {
   const [windowEvents, setWindowEvents] = useState<StoredEvent[]>([])
   const [searchResults, setSearchResults] = useState<StoredEvent[]>([])
   const [query, setQuery] = useState('')
@@ -65,7 +71,14 @@ export function Timeline({ pageSize = 200 }: { pageSize?: number }): React.JSX.E
   }, [query, pageSize])
 
   const searching = query !== ''
-  const visible = searching ? searchResults : windowEvents
+  const inWindow = searching ? searchResults : windowEvents
+  // Focus-follows: when an agent is highlighted, show only its events.
+  const visible =
+    sessionId === null
+      ? inWindow
+      : inWindow.filter(
+          (event) => (event.payload as { sessionId?: string }).sessionId === sessionId,
+        )
 
   const scrollToEnd = (): void => {
     const end = endRef.current

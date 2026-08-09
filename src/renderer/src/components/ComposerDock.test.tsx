@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { SelectionProvider } from '../state/selection'
+import { SessionsProvider } from '../state/sessions'
 import { ComposerDock } from './ComposerDock'
 
 interface BridgeStub {
@@ -12,7 +14,6 @@ interface BridgeStub {
   emit: (event: StoredEvent) => void
   startTask: ReturnType<typeof vi.fn>
   send: ReturnType<typeof vi.fn>
-  cancel: ReturnType<typeof vi.fn>
   resolve: ReturnType<typeof vi.fn>
 }
 
@@ -20,12 +21,10 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   const listeners: ((event: StoredEvent) => void)[] = []
   const startTask = vi.fn(() => Promise.resolve('session_task'))
   const send = vi.fn(() => Promise.resolve())
-  const cancel = vi.fn(() => Promise.resolve())
   const resolve = vi.fn(() => Promise.resolve())
   return {
     startTask,
     send,
-    cancel,
     resolve,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
@@ -52,7 +51,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         startDemo: vi.fn(() => Promise.resolve('session_1')),
         startTask: startTask as AgentinatorBridge['agent']['startTask'],
         send: send as AgentinatorBridge['agent']['send'],
-        cancel: cancel as AgentinatorBridge['agent']['cancel'],
+        cancel: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),
@@ -63,12 +62,21 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   }
 }
 
-function sessionEvent(type: StoredEvent['type'], payload: object): StoredEvent {
+function started(sessionId: string, title: string): StoredEvent {
+  return {
+    seq: 1,
+    ts: 't',
+    type: 'session.started',
+    payload: { sessionId, agentId: 'a', workspaceId: 'w', title },
+  } as StoredEvent
+}
+
+function event(type: StoredEvent['type'], payload: object): StoredEvent {
   return { seq: 1, ts: 't', type, payload } as StoredEvent
 }
 
 function requested(requestId: string): StoredEvent {
-  return sessionEvent('approval.requested', {
+  return event('approval.requested', {
     sessionId: 's',
     requestId,
     tool: 'bash',
@@ -76,12 +84,6 @@ function requested(requestId: string): StoredEvent {
   })
 }
 
-async function launchTask(): Promise<void> {
-  await userEvent.type(screen.getByRole('textbox', { name: 'Task for the agent' }), 'Do it{Enter}')
-  await screen.findByRole('textbox', { name: 'Reply to the agent' })
-}
-
-/** A 3-byte PNG whose base64 is a known constant ("AQID"). */
 function imageFile(): File {
   return new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })
 }
@@ -94,13 +96,32 @@ function drop(node: HTMLElement, items: unknown[], files: File[] = []): void {
   fireEvent.drop(node, { dataTransfer: { items, files } })
 }
 
+function renderDock(): void {
+  render(
+    <SelectionProvider>
+      <SessionsProvider>
+        <ComposerDock />
+      </SessionsProvider>
+    </SelectionProvider>,
+  )
+}
+
+/** Launch a task and make its session live + selected → reply mode. */
+async function activate(stub: BridgeStub): Promise<void> {
+  await userEvent.type(screen.getByRole('textbox', { name: 'Task for the agent' }), 'Do it{Enter}')
+  act(() => {
+    stub.emit(started('session_task', 'Do it'))
+  })
+  await screen.findByRole('textbox', { name: 'Reply to the agent' })
+}
+
 afterEach(() => {
   delete window.agentinator
 })
 
 describe('ComposerDock', () => {
   it('shows a placeholder and no composer without a bridge', () => {
-    render(<ComposerDock />)
+    renderDock()
 
     expect(screen.getByText(/Open a workspace to talk to an agent/)).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Task for the agent' })).not.toBeInTheDocument()
@@ -114,16 +135,16 @@ describe('ComposerDock', () => {
     })
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
 
     expect(await screen.findByText('Acme-7')).toBeInTheDocument()
   })
 
-  it('launches a task from the console prompt and clears it', async () => {
+  it('launches a new agent from the console prompt and clears it', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
     const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, 'Add a hello util{Enter}')
 
@@ -135,7 +156,7 @@ describe('ComposerDock', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
     const input = screen.getByRole('textbox', { name: 'Task for the agent' })
 
     await userEvent.type(input, 'first line')
@@ -150,127 +171,41 @@ describe('ComposerDock', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
-    await userEvent.type(input, '   {Enter}')
+    renderDock()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Task for the agent' }), '   {Enter}')
 
     expect(stub.startTask).not.toHaveBeenCalled()
   })
 
-  it('attaches a pasted screenshot and sends it (image-only is allowed)', async () => {
+  it('replies to the selected agent and shows its status', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
-    paste(input, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
+    renderDock()
+    await activate(stub)
 
-    await screen.findByAltText('pasted screenshot')
-    await userEvent.type(input, '{Enter}')
-
-    expect(stub.startTask).toHaveBeenCalledWith('', [{ mediaType: 'image/png', data: 'AQID' }])
-    // The attachment clears once sent.
-    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
-  })
-
-  it('ignores a paste that carries no image', () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
-    paste(input, [{ kind: 'string', type: 'text/plain', getAsFile: () => null }])
-
-    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
-  })
-
-  it('keeps only real image files from a mixed paste, and removes a thumbnail on demand', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
-    paste(input, [
-      { kind: 'file', type: 'image/png', getAsFile: () => imageFile() },
-      { kind: 'string', type: 'text/plain', getAsFile: () => null },
-      { kind: 'file', type: 'text/plain', getAsFile: () => imageFile() },
-      { kind: 'file', type: 'image/png', getAsFile: () => null },
-    ])
-
-    const thumbs = await screen.findAllByAltText('pasted screenshot')
-    expect(thumbs).toHaveLength(1)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Remove image' }))
-    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
-  })
-
-  it('falls back to clipboard files when there are no image items', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
-    // No usable items; the image rides in on the file list instead.
-    paste(input, [], [imageFile(), new File(['x'], 'note.txt', { type: 'text/plain' })])
-
-    const thumbs = await screen.findAllByAltText('pasted screenshot')
-    expect(thumbs).toHaveLength(1)
-  })
-
-  it('accepts an image dropped onto the composer, and ignores a non-image drop', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    const dock = screen.getByLabelText('Composer')
-    fireEvent.dragOver(dock)
-
-    drop(dock, [], [new File(['x'], 'note.txt', { type: 'text/plain' })])
-    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
-
-    drop(dock, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
-    expect(await screen.findByAltText('pasted screenshot')).toBeInTheDocument()
-  })
-
-  it('enters reply mode after a task launches and sends a follow-up to that session', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    await launchTask()
-
-    expect(screen.getByText('Working…')).toBeInTheDocument()
+    expect(screen.getByText(/Working…/)).toBeInTheDocument()
+    act(() => {
+      stub.emit(event('session.idle', { sessionId: 'session_task' }))
+    })
+    expect(screen.getByText(/Awaiting your reply/)).toBeInTheDocument()
 
     await userEvent.type(
       screen.getByRole('textbox', { name: 'Reply to the agent' }),
       'also add tests{Enter}',
     )
-
     expect(stub.send).toHaveBeenCalledWith('session_task', 'also add tests', [])
   })
 
-  it('marks the session idle when its turn ends', async () => {
+  it('renders the selected agent’s question as a card and answers via a follow-up', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
-    await launchTask()
-    act(() => {
-      stub.emit(sessionEvent('session.idle', { sessionId: 'session_task' }))
-    })
-
-    expect(screen.getByText('Awaiting your reply')).toBeInTheDocument()
-  })
-
-  it('renders an agent question as an answerable card and answers via a follow-up', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    await launchTask()
+    renderDock()
+    await activate(stub)
     act(() => {
       stub.emit(
-        sessionEvent('agent.question', {
+        event('agent.question', {
           sessionId: 'session_task',
           requestId: 'approval_q',
           questions: [{ question: 'Which approach?', options: ['Continue', 'Restart'] }],
@@ -285,54 +220,48 @@ describe('ComposerDock', () => {
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
   })
 
-  it('New task cancels the active session and returns to the launcher', async () => {
+  it('does not show a question meant for a different agent', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
-    await launchTask()
-    await userEvent.click(screen.getByRole('button', { name: 'New task' }))
-
-    expect(stub.cancel).toHaveBeenCalledWith('session_task')
-    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
-  })
-
-  it('clears the active session and returns to the launcher when the session ends', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    await launchTask()
+    renderDock()
+    await activate(stub)
     act(() => {
-      stub.emit(sessionEvent('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
-    })
-
-    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
-  })
-
-  it('ignores session idle, question, and ended events for other sessions', async () => {
-    const stub = stubBridge()
-    window.agentinator = stub.bridge
-
-    render(<ComposerDock />)
-    await launchTask()
-    act(() => {
-      stub.emit(sessionEvent('session.idle', { sessionId: 'other' }))
       stub.emit(
-        sessionEvent('agent.question', {
+        event('agent.question', {
           sessionId: 'other',
           requestId: 'approval_x',
           questions: [{ question: 'ignored?', options: [] }],
         }),
       )
-      stub.emit(sessionEvent('session.ended', { sessionId: 'other', outcome: 'completed' }))
-      // An event outside the handled set flows through untouched.
-      stub.emit(sessionEvent('agent.text', { sessionId: 'other', text: 'noise' }))
     })
 
-    expect(screen.getByText('Working…')).toBeInTheDocument()
     expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Reply to the agent' })).toBeInTheDocument()
+  })
+
+  it('drops the question and returns to launch mode when the agent ends', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    await activate(stub)
+    act(() => {
+      stub.emit(
+        event('agent.question', {
+          sessionId: 'session_task',
+          requestId: 'approval_q',
+          questions: [{ question: 'Which approach?', options: ['Continue'] }],
+        }),
+      )
+    })
+    expect(screen.getByLabelText('Agent question')).toBeInTheDocument()
+
+    act(() => {
+      stub.emit(event('session.ended', { sessionId: 'session_task', outcome: 'completed' }))
+    })
+
+    expect(screen.queryByLabelText('Agent question')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toBeInTheDocument()
   })
 
   it('shows already-pending approvals and resolves them via the bridge', async () => {
@@ -341,7 +270,7 @@ describe('ComposerDock', () => {
     ])
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
     await waitFor(() => {
       expect(screen.getByText('write a.ts')).toBeInTheDocument()
     })
@@ -354,7 +283,7 @@ describe('ComposerDock', () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
     await waitFor(() => {
       expect(stub.bridge.approvals.pending).toHaveBeenCalled()
     })
@@ -367,7 +296,7 @@ describe('ComposerDock', () => {
 
     act(() => {
       stub.emit(
-        sessionEvent('approval.resolved', {
+        event('approval.resolved', {
           sessionId: 's',
           requestId: 'approval_9',
           approved: false,
@@ -384,7 +313,7 @@ describe('ComposerDock', () => {
     ])
     window.agentinator = stub.bridge
 
-    render(<ComposerDock />)
+    renderDock()
     await waitFor(() => {
       expect(screen.getByText('write b.ts')).toBeInTheDocument()
     })
@@ -406,7 +335,13 @@ describe('ComposerDock', () => {
     )
     window.agentinator = stub.bridge
 
-    const { unmount } = render(<ComposerDock />)
+    const { unmount } = render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <ComposerDock />
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     unmount()
     resolvePending([
       { requestId: 'approval_late', sessionId: 's', tool: 'write', input: { path: 'b.ts' } },
@@ -414,5 +349,78 @@ describe('ComposerDock', () => {
     await Promise.resolve()
 
     expect(screen.queryByText('write b.ts')).not.toBeInTheDocument()
+  })
+
+  it('attaches a pasted screenshot and sends it (image-only is allowed)', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
+
+    await screen.findByAltText('pasted screenshot')
+    await userEvent.type(input, '{Enter}')
+
+    expect(stub.startTask).toHaveBeenCalledWith('', [{ mediaType: 'image/png', data: 'AQID' }])
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('ignores a paste that carries no image', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [{ kind: 'string', type: 'text/plain', getAsFile: () => null }])
+
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('keeps only real image files from a mixed paste, and removes a thumbnail on demand', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [
+      { kind: 'file', type: 'image/png', getAsFile: () => imageFile() },
+      { kind: 'string', type: 'text/plain', getAsFile: () => null },
+      { kind: 'file', type: 'text/plain', getAsFile: () => imageFile() },
+      { kind: 'file', type: 'image/png', getAsFile: () => null },
+    ])
+
+    const thumbs = await screen.findAllByAltText('pasted screenshot')
+    expect(thumbs).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove image' }))
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+  })
+
+  it('falls back to clipboard files when there are no image items', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    paste(input, [], [imageFile(), new File(['x'], 'note.txt', { type: 'text/plain' })])
+
+    const thumbs = await screen.findAllByAltText('pasted screenshot')
+    expect(thumbs).toHaveLength(1)
+  })
+
+  it('accepts an image dropped onto the composer, and ignores a non-image drop', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const dock = screen.getByLabelText('Composer')
+    fireEvent.dragOver(dock)
+
+    drop(dock, [], [new File(['x'], 'note.txt', { type: 'text/plain' })])
+    expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
+
+    drop(dock, [{ kind: 'file', type: 'image/png', getAsFile: () => imageFile() }])
+    expect(await screen.findByAltText('pasted screenshot')).toBeInTheDocument()
   })
 })

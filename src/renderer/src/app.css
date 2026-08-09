@@ -740,36 +740,80 @@ body {
   margin-top: 0.5rem;
 }
 
-/* ---- agent rail (slim fleet column) ---- */
-.rail {
+/* ---- agent rail (fleet column) ---- */
+.rail-head {
   align-items: center;
-  padding: 0.75rem 0.35rem;
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 
-.rail-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 0.62rem;
-  margin: 0.4rem 0;
+.rail-head .pane-label {
+  margin: 0;
+}
+
+.rail-new {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  margin-left: auto;
+  padding: 0.1rem 0.4rem;
+}
+
+.rail-new:hover,
+.rail-new:focus-visible {
+  background: rgba(53, 194, 165, 0.12);
+  color: var(--ink);
+  outline: none;
 }
 
 .rail-empty {
   color: var(--faint);
-  text-align: center;
+}
+
+.rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
 }
 
 .rail-agent {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0.45rem;
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+  width: 100%;
 }
 
-.rail-count {
-  color: var(--soft);
-  font-size: 0.75rem;
+.rail-agent:hover,
+.rail-agent:focus-visible {
+  border-color: var(--line);
+  outline: none;
+}
+
+.rail-agent.is-selected {
+  background: rgba(53, 194, 165, 0.1);
+  border-color: rgba(53, 194, 165, 0.5);
+  color: var(--ink);
+}
+
+.rail-agent-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- composer dock (decisions + input) ---- */

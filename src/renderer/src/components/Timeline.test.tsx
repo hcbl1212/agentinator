@@ -84,6 +84,21 @@ describe('Timeline', () => {
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
   })
 
+  it('scopes to a session id, hiding other agents’ events', async () => {
+    const stub = stubBridge(() => [
+      stored('agent.text', { sessionId: 'a', text: 'from A' }, 1),
+      stored('agent.text', { sessionId: 'b', text: 'from B' }, 2),
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Timeline sessionId="a" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('from A')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('from B')).not.toBeInTheDocument()
+  })
+
   it('search is inert without a bridge', async () => {
     const user = userEvent.setup()
 

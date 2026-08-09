@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { act, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { SelectionProvider } from '../state/selection'
+import { SessionsProvider } from '../state/sessions'
 import { AgentRail } from './AgentRail'
 
 function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) => void } {
-  let appended: ((event: StoredEvent) => void) | undefined
+  const listeners: ((event: StoredEvent) => void)[] = []
   return {
-    emit: (event) => appended?.(event),
+    emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
         count: vi.fn(() => Promise.resolve(0)),
@@ -19,7 +22,7 @@ function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) =
         tail: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
-          appended = listener
+          listeners.push(listener)
           return () => undefined
         }),
       },
@@ -27,8 +30,32 @@ function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) =
   }
 }
 
-function sessionEvent(type: 'session.started' | 'session.ended'): StoredEvent {
-  return { seq: 1, ts: 't', type, payload: { sessionId: 's' } } as StoredEvent
+function started(sessionId: string, title: string): StoredEvent {
+  return {
+    seq: 1,
+    ts: 't',
+    type: 'session.started',
+    payload: { sessionId, agentId: 'a', workspaceId: 'w', title },
+  } as StoredEvent
+}
+
+function ended(sessionId: string): StoredEvent {
+  return {
+    seq: 1,
+    ts: 't',
+    type: 'session.ended',
+    payload: { sessionId, outcome: 'completed' },
+  } as StoredEvent
+}
+
+function renderRail(): void {
+  render(
+    <SelectionProvider>
+      <SessionsProvider>
+        <AgentRail />
+      </SessionsProvider>
+    </SelectionProvider>,
+  )
 }
 
 afterEach(() => {
@@ -36,45 +63,91 @@ afterEach(() => {
 })
 
 describe('AgentRail', () => {
-  it('shows an empty rail with no bridge', () => {
-    render(<AgentRail />)
+  it('shows an empty rail with no agents', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
 
     expect(screen.getByLabelText('No active agents')).toBeInTheDocument()
   })
 
-  it('counts running agents up on start and down on end, never below zero', () => {
+  it('lists agents and highlights the one you click', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<AgentRail />)
-    expect(screen.getByLabelText('No active agents')).toBeInTheDocument()
-
+    renderRail()
     act(() => {
-      stub.emit(sessionEvent('session.started'))
-      stub.emit(sessionEvent('session.started'))
+      stub.emit(started('session_a', 'Count files'))
+      stub.emit(started('session_b', 'Fix header'))
     })
-    expect(screen.getByLabelText('2 active')).toBeInTheDocument()
 
-    act(() => {
-      stub.emit(sessionEvent('session.ended'))
-    })
-    expect(screen.getByLabelText('1 active')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Count files/ })).toBeInTheDocument()
+    const second = screen.getByRole('button', { name: /Fix header/ })
+    await userEvent.click(second)
 
-    // Two more ends than starts must floor at zero, not go negative.
-    act(() => {
-      stub.emit(sessionEvent('session.ended'))
-      stub.emit(sessionEvent('session.ended'))
-    })
-    expect(screen.getByLabelText('No active agents')).toBeInTheDocument()
+    expect(second).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
   })
 
-  it('ignores unrelated events', () => {
+  it('New agent clears the selection', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    render(<AgentRail />)
+    renderRail()
     act(() => {
-      stub.emit({ seq: 2, ts: 't', type: 'agent.text', payload: {} } as StoredEvent)
+      stub.emit(started('session_a', 'Count files'))
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
+    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'New agent' }))
+    expect(screen.getByRole('button', { name: /Count files/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('follows the selection to the newest agent when the highlighted one ends', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+      stub.emit(started('session_b', 'Fix header'))
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
+
+    act(() => {
+      stub.emit(ended('session_a'))
+    })
+
+    // A is gone; the selection follows to the newest remaining agent, B.
+    expect(screen.getByRole('button', { name: /Fix header/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('clears the selection when the last agent ends', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('session_a', 'Count files'))
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Count files/ }))
+
+    act(() => {
+      stub.emit(ended('session_a'))
     })
 
     expect(screen.getByLabelText('No active agents')).toBeInTheDocument()

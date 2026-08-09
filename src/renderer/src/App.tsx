@@ -1,11 +1,14 @@
 import { Panes } from './components/Panes'
 import { StatusBar } from './components/StatusBar'
 import { SelectionProvider } from './state/selection'
+import { SessionsProvider } from './state/sessions'
 
 export function App(): React.JSX.Element {
   return (
     <SelectionProvider>
-      <AppShell />
+      <SessionsProvider>
+        <AppShell />
+      </SessionsProvider>
     </SelectionProvider>
   )
 }

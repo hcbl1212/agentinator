@@ -5,8 +5,8 @@ import { Inspector } from './Inspector'
 import { PaneGutter } from './PaneGutter'
 import { Stream } from './Stream'
 
-const RAIL_MIN = 44
-const RAIL_MAX = 240
+const RAIL_MIN = 120
+const RAIL_MAX = 320
 const INSPECTOR_MIN = 260
 const INSPECTOR_MAX = 680
 
@@ -30,7 +30,7 @@ function storedWidth(key: string, fallback: number, min: number, max: number): n
  * either gutter redistributes space across all three.
  */
 export function Panes(): React.JSX.Element {
-  const [railWidth, setRailWidth] = useState(() => storedWidth(RAIL_KEY, 52, RAIL_MIN, RAIL_MAX))
+  const [railWidth, setRailWidth] = useState(() => storedWidth(RAIL_KEY, 176, RAIL_MIN, RAIL_MAX))
   const [inspectorWidth, setInspectorWidth] = useState(() =>
     storedWidth(INSPECTOR_KEY, 380, INSPECTOR_MIN, INSPECTOR_MAX),
   )

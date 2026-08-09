@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads, ImageAttachment } from '../../../shared/events'
+import { useSelection } from '../state/selection'
+import { useSessions } from '../state/sessions'
 import { ApprovalCard } from './ApprovalCard'
 import { QuestionCard } from './QuestionCard'
 
-type SessionStatus = 'running' | 'idle'
-
-/** A screenshot pasted into the composer: a thumbnail plus the base64 payload
- * sent to the model. */
+/** A screenshot pasted/dropped into the composer: a thumbnail plus the base64
+ * payload sent to the model. */
 interface PastedImage {
   id: string
   dataUrl: string
@@ -17,22 +17,26 @@ interface PastedImage {
 }
 
 /**
- * The bottom of the stream: active decisions (the agent's question, pending
- * approvals) as interactive cards, then a roomy composer. Enter sends;
- * Shift+Enter is a newline. Launching a task turns the composer into a reply
- * box on that session, so the stream above stays one continuous conversation.
+ * The bottom of the stream. It follows the highlighted agent: when one is
+ * selected, the composer replies to it (and shows its status and any pending
+ * question); with none selected it launches a fresh agent and selects it. The
+ * rail's "New agent" clears the selection to start over. Enter sends;
+ * Shift+Enter is a newline; images can be pasted or dropped.
  */
 export function ComposerDock(): React.JSX.Element {
   const bridge = window.agentinator
+  const { sessions } = useSessions()
+  const { selection, select } = useSelection()
   const [prompt, setPrompt] = useState('')
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const activeRef = useRef<string | null>(null)
-  const [status, setStatus] = useState<SessionStatus>('running')
-  const [question, setQuestion] = useState<EventPayloads['agent.question'] | null>(null)
-  // The vendor/model behind the prompt — reflected in the UI, never hardcoded.
+  const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
   const [agentLabel, setAgentLabel] = useState<string | null>(null)
   const [images, setImages] = useState<PastedImage[]>([])
+
+  const selectedId = selection?.kind === 'session' ? selection.id : null
+  const selected = sessions.find((session) => session.id === selectedId)
+  const replying = selected !== undefined
+  const question = selectedId === null ? undefined : questions[selectedId]
 
   useEffect(() => {
     const mounted = window.agentinator
@@ -63,23 +67,16 @@ export function ComposerDock(): React.JSX.Element {
         setApprovals((previous) =>
           previous.filter((approval) => approval.requestId !== payload.requestId),
         )
-      } else if (event.type === 'session.idle') {
-        const payload = event.payload as EventPayloads['session.idle']
-        if (payload.sessionId === activeRef.current) {
-          setStatus('idle')
-        }
       } else if (event.type === 'agent.question') {
         const payload = event.payload as EventPayloads['agent.question']
-        if (payload.sessionId === activeRef.current) {
-          setQuestion(payload)
-        }
+        setQuestions((previous) => ({ ...previous, [payload.sessionId]: payload }))
       } else if (event.type === 'session.ended') {
         const payload = event.payload as EventPayloads['session.ended']
-        if (payload.sessionId === activeRef.current) {
-          activeRef.current = null
-          setActiveSessionId(null)
-          setQuestion(null)
-        }
+        setQuestions((previous) => {
+          const rest = { ...previous }
+          delete rest[payload.sessionId]
+          return rest
+        })
       }
     })
     return () => {
@@ -88,18 +85,17 @@ export function ComposerDock(): React.JSX.Element {
     }
   }, [])
 
-  const beginTask = (trimmed: string, attachments: ImageAttachment[]): void => {
-    void bridge?.agent.startTask(trimmed, attachments).then((sessionId) => {
-      activeRef.current = sessionId
-      setActiveSessionId(sessionId)
-      setStatus('running')
+  const clearQuestion = (sessionId: string): void => {
+    setQuestions((previous) => {
+      const rest = { ...previous }
+      delete rest[sessionId]
+      return rest
     })
   }
 
-  const reply = (sessionId: string, trimmed: string, attachments: ImageAttachment[]): void => {
-    void bridge?.agent.send(sessionId, trimmed, attachments)
-    setStatus('running')
-    setQuestion(null)
+  const sendMessage = (sessionId: string, text: string, attachments: ImageAttachment[]): void => {
+    void bridge?.agent.send(sessionId, text, attachments)
+    clearQuestion(sessionId)
   }
 
   const submit = (): void => {
@@ -109,10 +105,12 @@ export function ComposerDock(): React.JSX.Element {
       return
     }
     const attachments = images.map(({ mediaType, data }) => ({ mediaType, data }))
-    if (activeSessionId === null) {
-      beginTask(trimmed, attachments)
+    if (selected !== undefined) {
+      sendMessage(selected.id, trimmed, attachments)
     } else {
-      reply(activeSessionId, trimmed, attachments)
+      void bridge.agent.startTask(trimmed, attachments).then((id) => {
+        select({ kind: 'session', id })
+      })
     }
     setPrompt('')
     setImages([])
@@ -179,14 +177,6 @@ export function ComposerDock(): React.JSX.Element {
     }
   }
 
-  const startNew = (sessionId: string): void => {
-    void bridge?.agent.cancel(sessionId)
-    activeRef.current = null
-    setActiveSessionId(null)
-    setQuestion(null)
-  }
-
-  const replying = activeSessionId !== null
   const who = agentLabel ?? 'the agent'
 
   return (
@@ -196,19 +186,12 @@ export function ComposerDock(): React.JSX.Element {
       onDrop={onDrop}
       onDragOver={(dragEvent) => dragEvent.preventDefault()}
     >
-      {activeSessionId !== null && (
+      {selected !== undefined && (
         <div className="session-status" aria-label="Active session">
-          <span className={`status-dot ${status}`} aria-hidden="true" />
+          <span className={`status-dot ${selected.status}`} aria-hidden="true" />
           <span className="session-status-label">
-            {status === 'idle' ? 'Awaiting your reply' : 'Working…'}
+            {selected.status === 'idle' ? 'Awaiting your reply' : 'Working…'} · {selected.title}
           </span>
-          <button
-            type="button"
-            className="new-task-button"
-            onClick={() => startNew(activeSessionId)}
-          >
-            New task
-          </button>
         </div>
       )}
 
@@ -216,10 +199,10 @@ export function ComposerDock(): React.JSX.Element {
         <p className="empty-state">Open a workspace to talk to an agent.</p>
       ) : (
         <>
-          {question !== null && activeSessionId !== null && (
+          {question !== undefined && selected !== undefined && (
             <QuestionCard
               question={question}
-              onAnswer={(text) => reply(activeSessionId, text, [])}
+              onAnswer={(text) => sendMessage(selected.id, text, [])}
             />
           )}
           {approvals.length > 0 && (

@@ -1,39 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+
+import { useSelection } from '../state/selection'
+import { useSessions } from '../state/sessions'
 
 /**
- * The slim fleet rail. Today it tracks whether an agent is live (a running
- * dot) so the conversation column can stay a pure dialogue surface; it grows
- * into the per-agent switcher when multiple sessions run at once.
+ * The fleet rail: every live agent as a selectable row. Clicking one highlights
+ * it, and the stream/inspector follow the selection. "New agent" clears the
+ * selection so the composer starts a fresh task. If the highlighted agent ends,
+ * the selection follows to the newest remaining one (or clears).
  */
 export function AgentRail(): React.JSX.Element {
-  const [running, setRunning] = useState(0)
+  const { sessions } = useSessions()
+  const { selection, select, clear } = useSelection()
+  const selectedId = selection?.kind === 'session' ? selection.id : null
 
   useEffect(() => {
-    const bridge = window.agentinator
-    if (bridge === undefined) {
-      return
-    }
-    return bridge.events.onAppended((event) => {
-      if (event.type === 'session.started') {
-        setRunning((previous) => previous + 1)
-      } else if (event.type === 'session.ended') {
-        setRunning((previous) => Math.max(0, previous - 1))
+    if (selectedId !== null && !sessions.some((session) => session.id === selectedId)) {
+      const newest = sessions.at(-1)
+      if (newest !== undefined) {
+        select({ kind: 'session', id: newest.id })
+      } else {
+        clear()
       }
-    })
-  }, [])
+    }
+  }, [sessions, selectedId, select, clear])
 
   return (
     <aside className="pane rail" aria-label="Agents">
-      <h2 className="pane-label rail-label">Agents</h2>
-      {running === 0 ? (
+      <div className="rail-head">
+        <h2 className="pane-label">Agents</h2>
+        <button type="button" className="rail-new" aria-label="New agent" onClick={() => clear()}>
+          ＋
+        </button>
+      </div>
+      {sessions.length === 0 ? (
         <p className="rail-empty" aria-label="No active agents">
-          —
+          No agents yet.
         </p>
       ) : (
-        <div className="rail-agent" aria-label={`${running} active`}>
-          <span className="status-dot running" aria-hidden="true" />
-          <span className="rail-count">{running}</span>
-        </div>
+        <ul className="rail-list">
+          {sessions.map((session) => (
+            <li key={session.id}>
+              <button
+                type="button"
+                className={`rail-agent${session.id === selectedId ? ' is-selected' : ''}`}
+                aria-pressed={session.id === selectedId}
+                title={session.title}
+                onClick={() => select({ kind: 'session', id: session.id })}
+              >
+                <span className={`status-dot ${session.status}`} aria-hidden="true" />
+                <span className="rail-agent-title">{session.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </aside>
   )
