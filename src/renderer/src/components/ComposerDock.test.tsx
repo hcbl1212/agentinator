@@ -127,6 +127,15 @@ describe('ComposerDock', () => {
     expect(screen.queryByRole('textbox', { name: 'Task for the agent' })).not.toBeInTheDocument()
   })
 
+  it('focuses the prompt so you can start typing a new task immediately', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+
+    expect(screen.getByRole('textbox', { name: 'Task for the agent' })).toHaveFocus()
+  })
+
   it('launches a new agent from the console prompt and clears it', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge

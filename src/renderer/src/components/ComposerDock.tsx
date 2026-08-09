@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads, ImageAttachment } from '../../../shared/events'
@@ -31,11 +31,20 @@ export function ComposerDock(): React.JSX.Element {
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
   const [images, setImages] = useState<PastedImage[]>([])
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const selectedId = selection?.kind === 'session' ? selection.id : null
   const selected = sessions.find((session) => session.id === selectedId)
   const replying = selected !== undefined
   const question = selectedId === null ? undefined : questions[selectedId]
+
+  // Focus the prompt whenever it's ready for a new task (on load and when the
+  // rail's "New agent" deselects) so you can just start typing.
+  useEffect(() => {
+    if (!replying) {
+      inputRef.current?.focus()
+    }
+  }, [replying])
 
   useEffect(() => {
     const mounted = window.agentinator
@@ -240,12 +249,11 @@ export function ComposerDock(): React.JSX.Element {
               &gt;
             </span>
             <textarea
+              ref={inputRef}
               className="console-input"
               aria-label={replying ? 'Reply to the agent' : 'Task for the agent'}
               placeholder={
-                replying
-                  ? 'Reply to the agent or steer it…  (Enter to send, Shift+Enter for a newline)'
-                  : 'Describe a task for the agent…  (paste or drop a screenshot too)'
+                replying ? 'Reply to the agent or steer it…' : 'Describe a task for the agent…'
               }
               rows={1}
               value={prompt}
