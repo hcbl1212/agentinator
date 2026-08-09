@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { StoredEvent } from '../../../shared/events'
 import { describeEvent, matchesQuery, mergeBySeq } from '../timeline/timelineFormat'
 
+/** Internal state the log records but the conversation view doesn't show: idle
+ * turns and the model colour the rail; the resume token is pure plumbing. */
+const INTERNAL_TYPES = new Set(['session.idle', 'session.resumable', 'session.model'])
+
 /**
  * Renders a bounded window over the append-only log: the newest `pageSize`
  * events plus live appends, with scrollback pages fetched on demand. The
@@ -72,16 +76,16 @@ export function Timeline({
 
   const searching = query !== ''
   const inWindow = searching ? searchResults : windowEvents
-  // Focus-follows: when an agent is highlighted, show only its events. Idle
-  // turns are internal state (they colour the rail dot), not conversation — so
-  // they never appear as timeline lines, including the ones a restart records.
+  // Focus-follows: when an agent is highlighted, show only its events. Internal
+  // state (idle turns, the model, the resume token) never appears as a line —
+  // it drives the rail, not the conversation — including what a restart records.
   const visible = (
     sessionId === null
       ? inWindow
       : inWindow.filter(
           (event) => (event.payload as { sessionId?: string }).sessionId === sessionId,
         )
-  ).filter((event) => event.type !== 'session.idle')
+  ).filter((event) => !INTERNAL_TYPES.has(event.type))
 
   const scrollToEnd = (): void => {
     const end = endRef.current

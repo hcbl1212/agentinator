@@ -76,9 +76,6 @@ describe('describeEvent', () => {
       text: 'session resumed',
       tone: 'accent',
     })
-    expect(
-      describeEvent(stored('session.resumable', { sessionId: 's', resumeToken: 't' })),
-    ).toMatchObject({ text: 'session saved', tone: 'faint' })
   })
 
   it('compacts tool inputs: command, path, then truncated JSON', () => {

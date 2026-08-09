@@ -100,6 +100,28 @@ describe('Timeline', () => {
     expect(screen.queryByText('from B')).not.toBeInTheDocument()
   })
 
+  it('hides internal state — resume token, model, idle — from the conversation', async () => {
+    const stub = stubBridge(() => [
+      stored('session.started', { sessionId: 's', agentId: 'a', workspaceId: 'w', title: 'T' }, 1),
+      stored('session.resumable', { sessionId: 's', resumeToken: 'tok' }, 2),
+      stored('session.model', { sessionId: 's', model: 'claude-opus-4-8' }, 3),
+      stored('session.idle', { sessionId: 's' }, 4),
+      text(5, 'Hello!'),
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Timeline />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello!')).toBeInTheDocument()
+    })
+    // The conversation shows; the plumbing does not.
+    expect(screen.getByText(/session started · T/)).toBeInTheDocument()
+    expect(screen.queryByText('session saved')).not.toBeInTheDocument()
+    expect(screen.queryByText('session.model')).not.toBeInTheDocument()
+    expect(screen.queryByText('done')).not.toBeInTheDocument()
+  })
+
   it('hides Load earlier once the scoped session’s start is on screen', async () => {
     const stub = stubBridge(() => [
       stored('session.started', { sessionId: 'a', agentId: 'x', workspaceId: 'w', title: 'T' }, 5),
