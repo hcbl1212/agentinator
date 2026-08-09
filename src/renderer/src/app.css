@@ -565,9 +565,37 @@ body {
   border-bottom-color: var(--err);
 }
 
-.capacity-text {
+.capacity-body {
+  display: flex;
   flex: 1;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.capacity-text {
   font-size: 0.85rem;
+}
+
+.capacity-overage {
+  color: var(--soft);
+  font-size: 0.85rem;
+}
+
+.capacity-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.capacity-link {
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.capacity-link:hover,
+.capacity-link:focus-visible {
+  text-decoration: underline;
 }
 
 .capacity-dismiss {

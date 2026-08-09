@@ -63,9 +63,38 @@ describe('CapacityBanner', () => {
     const banner = screen.getByRole('status', { name: 'Capacity limit' })
     expect(banner).toHaveTextContent(/Reached your session \(5-hour\) limit/)
     expect(banner).toHaveTextContent(/resets/)
+    expect(banner).toHaveTextContent('Overage available — new work continues on credits.')
+    expect(screen.getByRole('link', { name: 'Manage plan' })).toHaveAttribute(
+      'href',
+      'https://claude.ai/settings/billing',
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('status', { name: 'Capacity limit' })).not.toBeInTheDocument()
+  })
+
+  it('surfaces overage state — in use, then none on a rejection, then none on a warning', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    render(<CapacityBanner />)
+
+    act(() => {
+      stub.emit(limit({ overageInUse: true }))
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Using overage credits.')
+
+    act(() => {
+      stub.emit(limit({ status: 'rejected', overageAvailable: false, overageInUse: false }))
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Enable overage, or wait for the reset.')
+
+    act(() => {
+      stub.emit(limit({ status: 'warning', overageAvailable: false, overageInUse: false }))
+    })
+    const banner = screen.getByRole('status')
+    expect(banner).not.toHaveTextContent('Overage')
+    expect(banner).not.toHaveTextContent('Enable overage')
   })
 
   it('shows a warning for an unknown window with no reset, and ignores non-limit events', () => {

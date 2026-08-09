@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { EventPayloads } from '../../../shared/events'
 import type { AccountLimit, LimitStatus } from '../../../shared/usage'
 
+/** Where overage/credits are enabled — the app can't toggle them, but it can
+ * hand you straight there. Opened externally by the window's open handler. */
+const PLAN_URL = 'https://claude.ai/settings/billing'
+
 const WINDOW_LABEL: Record<string, string> = {
   five_hour: 'session (5-hour)',
   seven_day: 'weekly',
@@ -52,19 +56,34 @@ export function CapacityBanner(): React.JSX.Element | null {
   }
   const rejected = limit.status === 'rejected'
   const windowLabel = limit.window === null ? 'plan' : (WINDOW_LABEL[limit.window] ?? limit.window)
+  const overageNote = limit.overageInUse
+    ? 'Using overage credits.'
+    : limit.overageAvailable
+      ? 'Overage available — new work continues on credits.'
+      : rejected
+        ? 'Enable overage, or wait for the reset.'
+        : null
   return (
     <div
       className={`capacity-banner${rejected ? ' is-rejected' : ''}`}
       role="status"
       aria-label="Capacity limit"
     >
-      <span className="capacity-text">
-        {rejected ? 'Reached' : 'Approaching'} your {windowLabel} limit{resetText(limit.resetsAtMs)}
-        .
-      </span>
-      <button type="button" className="capacity-dismiss" onClick={() => setDismissed(true)}>
-        Dismiss
-      </button>
+      <div className="capacity-body">
+        <span className="capacity-text">
+          {rejected ? 'Reached' : 'Approaching'} your {windowLabel} limit
+          {resetText(limit.resetsAtMs)}.
+        </span>
+        {overageNote !== null && <span className="capacity-overage">{overageNote}</span>}
+      </div>
+      <div className="capacity-actions">
+        <a className="capacity-link" href={PLAN_URL} target="_blank" rel="noreferrer">
+          Manage plan
+        </a>
+        <button type="button" className="capacity-dismiss" onClick={() => setDismissed(true)}>
+          Dismiss
+        </button>
+      </div>
     </div>
   )
 }
