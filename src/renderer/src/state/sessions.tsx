@@ -11,6 +11,8 @@ export interface SessionInfo {
   status: SessionStatus
   /** The provider running it (e.g. "claude"), shown per agent in the rail. */
   providerId?: string
+  /** The model it's running (captured from the stream), shown beside the vendor. */
+  model?: string
 }
 
 /**
@@ -42,6 +44,12 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
     }
     case 'session.idle': {
       return withStatus((event.payload as EventPayloads['session.idle']).sessionId, 'idle')
+    }
+    case 'session.model': {
+      const payload = event.payload as EventPayloads['session.model']
+      return sessions.map((session) =>
+        session.id === payload.sessionId ? { ...session, model: payload.model } : session,
+      )
     }
     case 'session.ended': {
       const payload = event.payload as EventPayloads['session.ended']

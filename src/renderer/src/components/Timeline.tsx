@@ -101,7 +101,12 @@ export function Timeline({
   }
 
   const earliestCursor = windowEvents[0]?.seq ?? floorSeq + 1
-  const hasEarlier = !searching && earliestCursor > 1
+  // When scoped to an agent, its session.started is the beginning of the
+  // conversation — nothing earlier to load once it's on screen (the events
+  // before it in the log belong to other agents).
+  const atSessionStart =
+    sessionId !== null && visible.some((event) => event.type === 'session.started')
+  const hasEarlier = !searching && earliestCursor > 1 && !atSessionStart
 
   const loadEarlier = (): void => {
     const bridge = window.agentinator

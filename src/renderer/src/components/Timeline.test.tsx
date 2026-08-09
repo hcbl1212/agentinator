@@ -99,6 +99,34 @@ describe('Timeline', () => {
     expect(screen.queryByText('from B')).not.toBeInTheDocument()
   })
 
+  it('hides Load earlier once the scoped session’s start is on screen', async () => {
+    const stub = stubBridge(() => [
+      stored('session.started', { sessionId: 'a', agentId: 'x', workspaceId: 'w', title: 'T' }, 5),
+      stored('agent.text', { sessionId: 'a', text: 'hi' }, 6),
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Timeline sessionId="a" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('hi')).toBeInTheDocument()
+    })
+    // Earlier log events exist (seq 5 > 1) but they belong to other agents.
+    expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument()
+  })
+
+  it('shows Load earlier when the scoped session’s start is not yet loaded', async () => {
+    const stub = stubBridge(() => [stored('agent.text', { sessionId: 'a', text: 'hi' }, 5)])
+    window.agentinator = stub.bridge
+
+    render(<Timeline sessionId="a" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('hi')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Load earlier/ })).toBeInTheDocument()
+  })
+
   it('search is inert without a bridge', async () => {
     const user = userEvent.setup()
 

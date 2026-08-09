@@ -421,6 +421,24 @@ describe('createClaudeProvider', () => {
     expect(resumable[0]?.payload).toEqual({ sessionId: 'session_c', resumeToken: 'sdk-xyz' })
   })
 
+  it('captures the running model once from the assistant stream', async () => {
+    const { events } = await runSession([
+      {
+        type: 'assistant',
+        message: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'a' }] },
+      },
+      {
+        type: 'assistant',
+        message: { model: 'claude-opus-4-8', content: [{ type: 'text', text: 'b' }] },
+      },
+      successResult,
+    ])
+
+    const models = events.filter((event) => event.type === 'session.model')
+    expect(models).toHaveLength(1)
+    expect(models[0]?.payload).toEqual({ sessionId: 'session_c', model: 'claude-opus-4-8' })
+  })
+
   it('resumes with a token and skips the opening prompt, sending the reply instead', async () => {
     let queryArgs: Parameters<ClaudeQuery>[0] | undefined
     const seen: unknown[] = []

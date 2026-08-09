@@ -301,6 +301,7 @@ export function createClaudeProvider(
       }
 
       let tokenEmitted = false
+      let modelEmitted = false
       const run = async (): Promise<void> => {
         try {
           for await (const message of stream) {
@@ -308,11 +309,24 @@ export function createClaudeProvider(
             if (ended) {
               break
             }
-            // Capture the SDK session id once — it resumes this conversation
-            // after a restart.
-            if (!tokenEmitted && isRecord(message) && typeof message['session_id'] === 'string') {
-              tokenEmitted = true
-              emit('session.resumable', { sessionId, resumeToken: message['session_id'] })
+            if (isRecord(message)) {
+              // Capture the SDK session id once — it resumes this conversation
+              // after a restart.
+              if (!tokenEmitted && typeof message['session_id'] === 'string') {
+                tokenEmitted = true
+                emit('session.resumable', { sessionId, resumeToken: message['session_id'] })
+              }
+              // Capture the model the SDK actually ran, once.
+              const nested = message['message']
+              if (
+                !modelEmitted &&
+                message['type'] === 'assistant' &&
+                isRecord(nested) &&
+                typeof nested['model'] === 'string'
+              ) {
+                modelEmitted = true
+                emit('session.model', { sessionId, model: nested['model'] })
+              }
             }
             mapSdkMessage(message, { sessionId, emit })
           }

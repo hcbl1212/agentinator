@@ -43,6 +43,9 @@ export interface EventPayloads {
   'agent.thinking': { sessionId: string; summary: string }
   /** A turn finished; the session is alive and awaiting a follow-up message. */
   'session.idle': { sessionId: string }
+  /** The model the session is actually running, captured from the provider's
+   * stream (the SDK reports it) — shown per agent in the rail. */
+  'session.model': { sessionId: string; model: string }
   /** A vendor-native token that can reopen this conversation after a restart
    * (e.g. the Claude SDK session id). Persisted so resume survives the app. */
   'session.resumable': { sessionId: string; resumeToken: string }

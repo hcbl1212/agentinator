@@ -51,6 +51,10 @@ function started(sessionId: string, title: string, providerId?: string): StoredE
   }
 }
 
+function modelEvent(sessionId: string, model: string): StoredEvent {
+  return { seq: 1, ts: 't', type: 'session.model', payload: { sessionId, model } } as StoredEvent
+}
+
 function renderRail(): void {
   render(
     <SelectionProvider>
@@ -117,6 +121,23 @@ describe('AgentRail', () => {
       'aria-pressed',
       'false',
     )
+  })
+
+  it('shows the model beside the vendor, stripping the vendor prefix', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('a', 'Task A', 'claude'))
+      stub.emit(modelEvent('a', 'claude-opus-4-8'))
+      stub.emit(started('b', 'Task B', 'acme'))
+      // A model that doesn't carry the vendor prefix is shown as-is.
+      stub.emit(modelEvent('b', 'x-9'))
+    })
+
+    expect(screen.getByText('Claude · opus-4-8')).toBeInTheDocument()
+    expect(screen.getByText('Acme · x-9')).toBeInTheDocument()
   })
 
   it('keeps a freshly launched agent selected even before it appears in the list', async () => {

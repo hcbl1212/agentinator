@@ -31,6 +31,19 @@ describe('reduceSession', () => {
     expect(reduceSession(list, ev('session.idle', { sessionId: 'nope' }))).toEqual(list)
   })
 
+  it('records the running model on session.model', () => {
+    const list = reduceSession([], started('a', 'A', 'claude'))
+    const withModel = reduceSession(
+      list,
+      ev('session.model', { sessionId: 'a', model: 'claude-opus-4-8' }),
+    )
+    expect(withModel[0]).toMatchObject({ model: 'claude-opus-4-8' })
+    // A model event for an unknown session is a no-op.
+    expect(reduceSession(list, ev('session.model', { sessionId: 'nope', model: 'x' }))).toEqual(
+      list,
+    )
+  })
+
   it('removes a session on end and passes unrelated events through', () => {
     const list = reduceSession([], started('a', 'A'))
     expect(

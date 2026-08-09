@@ -1,10 +1,15 @@
 import { useSelection } from '../state/selection'
 import { useSessions } from '../state/sessions'
 
-/** A vendor id → display label. Until model selection lands this is the
- * provider name; it becomes "Claude · <model>" once a model is chosen. */
-function vendorLabel(providerId: string): string {
-  return providerId.charAt(0).toUpperCase() + providerId.slice(1)
+/** The per-agent vendor/model label, e.g. "Claude" or "Claude · opus-4-8"
+ * (the vendor prefix is stripped from the model to avoid repeating it). */
+function vendorLabel(providerId: string, model?: string): string {
+  const vendor = providerId.charAt(0).toUpperCase() + providerId.slice(1)
+  if (model === undefined) {
+    return vendor
+  }
+  const short = model.startsWith(`${providerId}-`) ? model.slice(providerId.length + 1) : model
+  return `${vendor} · ${short}`
 }
 
 /**
@@ -47,7 +52,9 @@ export function AgentRail(): React.JSX.Element {
                   <span className="rail-agent-title">{session.title}</span>
                 </span>
                 {session.providerId !== undefined && (
-                  <span className="rail-agent-vendor">{vendorLabel(session.providerId)}</span>
+                  <span className="rail-agent-vendor">
+                    {vendorLabel(session.providerId, session.model)}
+                  </span>
                 )}
               </button>
             </li>
