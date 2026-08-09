@@ -30,7 +30,6 @@ export function ComposerDock(): React.JSX.Element {
   const [prompt, setPrompt] = useState('')
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
-  const [agentLabel, setAgentLabel] = useState<string | null>(null)
   const [images, setImages] = useState<PastedImage[]>([])
 
   const selectedId = selection?.kind === 'session' ? selection.id : null
@@ -44,11 +43,6 @@ export function ComposerDock(): React.JSX.Element {
       return
     }
     let cancelled = false
-    void mounted.agent.current().then((agent) => {
-      if (!cancelled) {
-        setAgentLabel(agent.label)
-      }
-    })
     void mounted.approvals.pending().then((pending) => {
       if (!cancelled) {
         setApprovals(pending)
@@ -184,8 +178,6 @@ export function ComposerDock(): React.JSX.Element {
     }
   }
 
-  const who = agentLabel ?? 'the agent'
-
   return (
     <div
       className="composer-dock"
@@ -245,15 +237,15 @@ export function ComposerDock(): React.JSX.Element {
           )}
           <div className="console">
             <span className="console-prompt" aria-hidden="true">
-              {agentLabel !== null && <span className="console-agent">{agentLabel}</span>} &gt;
+              &gt;
             </span>
             <textarea
               className="console-input"
               aria-label={replying ? 'Reply to the agent' : 'Task for the agent'}
               placeholder={
                 replying
-                  ? `Reply to ${who} or steer it…  (Enter to send, Shift+Enter for a newline)`
-                  : `Describe a task for ${who} to do in this repo…  (paste or drop a screenshot too)`
+                  ? 'Reply to the agent or steer it…  (Enter to send, Shift+Enter for a newline)'
+                  : 'Describe a task for the agent…  (paste or drop a screenshot too)'
               }
               rows={1}
               value={prompt}

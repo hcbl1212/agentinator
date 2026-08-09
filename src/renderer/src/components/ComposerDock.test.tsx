@@ -127,19 +127,6 @@ describe('ComposerDock', () => {
     expect(screen.queryByRole('textbox', { name: 'Task for the agent' })).not.toBeInTheDocument()
   })
 
-  it('reflects the current agent at the prompt, not a hardcoded vendor', async () => {
-    const stub = stubBridge()
-    ;(stub.bridge.agent.current as ReturnType<typeof vi.fn>).mockResolvedValue({
-      providerId: 'acme',
-      label: 'Acme-7',
-    })
-    window.agentinator = stub.bridge
-
-    renderDock()
-
-    expect(await screen.findByText('Acme-7')).toBeInTheDocument()
-  })
-
   it('launches a new agent from the console prompt and clears it', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge

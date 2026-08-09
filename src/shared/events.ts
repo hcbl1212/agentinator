@@ -23,7 +23,14 @@ export interface ImageAttachment {
 export interface EventPayloads {
   /** Emitted once per app launch — proves the fabric end-to-end. */
   'app.started': { version: string }
-  'session.started': { sessionId: string; agentId: string; workspaceId: string; title: string }
+  'session.started': {
+    sessionId: string
+    agentId: string
+    workspaceId: string
+    title: string
+    /** The provider running the session (e.g. "claude") — shown per agent. */
+    providerId?: string
+  }
   'session.ended': { sessionId: string; outcome: 'completed' | 'cancelled' | 'failed' }
   'agent.text': { sessionId: string; text: string }
   'agent.thinking': { sessionId: string; summary: string }

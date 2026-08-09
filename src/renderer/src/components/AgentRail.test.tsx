@@ -30,12 +30,12 @@ function stubBridge(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) =
   }
 }
 
-function started(sessionId: string, title: string): StoredEvent {
+function started(sessionId: string, title: string, providerId?: string): StoredEvent {
   return {
     seq: 1,
     ts: 't',
     type: 'session.started',
-    payload: { sessionId, agentId: 'a', workspaceId: 'w', title },
+    payload: { sessionId, agentId: 'a', workspaceId: 'w', title, providerId },
   } as StoredEvent
 }
 
@@ -78,10 +78,12 @@ describe('AgentRail', () => {
 
     renderRail()
     act(() => {
-      stub.emit(started('session_a', 'Count files'))
+      stub.emit(started('session_a', 'Count files', 'claude'))
       stub.emit(started('session_b', 'Fix header'))
     })
 
+    // The provider shows per agent (capitalized); agents without one omit it.
+    expect(screen.getByText('Claude')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Count files/ })).toBeInTheDocument()
     const second = screen.getByRole('button', { name: /Fix header/ })
     await userEvent.click(second)

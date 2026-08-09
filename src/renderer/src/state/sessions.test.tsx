@@ -10,15 +10,15 @@ function ev(type: StoredEvent['type'], payload: object): StoredEvent {
   return { seq: 1, ts: 't', type, payload } as StoredEvent
 }
 
-function started(id: string, title: string): StoredEvent {
-  return ev('session.started', { sessionId: id, agentId: 'a', workspaceId: 'w', title })
+function started(id: string, title: string, providerId?: string): StoredEvent {
+  return ev('session.started', { sessionId: id, agentId: 'a', workspaceId: 'w', title, providerId })
 }
 
 describe('reduceSession', () => {
-  it('adds a session on start and ignores a duplicate start', () => {
-    const one = reduceSession([], started('a', 'A'))
-    expect(one).toEqual([{ id: 'a', title: 'A', status: 'running' }])
-    expect(reduceSession(one, started('a', 'A'))).toEqual(one)
+  it('adds a session on start, keeping its provider, and ignores a duplicate', () => {
+    const one = reduceSession([], started('a', 'A', 'claude'))
+    expect(one).toEqual([{ id: 'a', title: 'A', status: 'running', providerId: 'claude' }])
+    expect(reduceSession(one, started('a', 'A', 'claude'))).toEqual(one)
   })
 
   it('flips status on user.message (running) and idle, matching only the right id', () => {

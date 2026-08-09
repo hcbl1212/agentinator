@@ -3,6 +3,12 @@ import { useEffect } from 'react'
 import { useSelection } from '../state/selection'
 import { useSessions } from '../state/sessions'
 
+/** A vendor id → display label. Until model selection lands this is the
+ * provider name; it becomes "Claude · <model>" once a model is chosen. */
+function vendorLabel(providerId: string): string {
+  return providerId.charAt(0).toUpperCase() + providerId.slice(1)
+}
+
 /**
  * The fleet rail: every live agent as a selectable row. Clicking one highlights
  * it, and the stream/inspector follow the selection. "New agent" clears the
@@ -48,8 +54,13 @@ export function AgentRail(): React.JSX.Element {
                 title={session.title}
                 onClick={() => select({ kind: 'session', id: session.id })}
               >
-                <span className={`status-dot ${session.status}`} aria-hidden="true" />
-                <span className="rail-agent-title">{session.title}</span>
+                <span className="rail-agent-head">
+                  <span className={`status-dot ${session.status}`} aria-hidden="true" />
+                  <span className="rail-agent-title">{session.title}</span>
+                </span>
+                {session.providerId !== undefined && (
+                  <span className="rail-agent-vendor">{vendorLabel(session.providerId)}</span>
+                )}
               </button>
             </li>
           ))}

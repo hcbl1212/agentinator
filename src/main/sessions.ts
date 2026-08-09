@@ -1,7 +1,7 @@
 import { BUDGET_SCOPES } from '../shared/budget'
 import type { Budgets, BudgetScope } from '../shared/budget'
 import { createEntityId } from '../shared/events'
-import type { ImageAttachment, StoredEvent } from '../shared/events'
+import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
 import { periodStartIso } from './budgetPeriods'
 import type { EventStore } from './eventStore'
 import type { AgentProvider, AgentSessionHandle } from './providers/types'
@@ -141,6 +141,7 @@ export class SessionManager {
           agentId,
           workspaceId,
           title: options.title,
+          providerId: options.providerId,
         }),
       )
       this.#emit(this.#store.append('budget.exceeded', { sessionId, ...blocked }))
@@ -160,7 +161,15 @@ export class SessionManager {
         images: options.images,
       },
       (type, payload) => {
-        const stored = this.#store.append(type, payload)
+        // Stamp the provider onto session.started so the UI can show which
+        // vendor/model each agent runs — the provider stays vendor-blind.
+        const stored =
+          type === 'session.started'
+            ? this.#store.append('session.started', {
+                ...(payload as EventPayloads['session.started']),
+                providerId: options.providerId,
+              })
+            : this.#store.append(type, payload)
         if (type === 'session.ended') {
           // May fire before startSession returns (instant failures) — record
           // it so the handle registered below is cleaned up either way.

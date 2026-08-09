@@ -9,6 +9,8 @@ export interface SessionInfo {
   id: string
   title: string
   status: SessionStatus
+  /** The provider running it (e.g. "claude"), shown per agent in the rail. */
+  providerId?: string
 }
 
 /**
@@ -24,7 +26,15 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
       const payload = event.payload as EventPayloads['session.started']
       return sessions.some((session) => session.id === payload.sessionId)
         ? sessions
-        : [...sessions, { id: payload.sessionId, title: payload.title, status: 'running' }]
+        : [
+            ...sessions,
+            {
+              id: payload.sessionId,
+              title: payload.title,
+              status: 'running',
+              providerId: payload.providerId,
+            },
+          ]
     }
     case 'user.message': {
       // A new message means the agent is working again.
