@@ -201,6 +201,26 @@ describe('Preview', () => {
     expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
   })
 
+  it('collapses and expands the component setup block', () => {
+    window.agentinator = stub().bridge
+
+    render(<Preview sessionId="s" />)
+
+    // Open by default so a first-time user sees the fields.
+    const toggle = screen.getByRole('button', { name: /Isolate one component/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('form', { name: 'Component workbench' })).toBeInTheDocument()
+
+    // Collapsing folds the form away to free up capture space.
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('form', { name: 'Component workbench' })).not.toBeInTheDocument()
+
+    // And it reopens.
+    fireEvent.click(toggle)
+    expect(screen.getByRole('form', { name: 'Component workbench' })).toBeInTheDocument()
+  })
+
   it('loads, pins (with wrapper), and clears a component workbench target', async () => {
     const stubbed = stub({
       component: { root: '/app', file: 'src/Cart.tsx', wrapper: 'src/Providers.tsx' },

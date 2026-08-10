@@ -53,6 +53,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [componentProps, setComponentProps] = useState('')
   const [inferring, setInferring] = useState(false)
   const [wrappering, setWrappering] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(true)
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -301,105 +302,117 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           Capture failed: {error}
         </p>
       )}
-      <span className="preview-row-label">Isolate one component (needs the URL above)</span>
-      <form
-        className="preview-component"
-        aria-label="Component workbench"
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveComponent()
-        }}
+      <button
+        type="button"
+        className="preview-row-label preview-disclosure"
+        aria-expanded={setupOpen}
+        onClick={() => setSetupOpen((open) => !open)}
       >
-        <div className="preview-field">
-          <span className="preview-field-label">Root</span>
-          <input
-            className="preview-field-input"
-            value={componentRoot}
-            onChange={(event) => setComponentRoot(event.target.value)}
-            placeholder="App root folder"
-            aria-label="Component app root"
-          />
-          <button
-            type="button"
-            className="preview-browse"
-            onClick={chooseRoot}
-            aria-label="Choose app root"
-          >
-            Browse…
-          </button>
-        </div>
-        <div className="preview-field">
-          <span className="preview-field-label">File</span>
-          <input
-            className="preview-field-input"
-            value={componentFile}
-            onChange={(event) => setComponentFile(event.target.value)}
-            placeholder="e.g. src/components/Cart.tsx"
-            aria-label="Component file"
-          />
-          <button
-            type="button"
-            className="preview-browse"
-            onClick={() => chooseFile(setComponentFile)}
-            aria-label="Choose component file"
-          >
-            Browse…
-          </button>
-        </div>
-        <div className="preview-field">
-          <span className="preview-field-label">Wrapper</span>
-          <input
-            className="preview-field-input"
-            value={componentWrapper}
-            onChange={(event) => setComponentWrapper(event.target.value)}
-            placeholder="optional — a provider for context"
-            aria-label="Wrapper file"
-          />
-          <button
-            type="button"
-            className="preview-browse"
-            onClick={() => chooseFile(setComponentWrapper)}
-            aria-label="Choose wrapper file"
-          >
-            Browse…
-          </button>
-        </div>
-        <div className="preview-field">
-          <span className="preview-field-label">Props</span>
-          <textarea
-            className="preview-field-input preview-props-input"
-            value={componentProps}
-            onChange={(event) => setComponentProps(event.target.value)}
-            placeholder="{ label: 'Hi' } — or click Infer props"
-            aria-label="Component props"
-            rows={2}
-          />
-        </div>
-        <div className="preview-actions">
-          <button
-            type="button"
-            className="preview-action"
-            onClick={inferProps}
-            disabled={inferring}
-          >
-            {inferring ? 'Inferring…' : 'Infer props'}
-          </button>
-          <button
-            type="button"
-            className="preview-action"
-            onClick={inferWrapper}
-            disabled={wrappering}
-          >
-            {wrappering ? 'Generating…' : 'Infer wrapper'}
-          </button>
-          <button type="submit" className="preview-action is-primary">
-            Pin
-          </button>
-          <button type="button" className="preview-action" onClick={clearComponent}>
-            Clear
-          </button>
-        </div>
-      </form>
+        <span className="preview-caret" aria-hidden="true">
+          {setupOpen ? '▾' : '▸'}
+        </span>
+        Isolate one component (needs the URL above)
+      </button>
+      {setupOpen && (
+        <form
+          className="preview-component"
+          aria-label="Component workbench"
+          onSubmit={(event) => {
+            event.preventDefault()
+            saveComponent()
+          }}
+        >
+          <div className="preview-field">
+            <span className="preview-field-label">Root</span>
+            <input
+              className="preview-field-input"
+              value={componentRoot}
+              onChange={(event) => setComponentRoot(event.target.value)}
+              placeholder="App root folder"
+              aria-label="Component app root"
+            />
+            <button
+              type="button"
+              className="preview-browse"
+              onClick={chooseRoot}
+              aria-label="Choose app root"
+            >
+              Browse…
+            </button>
+          </div>
+          <div className="preview-field">
+            <span className="preview-field-label">File</span>
+            <input
+              className="preview-field-input"
+              value={componentFile}
+              onChange={(event) => setComponentFile(event.target.value)}
+              placeholder="e.g. src/components/Cart.tsx"
+              aria-label="Component file"
+            />
+            <button
+              type="button"
+              className="preview-browse"
+              onClick={() => chooseFile(setComponentFile)}
+              aria-label="Choose component file"
+            >
+              Browse…
+            </button>
+          </div>
+          <div className="preview-field">
+            <span className="preview-field-label">Wrapper</span>
+            <input
+              className="preview-field-input"
+              value={componentWrapper}
+              onChange={(event) => setComponentWrapper(event.target.value)}
+              placeholder="optional — a provider for context"
+              aria-label="Wrapper file"
+            />
+            <button
+              type="button"
+              className="preview-browse"
+              onClick={() => chooseFile(setComponentWrapper)}
+              aria-label="Choose wrapper file"
+            >
+              Browse…
+            </button>
+          </div>
+          <div className="preview-field">
+            <span className="preview-field-label">Props</span>
+            <textarea
+              className="preview-field-input preview-props-input"
+              value={componentProps}
+              onChange={(event) => setComponentProps(event.target.value)}
+              placeholder="{ label: 'Hi' } — or click Infer props"
+              aria-label="Component props"
+              rows={2}
+            />
+          </div>
+          <div className="preview-actions">
+            <button
+              type="button"
+              className="preview-action"
+              onClick={inferProps}
+              disabled={inferring}
+            >
+              {inferring ? 'Inferring…' : 'Infer props'}
+            </button>
+            <button
+              type="button"
+              className="preview-action"
+              onClick={inferWrapper}
+              disabled={wrappering}
+            >
+              {wrappering ? 'Generating…' : 'Infer wrapper'}
+            </button>
+            <button type="submit" className="preview-action is-primary">
+              Pin
+            </button>
+            <button type="button" className="preview-action" onClick={clearComponent}>
+              Clear
+            </button>
+          </div>
+        </form>
+      )}
       {src === null ? (
         <p className="empty-state">
           Capture a screenshot of the target app — it renders here, and streams to the agent next.
