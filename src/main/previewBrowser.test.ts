@@ -73,7 +73,10 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
 
 vi.mock('electron', () => ({ BrowserWindow: MockBrowserWindow }))
 
-import { ElectronPreviewBrowser } from './previewBrowser'
+import { ElectronPreviewBrowser, settleDelay } from './previewBrowser'
+
+// Inject a no-op settle so the real 200ms pause doesn't slow the unit tests.
+const mk = (): ElectronPreviewBrowser => new ElectronPreviewBrowser(() => Promise.resolve())
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -83,7 +86,7 @@ beforeEach(() => {
 
 describe('ElectronPreviewBrowser', () => {
   it('loads an http URL, captures the page, and returns PNG + size + console', async () => {
-    const shot = await new ElectronPreviewBrowser().capture('http://localhost:5173/')
+    const shot = await mk().capture('http://localhost:5173/')
 
     const window = MockBrowserWindow.instances[0]
     expect(window?.options).toMatchObject({ show: false })
@@ -106,7 +109,7 @@ describe('ElectronPreviewBrowser', () => {
   })
 
   it('loads a local file path when the target is not an http URL', async () => {
-    const shot = await new ElectronPreviewBrowser().capture('/app/examples/sample-web/index.html')
+    const shot = await mk().capture('/app/examples/sample-web/index.html')
 
     const window = MockBrowserWindow.instances[0]
     expect(window?.loadFile).toHaveBeenCalledWith('/app/examples/sample-web/index.html')
@@ -117,7 +120,7 @@ describe('ElectronPreviewBrowser', () => {
   it('records a load failure as a console error and still returns a shot', async () => {
     MockBrowserWindow.loadRejection = { value: new Error('ERR_CONNECTION_REFUSED') }
 
-    const shot = await new ElectronPreviewBrowser().capture('http://localhost:9/')
+    const shot = await mk().capture('http://localhost:9/')
 
     expect(shot.console).toEqual([
       { level: 'error', text: 'Failed to load http://localhost:9/: ERR_CONNECTION_REFUSED' },
@@ -129,7 +132,7 @@ describe('ElectronPreviewBrowser', () => {
   it('stringifies a non-Error load rejection', async () => {
     MockBrowserWindow.loadRejection = { value: 'boom' }
 
-    const shot = await new ElectronPreviewBrowser().capture('http://x/')
+    const shot = await mk().capture('http://x/')
 
     expect(shot.console).toEqual([{ level: 'error', text: 'Failed to load http://x/: boom' }])
   })
@@ -137,9 +140,23 @@ describe('ElectronPreviewBrowser', () => {
   it('destroys the window even when the capture fails', async () => {
     capturePage.mockRejectedValueOnce(new Error('render crashed'))
 
-    await expect(new ElectronPreviewBrowser().capture('http://x/')).rejects.toThrow(
-      'render crashed',
-    )
+    await expect(mk().capture('http://x/')).rejects.toThrow('render crashed')
     expect(MockBrowserWindow.instances[0]?.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('settles before capturing so console/network events aren’t raced', async () => {
+    vi.useFakeTimers()
+    try {
+      const settled = settleDelay()
+      let done = false
+      void settled.then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(200)
+      await settled
+      expect(done).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

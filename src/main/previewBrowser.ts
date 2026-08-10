@@ -30,6 +30,10 @@ function errorMessage(error: unknown): string {
 /** Cap on captured entries so a chatty page can't bloat the event log. */
 const MAX_ENTRIES = 100
 
+/** A brief pause after load so console/network events (delivered a tick after
+ * they fire) are all in before the shot — otherwise the capture races them. */
+export const settleDelay = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 200))
+
 /**
  * Captures via a hidden Electron BrowserWindow — Chromium ships with the app,
  * so there's no extra browser to bundle. Each capture is a throwaway window on
@@ -39,6 +43,12 @@ const MAX_ENTRIES = 100
  * agent sees "blank screen + here's why" rather than an opaque tool error.
  */
 export class ElectronPreviewBrowser implements PreviewBrowser {
+  #settle: () => Promise<void>
+
+  constructor(settle: () => Promise<void> = settleDelay) {
+    this.#settle = settle
+  }
+
   async capture(target: string): Promise<Screenshot> {
     const partition = `preview-${crypto.randomUUID()}`
     const window = new BrowserWindow({
@@ -74,6 +84,7 @@ export class ElectronPreviewBrowser implements PreviewBrowser {
       } catch (error) {
         messages.push({ level: 'error', text: `Failed to load ${target}: ${errorMessage(error)}` })
       }
+      await this.#settle()
       const image = await window.webContents.capturePage()
       const { width, height } = image.getSize()
       // Cap on return so a chatty page can't bloat the event log.

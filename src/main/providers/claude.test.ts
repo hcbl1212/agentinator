@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ConsoleEntry, EventPayloads, EventType, NetworkEntry } from '../../shared/events'
 import type { GitRunner } from '../git'
+import { missingContractEvents } from './contract'
 import { createClaudeProvider } from './claude'
 import type { ClaudeQuery, PreviewVision, SdkUserMessage } from './claude'
 import type { PermissionDecider, SessionContext } from './types'
@@ -658,6 +659,62 @@ describe('createClaudeProvider', () => {
     await handle.cancel()
     await vi.waitFor(() => {
       expect(events.at(-1)?.type).toBe('session.ended')
+    })
+  })
+})
+
+describe('createClaudeProvider — parity contract', () => {
+  it('emits every event the UI renders a session from', async () => {
+    const stream = [
+      { type: 'system', subtype: 'init', apiKeySource: 'none', session_id: 'sdk-1' },
+      {
+        type: 'assistant',
+        message: {
+          model: 'claude-x',
+          content: [
+            { type: 'thinking', thinking: 'planning' },
+            { type: 'text', text: 'working' },
+            { type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: 'a.ts' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      },
+      successResult,
+    ]
+    const git: GitRunner = vi.fn((args: string[]) =>
+      Promise.resolve(
+        args[0] === 'diff' && args[1] === 'HEAD'
+          ? 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-x\n+y'
+          : '',
+      ),
+    )
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf(stream)
+    }
+    const provider = createClaudeProvider(
+      query,
+      vi.fn(() => Promise.resolve(true)),
+      undefined,
+      git,
+    )
+    const events: Recorded[] = []
+
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    // agent.question is routed through canUseTool, not the stream.
+    await vi.waitFor(() => {
+      expect(queryArgs?.options.canUseTool).toBeDefined()
+    })
+    await queryArgs?.options.canUseTool?.('AskUserQuestion', {
+      questions: [{ question: 'q', options: ['a'] }],
+    })
+
+    await vi.waitFor(() => {
+      expect(missingContractEvents(events.map((event) => event.type))).toEqual([])
     })
   })
 })

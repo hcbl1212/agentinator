@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { missingContractEvents } from './contract'
 import { createE2eProvider } from './e2e'
 import type { EmitEvent, SessionContext } from './types'
 
@@ -27,7 +28,7 @@ function collector(): { emit: EmitEvent; types: () => string[]; find: (t: string
 }
 
 describe('createE2eProvider', () => {
-  it('streams a diff and cost then goes idle for a plain task', async () => {
+  it('streams the full turn — plumbing, thinking, tool, diff, cost — then idles', async () => {
     const decide = vi.fn((): Promise<boolean> => Promise.resolve(true))
     const { emit, types, find } = collector()
 
@@ -36,12 +37,49 @@ describe('createE2eProvider', () => {
 
     expect(types()).toEqual([
       'session.started',
+      'session.resumable',
+      'session.auth',
+      'session.model',
+      'agent.thinking',
+      'tool.called',
+      'tool.resulted',
       'agent.text',
       'file.diffed',
       'cost.usage',
       'session.idle',
     ])
     expect(find('file.diffed')).toMatchObject({ path: 'src/demo/e2e.ts', additions: 2 })
+    expect(decide).not.toHaveBeenCalled()
+  })
+
+  it('meets the provider parity contract (plus ended via cancel and question)', async () => {
+    const decide = vi.fn((): Promise<boolean> => Promise.resolve(true))
+    const { emit, types } = collector()
+    const provider = createE2eProvider(decide)
+
+    // A question turn covers agent.question; cancel covers session.ended.
+    const handle = provider.startSession(ctx('please ask a question'), emit)
+    await flush()
+    provider.startSession(ctx('other task'), emit)
+    await flush()
+    void handle.cancel()
+    await flush()
+
+    expect(missingContractEvents(types())).toEqual([])
+  })
+
+  it('asks the user a question then idles when the prompt calls for it', async () => {
+    const decide = vi.fn((): Promise<boolean> => Promise.resolve(true))
+    const { emit, types, find } = collector()
+
+    createE2eProvider(decide).startSession(ctx('ask a question'), emit)
+    await flush()
+
+    expect(find('agent.question')).toMatchObject({
+      questions: [{ question: 'Which approach?', options: ['Fast', 'Safe'] }],
+    })
+    // It idles awaiting the answer and never reaches the approval path.
+    expect(types()).toContain('session.idle')
     expect(decide).not.toHaveBeenCalled()
   })
 
@@ -71,6 +109,22 @@ describe('createE2eProvider', () => {
     await flush()
 
     expect(events).toContain('Write denied.')
+  })
+
+  it('skips the opening turn on resume and only echoes the reply', async () => {
+    const decide = vi.fn((): Promise<boolean> => Promise.resolve(true))
+    const { emit, types, find } = collector()
+
+    const handle = createE2eProvider(decide).startSession(
+      { ...ctx('reopened'), resume: { token: 'e2e-s1', turns: [] } },
+      emit,
+    )
+    await flush()
+    // No opening turn was replayed.
+    expect(types()).not.toContain('session.started')
+
+    void handle.send('still there')
+    expect(find('agent.text')).toMatchObject({ text: 'Echo: still there' })
   })
 
   it('echoes follow-ups and goes idle', () => {

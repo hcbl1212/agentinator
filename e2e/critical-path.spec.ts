@@ -11,11 +11,13 @@ import type { ElectronApplication, Page } from '@playwright/test'
  * provider (AGENTINATOR_MOCK_TASKS, no network) so they can't silently
  * regress. Each test gets a throwaway user-data dir → a clean event log.
  */
-async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
-  const userData = mkdtempSync(join(tmpdir(), 'agentinator-e2e-'))
+async function launchApp(
+  userData: string = mkdtempSync(join(tmpdir(), 'agentinator-e2e-')),
+): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   // Against the dev build (out/) by default, or the packaged .app binary when
   // AGENTINATOR_E2E_BINARY is set — the release pipeline's gate on the shipped
-  // artifact.
+  // artifact. A reused user-data dir (passed in) keeps the event log across a
+  // relaunch, so restart/resume can be tested.
   const binary = process.env['AGENTINATOR_E2E_BINARY']
   const launch = binary
     ? { executablePath: binary, args: [`--user-data-dir=${userData}`] }
@@ -25,7 +27,7 @@ async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
     env: { ...process.env, AGENTINATOR_MOCK_TASKS: '1' },
   })
   const page = await app.firstWindow()
-  return { app, page }
+  return { app, page, userData }
 }
 
 async function launchTask(page: Page, text: string): Promise<void> {
@@ -95,6 +97,79 @@ test('replying to an idle agent shows the follow-up and its echo', async () => {
 
     await expect(stream.getByText('are you there', { exact: true })).toBeVisible()
     await expect(stream.getByText('Echo: are you there')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
+test('the timeline renders thinking, tool calls, and their results', async () => {
+  const { app, page } = await launchApp()
+  const stream = page.getByRole('region', { name: 'Conversation' })
+  try {
+    await launchTask(page, 'do some work')
+
+    // Events the enriched provider mirrors from a real turn now render E2E.
+    await expect(stream.getByText(/thinking · Planning the change/)).toBeVisible()
+    await expect(stream.getByText(/read README\.md/)).toBeVisible()
+    await expect(stream.getByText('read 12 lines')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
+test('the rail shows the agent’s model and billing mode', async () => {
+  const { app, page } = await launchApp()
+  try {
+    await launchTask(page, 'a task')
+
+    const rail = page.getByRole('complementary', { name: 'Agents' })
+    await expect(rail.getByText('E2e · model-1')).toBeVisible()
+    await expect(rail.getByText('plan')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
+test('an agent question shows an answerable card, and answering echoes', async () => {
+  const { app, page } = await launchApp()
+  const stream = page.getByRole('region', { name: 'Conversation' })
+  try {
+    await launchTask(page, 'please ask a question')
+
+    const card = page.getByLabel('Agent question')
+    await expect(card.getByText('Which approach?')).toBeVisible()
+    await card.getByRole('button', { name: 'Fast' }).click()
+
+    // The chosen option is sent as the reply and the provider echoes it.
+    await expect(stream.getByText('Echo: Fast')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
+test('a session survives an app restart and reopens on reply', async () => {
+  const first = await launchApp()
+  const stream = first.page.getByRole('region', { name: 'Conversation' })
+  try {
+    await launchTask(first.page, 'resumable work')
+    await expect(stream.getByText('Ready.')).toBeVisible()
+  } finally {
+    await first.app.close()
+  }
+
+  // Relaunch against the SAME user-data dir — the event log persists.
+  const { app, page } = await launchApp(first.userData)
+  try {
+    // The agent is restored from the log; selecting it enters reply mode.
+    await page.getByRole('button', { name: /^resumable work/ }).click()
+    const reply = page.getByRole('textbox', { name: 'Reply to the agent' })
+    await reply.fill('are you back')
+    await reply.press('Enter')
+
+    // Reopened via the provider's resume path → the reply echoes.
+    await expect(
+      page.getByRole('region', { name: 'Conversation' }).getByText('Echo: are you back'),
+    ).toBeVisible()
   } finally {
     await app.close()
   }
