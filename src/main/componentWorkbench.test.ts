@@ -12,26 +12,34 @@ import {
 } from './componentWorkbench'
 
 describe('componentEntryHtml', () => {
-  it('mounts the imported component via createRoot', () => {
-    const html = componentEntryHtml('/src/components/Cart.tsx')
-    expect(html).toContain('import Component from "/src/components/Cart.tsx"')
-    expect(html).toContain("createRoot(document.getElementById('agentinator-root'))")
+  it('picks the export namespace-agnostically and mounts across React versions', () => {
+    const html = componentEntryHtml('/src/components/Cart.tsx', 'Cart')
+    // Namespace import so default OR named exports work; no static react-dom/client.
+    expect(html).toContain('import * as mod from "/src/components/Cart.tsx"')
+    expect(html).toContain('mod["Cart"]')
+    expect(html).toContain("import * as ReactDOM from 'react-dom'")
+    // React 18 createRoot when present, else React 17 render.
+    expect(html).toContain("typeof ReactDOM.createRoot === 'function'")
+    expect(html).toContain('ReactDOM.render(element, root)')
   })
 })
 
 describe('ComponentWorkbench', () => {
-  it('writes the entry at the app root and returns its dev-server path', () => {
+  it('writes the entry and passes the file base name as the likely export', () => {
     const writes: { path: string; content: string }[] = []
     const workbench = new ComponentWorkbench({
       write: (path, content) => writes.push({ path, content }),
       remove: vi.fn(),
     })
 
-    const url = workbench.prepare('/app', 'src/components/Cart.tsx')
+    const url = workbench.prepare('/app', 'src/components/EmployerDashboard/EmailMigrationPage.tsx')
 
     expect(url).toBe('/__agentinator_component.html')
     expect(writes[0]?.path).toBe(join('/app', COMPONENT_ENTRY))
-    expect(writes[0]?.content).toContain('import Component from "/src/components/Cart.tsx"')
+    expect(writes[0]?.content).toContain(
+      'import * as mod from "/src/components/EmployerDashboard/EmailMigrationPage.tsx"',
+    )
+    expect(writes[0]?.content).toContain('mod["EmailMigrationPage"]')
   })
 
   it('normalizes a leading slash and backslashes in the component path', () => {
@@ -43,7 +51,8 @@ describe('ComponentWorkbench', () => {
 
     workbench.prepare('/app', '\\src\\ui\\Button.tsx')
 
-    expect(writes[0]?.content).toContain('import Component from "/src/ui/Button.tsx"')
+    expect(writes[0]?.content).toContain('import * as mod from "/src/ui/Button.tsx"')
+    expect(writes[0]?.content).toContain('mod["Button"]')
   })
 
   it('removes the entry on clear', () => {

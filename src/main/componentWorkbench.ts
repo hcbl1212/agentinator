@@ -8,8 +8,14 @@ export const COMPONENT_ENTRY = '__agentinator_component.html'
 /** A standalone page that mounts one React component through the app's own
  * module graph — bare imports (`react`) and the `/src/...` import resolve via
  * the running Vite, so the component renders with the app's real deps. No JSX
- * in the inline script (Vite doesn't transform those), hence createElement. */
-export function componentEntryHtml(importPath: string): string {
+ * in the inline script (Vite doesn't transform those), hence createElement.
+ *
+ * The component is picked without assuming how it's exported: a default export,
+ * then a named export matching the file (e.g. `EmailMigrationPage`), then the
+ * first function export. Mounting is version-agnostic — React 18's createRoot
+ * when available, else React 17's render (no static `react-dom/client` import,
+ * which doesn't exist on 17). If no component is found the page says so. */
+export function componentEntryHtml(importPath: string, exportName: string): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -20,9 +26,23 @@ export function componentEntryHtml(importPath: string): string {
     <div id="agentinator-root"></div>
     <script type="module">
       import { createElement } from 'react'
-      import { createRoot } from 'react-dom/client'
-      import Component from ${JSON.stringify(importPath)}
-      createRoot(document.getElementById('agentinator-root')).render(createElement(Component))
+      import * as ReactDOM from 'react-dom'
+      import * as mod from ${JSON.stringify(importPath)}
+      const Component =
+        mod.default ??
+        mod[${JSON.stringify(exportName)}] ??
+        Object.values(mod).find((value) => typeof value === 'function')
+      const root = document.getElementById('agentinator-root')
+      if (Component) {
+        const element = createElement(Component)
+        if (typeof ReactDOM.createRoot === 'function') {
+          ReactDOM.createRoot(root).render(element)
+        } else {
+          ReactDOM.render(element, root)
+        }
+      } else {
+        root.textContent = 'No component export found in ${importPath}'
+      }
     </script>
   </body>
 </html>
@@ -58,10 +78,13 @@ export class ComponentWorkbench {
   }
 
   /** Write the entry into `root` importing `file` (root-relative), and return
-   * the dev-server URL path to preview. */
+   * the dev-server URL path to preview. The file's base name is passed as the
+   * likely export name (e.g. `EmailMigrationPage.tsx` → `EmailMigrationPage`). */
   prepare(root: string, file: string): string {
-    const importPath = `/${file.replace(/\\/g, '/').replace(/^\/+/, '')}`
-    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(importPath))
+    const normalized = file.replace(/\\/g, '/').replace(/^\/+/, '')
+    const base = normalized.substring(normalized.lastIndexOf('/') + 1)
+    const exportName = base.replace(/\.[^.]+$/, '')
+    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(`/${normalized}`, exportName))
     return `/${COMPONENT_ENTRY}`
   }
 
