@@ -310,82 +310,96 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           saveComponent()
         }}
       >
-        <input
-          className="preview-target-input"
-          value={componentRoot}
-          onChange={(event) => setComponentRoot(event.target.value)}
-          placeholder="App root (folder)"
-          aria-label="Component app root"
-        />
-        <button
-          type="button"
-          className="preview-target-save"
-          onClick={chooseRoot}
-          aria-label="Choose app root"
-        >
-          …
-        </button>
-        <input
-          className="preview-target-input"
-          value={componentFile}
-          onChange={(event) => setComponentFile(event.target.value)}
-          placeholder="Component file, e.g. src/Cart.tsx"
-          aria-label="Component file"
-        />
-        <button
-          type="button"
-          className="preview-target-save"
-          onClick={() => chooseFile(setComponentFile)}
-          aria-label="Choose component file"
-        >
-          …
-        </button>
-        <input
-          className="preview-target-input"
-          value={componentWrapper}
-          onChange={(event) => setComponentWrapper(event.target.value)}
-          placeholder="Wrapper file (optional, for context)"
-          aria-label="Wrapper file"
-        />
-        <button
-          type="button"
-          className="preview-target-save"
-          onClick={() => chooseFile(setComponentWrapper)}
-          aria-label="Choose wrapper file"
-        >
-          …
-        </button>
-        <button
-          type="button"
-          className="preview-target-save"
-          onClick={inferProps}
-          disabled={inferring}
-        >
-          {inferring ? 'Inferring…' : 'Infer props'}
-        </button>
-        <button
-          type="button"
-          className="preview-target-save"
-          onClick={inferWrapper}
-          disabled={wrappering}
-        >
-          {wrappering ? 'Generating…' : 'Infer wrapper'}
-        </button>
-        <button type="submit" className="preview-target-save">
-          Pin
-        </button>
-        <button type="button" className="preview-target-save" onClick={clearComponent}>
-          Clear
-        </button>
+        <div className="preview-field">
+          <span className="preview-field-label">Root</span>
+          <input
+            className="preview-field-input"
+            value={componentRoot}
+            onChange={(event) => setComponentRoot(event.target.value)}
+            placeholder="App root folder"
+            aria-label="Component app root"
+          />
+          <button
+            type="button"
+            className="preview-browse"
+            onClick={chooseRoot}
+            aria-label="Choose app root"
+          >
+            Browse…
+          </button>
+        </div>
+        <div className="preview-field">
+          <span className="preview-field-label">File</span>
+          <input
+            className="preview-field-input"
+            value={componentFile}
+            onChange={(event) => setComponentFile(event.target.value)}
+            placeholder="e.g. src/components/Cart.tsx"
+            aria-label="Component file"
+          />
+          <button
+            type="button"
+            className="preview-browse"
+            onClick={() => chooseFile(setComponentFile)}
+            aria-label="Choose component file"
+          >
+            Browse…
+          </button>
+        </div>
+        <div className="preview-field">
+          <span className="preview-field-label">Wrapper</span>
+          <input
+            className="preview-field-input"
+            value={componentWrapper}
+            onChange={(event) => setComponentWrapper(event.target.value)}
+            placeholder="optional — a provider for context"
+            aria-label="Wrapper file"
+          />
+          <button
+            type="button"
+            className="preview-browse"
+            onClick={() => chooseFile(setComponentWrapper)}
+            aria-label="Choose wrapper file"
+          >
+            Browse…
+          </button>
+        </div>
+        <div className="preview-field">
+          <span className="preview-field-label">Props</span>
+          <textarea
+            className="preview-field-input preview-props-input"
+            value={componentProps}
+            onChange={(event) => setComponentProps(event.target.value)}
+            placeholder="{ label: 'Hi' } — or click Infer props"
+            aria-label="Component props"
+            rows={2}
+          />
+        </div>
+        <div className="preview-actions">
+          <button
+            type="button"
+            className="preview-action"
+            onClick={inferProps}
+            disabled={inferring}
+          >
+            {inferring ? 'Inferring…' : 'Infer props'}
+          </button>
+          <button
+            type="button"
+            className="preview-action"
+            onClick={inferWrapper}
+            disabled={wrappering}
+          >
+            {wrappering ? 'Generating…' : 'Infer wrapper'}
+          </button>
+          <button type="submit" className="preview-action is-primary">
+            Pin
+          </button>
+          <button type="button" className="preview-action" onClick={clearComponent}>
+            Clear
+          </button>
+        </div>
       </form>
-      <textarea
-        className="preview-props-input"
-        value={componentProps}
-        onChange={(event) => setComponentProps(event.target.value)}
-        placeholder="Props (a JS object literal, e.g. { label: 'Hi' }) — or click Infer props"
-        aria-label="Component props"
-        rows={2}
-      />
       {src === null ? (
         <p className="empty-state">
           Capture a screenshot of the target app — it renders here, and streams to the agent next.

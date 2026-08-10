@@ -204,8 +204,8 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.preview-target,
-.preview-component {
+/* The dev-server URL row: input + Set. */
+.preview-target {
   display: flex;
   gap: 0.5rem;
 }
@@ -223,43 +223,92 @@ body {
   text-transform: uppercase;
 }
 
+/* The component workbench: labeled field rows stacked, then an actions row. */
+.preview-component {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.preview-field {
+  align-items: start;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
+}
+
+.preview-field-label {
+  color: var(--faint);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+  text-transform: uppercase;
+}
+
+.preview-field-input,
 .preview-target-input {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--ink);
-  flex: 1;
   font: inherit;
   font-size: 0.8rem;
   min-width: 0;
   padding: 0.3rem 0.55rem;
+  width: 100%;
 }
 
-.preview-target-save {
+.preview-target-input {
+  flex: 1;
+}
+
+textarea.preview-props-input {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.75rem;
+  resize: vertical;
+}
+
+/* Small secondary buttons: Set, Browse. */
+.preview-target-save,
+.preview-browse {
   background: none;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--soft);
   cursor: pointer;
   font: inherit;
-  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  white-space: nowrap;
 }
 
-.preview-target-save:disabled {
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.preview-action {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+}
+
+.preview-action:disabled {
   cursor: progress;
   opacity: 0.6;
 }
 
-.preview-props-input {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink);
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 0.75rem;
-  padding: 0.4rem 0.55rem;
-  resize: vertical;
-  width: 100%;
+.preview-action.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06251e;
+  font-weight: 600;
 }
 
 .preview-frame {
