@@ -75,8 +75,11 @@ const WRAPPER_SYSTEM =
   'Redux store, i18n, and any React contexts it consumes — and produce a wrapper that supplies ' +
   'them with mocked or in-memory values so it renders with NO running backend or login. Prefer the ' +
   "app's own provider components when they self-contain their client; otherwise use MemoryRouter, " +
-  'Apollo MockedProvider, and mock context values. Output ONLY a complete .tsx module that ' +
-  'default-exports a component taking `children`. No prose, no code fences.'
+  "Apollo MockedProvider, and mock context values. CRITICAL: also import the app's GLOBAL " +
+  'STYLESHEETS at the top of the wrapper — Tailwind, SCSS, and any CSS reset that the app entry ' +
+  '(index/main/App) imports — and reproduce the app root wrapper element (e.g. the id/class on ' +
+  '#app) so the component renders STYLED, not as unstyled plain text. Output ONLY a complete .tsx ' +
+  'module that default-exports a component taking `children`. No prose, no code fences.'
 
 /** Read-only tools the wrapper generator may use to explore the app. */
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead'])
