@@ -1,6 +1,8 @@
 import { createEntityId } from '../../shared/events'
 import type { ConsoleEntry, ImageAttachment, NetworkEntry } from '../../shared/events'
 import { normalizeLimit, normalizeUsage } from '../../shared/usage'
+import type { GitRunner } from '../git'
+import { diffAgainstHead } from '../workspaceDiff'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
   AgentProvider,
@@ -340,6 +342,10 @@ export function createClaudeProvider(
   query: ClaudeQuery,
   decide?: PermissionDecider,
   vision?: PreviewVision,
+  // Runs git in the agent's working dir so the harness can render its edits as a
+  // cumulative diff (the SDK reports edits only as opaque tool calls). Omitted →
+  // no diffs (e.g. tests, or a non-git workspace).
+  git?: GitRunner,
 ): AgentProvider {
   return {
     id: 'claude',
@@ -484,6 +490,18 @@ export function createClaudeProvider(
           // Experimental usage API — ignore any failure.
         }
       }
+      // After a turn, render the agent's file edits as a cumulative diff. The
+      // SDK surfaces edits only as opaque tool calls, so we ask git for the real
+      // diff of the working dir. diffAgainstHead is best-effort and never throws
+      // (git errors are swallowed), so a diff hiccup can't disturb the session.
+      const reportDiff = async (): Promise<void> => {
+        if (git === undefined) {
+          return
+        }
+        for (const file of await diffAgainstHead(context.cwd, git)) {
+          emit('file.diffed', { sessionId, ...file })
+        }
+      }
       const run = async (): Promise<void> => {
         try {
           for await (const message of stream) {
@@ -523,6 +541,7 @@ export function createClaudeProvider(
             }
             if (mapSdkMessage(message, { sessionId, emit, cost })) {
               void reportUsage()
+              void reportDiff()
             }
           }
         } catch {

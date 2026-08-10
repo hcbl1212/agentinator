@@ -12,6 +12,7 @@ import type { ArtifactStore } from './artifacts'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
+import { runGit } from './git'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
 import type { PreviewBrowser } from './previewBrowser'
@@ -293,13 +294,18 @@ export async function bootstrap(
   manager.register(createMockProvider(undefined, undefined, decide))
   // Hand Claude the app-capture tool so the agent can see what it builds.
   manager.register(
-    createClaudeProvider(claudeQuery, decide, {
-      capture: preview.captureImage.bind(preview),
-      // Narrowed to the adapter's own SDK-free types (like `query` above), so
-      // the provider never depends on the SDK's exact generics.
-      tool: tool as unknown as SdkTool,
-      createSdkMcpServer: createSdkMcpServer as unknown as SdkCreateServer,
-    }),
+    createClaudeProvider(
+      claudeQuery,
+      decide,
+      {
+        capture: preview.captureImage.bind(preview),
+        // Narrowed to the adapter's own SDK-free types (like `query` above), so
+        // the provider never depends on the SDK's exact generics.
+        tool: tool as unknown as SdkTool,
+        createSdkMcpServer: createSdkMcpServer as unknown as SdkCreateServer,
+      },
+      runGit,
+    ),
   )
   // The deterministic, no-network agent the Playwright e2e drives.
   if (env['AGENTINATOR_MOCK_TASKS'] === '1') {

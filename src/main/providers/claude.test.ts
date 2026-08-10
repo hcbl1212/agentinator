@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ConsoleEntry, EventPayloads, EventType, NetworkEntry } from '../../shared/events'
+import type { GitRunner } from '../git'
 import { createClaudeProvider } from './claude'
 import type { ClaudeQuery, PreviewVision, SdkUserMessage } from './claude'
 import type { PermissionDecider, SessionContext } from './types'
@@ -658,6 +659,62 @@ describe('createClaudeProvider', () => {
     await vi.waitFor(() => {
       expect(events.at(-1)?.type).toBe('session.ended')
     })
+  })
+})
+
+describe('createClaudeProvider — workspace diff', () => {
+  async function runWithGit(git: GitRunner | undefined): Promise<Recorded[]> {
+    const query: ClaudeQuery = () => streamOf([successResult])
+    const provider = createClaudeProvider(query, undefined, undefined, git)
+    const events: Recorded[] = []
+    provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    // A diff can land just after session.ended, so wait for it to EXIST rather
+    // than be the last event.
+    await vi.waitFor(() => {
+      expect(events.some((event) => event.type === 'session.ended')).toBe(true)
+    })
+    return events
+  }
+
+  it('emits file.diffed for the agent’s edits after a turn', async () => {
+    const git: GitRunner = vi.fn((args: string[]) =>
+      Promise.resolve(
+        args[0] === 'diff' && args[1] === 'HEAD'
+          ? 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new'
+          : '', // ls-files → nothing untracked
+      ),
+    )
+
+    // The diff is reported asynchronously after the turn — it can land just
+    // after session.ended, so wait for it specifically.
+    const events = await runWithGit(git)
+    await vi.waitFor(() => {
+      expect(events.some((event) => event.type === 'file.diffed')).toBe(true)
+    })
+
+    const diffs = events.filter((event) => event.type === 'file.diffed')
+    expect(diffs).toHaveLength(1)
+    expect(diffs[0]?.payload).toMatchObject({
+      sessionId: 'session_c',
+      path: 'x.ts',
+      additions: 1,
+      deletions: 1,
+    })
+  })
+
+  it('emits no diffs when no git runner is wired', async () => {
+    const events = await runWithGit(undefined)
+
+    expect(events.some((event) => event.type === 'file.diffed')).toBe(false)
+  })
+
+  it('completes the session even when git fails entirely', async () => {
+    const git: GitRunner = vi.fn(() => Promise.reject(new Error('git blew up')))
+
+    const events = await runWithGit(git)
+
+    expect(events.at(-1)?.type).toBe('session.ended')
+    expect(events.some((event) => event.type === 'file.diffed')).toBe(false)
   })
 })
 
