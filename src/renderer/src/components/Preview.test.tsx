@@ -158,6 +158,23 @@ describe('Preview', () => {
     await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null))
   })
 
+  it('surfaces a failed capture instead of failing silently', async () => {
+    const stubbed = stub()
+    stubbed.capture.mockRejectedValueOnce(new Error('ENOENT: /Users/brian/myapp missing'))
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ENOENT: /Users/brian/myapp missing')
+
+    // A non-Error rejection is stringified; a fresh capture clears the message.
+    stubbed.capture.mockRejectedValueOnce('boom')
+    fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('boom'))
+  })
+
   it('loads the configured preview target into the input', async () => {
     const stubbed = stub({ target: 'http://localhost:3001/' })
     window.agentinator = stubbed.bridge

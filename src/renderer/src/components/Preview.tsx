@@ -46,6 +46,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [mark, setMark] = useState<Mark | null>(null)
   const [note, setNote] = useState('')
   const [target, setTarget] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [componentRoot, setComponentRoot] = useState('')
   const [componentFile, setComponentFile] = useState('')
 
@@ -123,9 +124,17 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
       return
     }
     setBusy(true)
-    void bridge.preview.capture(sessionId).finally(() => {
-      setBusy(false)
-    })
+    setError(null)
+    void bridge.preview
+      .capture(sessionId)
+      .catch((reason: unknown) => {
+        // Surface a failed capture (e.g. a pinned component whose app root
+        // doesn't exist) instead of leaving the stale shot with no feedback.
+        setError(reason instanceof Error ? reason.message : String(reason))
+      })
+      .finally(() => {
+        setBusy(false)
+      })
   }
 
   const saveTarget = (): void => {
@@ -218,6 +227,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           Set
         </button>
       </form>
+      {error !== null && (
+        <p className="preview-error" role="alert">
+          Capture failed: {error}
+        </p>
+      )}
+      <span className="preview-row-label">Isolate one component (needs the URL above)</span>
       <form
         className="preview-component"
         aria-label="Component workbench"
