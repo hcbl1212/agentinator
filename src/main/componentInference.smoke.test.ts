@@ -30,7 +30,9 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)(
       expect(props).toMatch(/^\{[\s\S]*\}$/)
       expect(props).toContain('completedValue')
       expect(props).toContain('totalValue')
-      expect(() => JSON.parse(props.replace(/(\w+):/g, '"$1":'))).not.toThrow()
+      expect(() => {
+        JSON.parse(props.replace(/(\w+):/g, '"$1":'))
+      }).not.toThrow()
     })
   },
 )
