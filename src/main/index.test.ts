@@ -586,12 +586,12 @@ describe('registerPreviewIpc', () => {
       root: '/app',
       file: 'src/Cart.tsx',
     })
-    handlers.get('preview:set-component')?.(undefined, '/app', 'src/Cart.tsx')
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', 'src/Cart.tsx')
+    handlers.get('preview:set-component')?.(undefined, '/app', 'src/Cart.tsx', 'src/Providers.tsx')
+    expect(settings.setComponent).toHaveBeenCalledWith('/app', 'src/Cart.tsx', 'src/Providers.tsx')
     // Clearing (blank file) removes the entry from the pinned root first.
     handlers.get('preview:set-component')?.(undefined, '/app', '  ')
     expect(workbench.clear).toHaveBeenCalledWith('/app')
-    expect(settings.setComponent).toHaveBeenLastCalledWith('/app', '  ')
+    expect(settings.setComponent).toHaveBeenLastCalledWith('/app', '  ', undefined)
   })
 
   it('returns null for an unpinned component and skips the clear', () => {
@@ -612,7 +612,7 @@ describe('registerPreviewIpc', () => {
     expect(handlers.get('preview:get-component')?.(undefined)).toBeNull()
     handlers.get('preview:set-component')?.(undefined, '/app', null)
     expect(workbench.clear).not.toHaveBeenCalled()
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', null)
+    expect(settings.setComponent).toHaveBeenCalledWith('/app', null, undefined)
   })
 
   it('registers on ipcMain by default', () => {

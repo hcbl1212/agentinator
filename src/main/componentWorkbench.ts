@@ -10,12 +10,24 @@ export const COMPONENT_ENTRY = '__agentinator_component.html'
  * the running Vite, so the component renders with the app's real deps. No JSX
  * in the inline script (Vite doesn't transform those), hence createElement.
  *
- * The component is picked without assuming how it's exported: a default export,
- * then a named export matching the file (e.g. `EmailMigrationPage`), then the
- * first function export. Mounting is version-agnostic — React 18's createRoot
- * when available, else React 17's render (no static `react-dom/client` import,
- * which doesn't exist on 17). If no component is found the page says so. */
-export function componentEntryHtml(importPath: string, exportName: string): string {
+ * The component (and an optional wrapper that provides app context — store,
+ * router, i18n) is picked without assuming how it's exported: a default export,
+ * then a named export matching the file, then the first function export. When a
+ * wrapper is given the component renders as its children. Mounting is
+ * version-agnostic — React 18's createRoot when available, else React 17's
+ * render (no static `react-dom/client` import, which doesn't exist on 17). */
+export interface EntryModule {
+  importPath: string
+  exportName: string
+}
+
+export function componentEntryHtml(component: EntryModule, wrapper?: EntryModule): string {
+  const pick = (variable: string, mod: string, entry: EntryModule): string =>
+    `import * as ${mod} from ${JSON.stringify(entry.importPath)}\n` +
+    `      const ${variable} = ${mod}.default ?? ${mod}[${JSON.stringify(entry.exportName)}] ?? ` +
+    `Object.values(${mod}).find((value) => typeof value === 'function')`
+  const wrapperImport =
+    wrapper === undefined ? 'const Wrapper = null' : pick('Wrapper', 'wrapMod', wrapper)
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -27,21 +39,19 @@ export function componentEntryHtml(importPath: string, exportName: string): stri
     <script type="module">
       import { createElement } from 'react'
       import * as ReactDOM from 'react-dom'
-      import * as mod from ${JSON.stringify(importPath)}
-      const Component =
-        mod.default ??
-        mod[${JSON.stringify(exportName)}] ??
-        Object.values(mod).find((value) => typeof value === 'function')
+      ${pick('Component', 'mod', component)}
+      ${wrapperImport}
       const root = document.getElementById('agentinator-root')
       if (Component) {
-        const element = createElement(Component)
+        const inner = createElement(Component)
+        const element = Wrapper ? createElement(Wrapper, null, inner) : inner
         if (typeof ReactDOM.createRoot === 'function') {
           ReactDOM.createRoot(root).render(element)
         } else {
           ReactDOM.render(element, root)
         }
       } else {
-        root.textContent = 'No component export found in ${importPath}'
+        root.textContent = 'No component export found in ${component.importPath}'
       }
     </script>
   </body>
@@ -77,14 +87,18 @@ export class ComponentWorkbench {
     this.#fs = fs
   }
 
-  /** Write the entry into `root` importing `file` (root-relative), and return
-   * the dev-server URL path to preview. The file's base name is passed as the
-   * likely export name (e.g. `EmailMigrationPage.tsx` → `EmailMigrationPage`). */
-  prepare(root: string, file: string): string {
-    const normalized = file.replace(/\\/g, '/').replace(/^\/+/, '')
-    const base = normalized.substring(normalized.lastIndexOf('/') + 1)
-    const exportName = base.replace(/\.[^.]+$/, '')
-    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(`/${normalized}`, exportName))
+  /** Write the entry into `root` importing `file` (and an optional `wrapper`,
+   * both root-relative), and return the dev-server URL path to preview. The
+   * file's base name is used as the likely export name (e.g.
+   * `EmailMigrationPage.tsx` → `EmailMigrationPage`). */
+  prepare(root: string, file: string, wrapper?: string): string {
+    const entry = (path: string): EntryModule => {
+      const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '')
+      const base = normalized.substring(normalized.lastIndexOf('/') + 1)
+      return { importPath: `/${normalized}`, exportName: base.replace(/\.[^.]+$/, '') }
+    }
+    const wrap = wrapper === undefined || wrapper === '' ? undefined : entry(wrapper)
+    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(entry(file), wrap))
     return `/${COMPONENT_ENTRY}`
   }
 

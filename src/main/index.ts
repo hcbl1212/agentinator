@@ -208,7 +208,7 @@ export function registerPreviewIpc(
   )
   handle('preview:image', (_event, ref) => preview.image(ref as string))
   handle('preview:get-component', () => settings.component() ?? null)
-  handle('preview:set-component', (_event, root, file) => {
+  handle('preview:set-component', (_event, root, file, wrapper) => {
     const trimmed = typeof file === 'string' ? file.trim() : ''
     // Clearing the pin removes the entry we wrote into the app root.
     if (trimmed === '') {
@@ -217,7 +217,11 @@ export function registerPreviewIpc(
         workbench.clear(current.root)
       }
     }
-    settings.setComponent(root as string, file as string | null)
+    settings.setComponent(
+      root as string,
+      file as string | null,
+      wrapper as string | null | undefined,
+    )
   })
 }
 

@@ -13,7 +13,7 @@ import {
 
 describe('componentEntryHtml', () => {
   it('picks the export namespace-agnostically and mounts across React versions', () => {
-    const html = componentEntryHtml('/src/components/Cart.tsx', 'Cart')
+    const html = componentEntryHtml({ importPath: '/src/components/Cart.tsx', exportName: 'Cart' })
     // Namespace import so default OR named exports work; no static react-dom/client.
     expect(html).toContain('import * as mod from "/src/components/Cart.tsx"')
     expect(html).toContain('mod["Cart"]')
@@ -21,6 +21,18 @@ describe('componentEntryHtml', () => {
     // React 18 createRoot when present, else React 17 render.
     expect(html).toContain("typeof ReactDOM.createRoot === 'function'")
     expect(html).toContain('ReactDOM.render(element, root)')
+    // No wrapper → no wrap import; renders the component directly.
+    expect(html).toContain('const Wrapper = null')
+  })
+
+  it('wraps the component in a provider when a wrapper is given', () => {
+    const html = componentEntryHtml(
+      { importPath: '/src/Cart.tsx', exportName: 'Cart' },
+      { importPath: '/src/PreviewProviders.tsx', exportName: 'PreviewProviders' },
+    )
+    expect(html).toContain('import * as wrapMod from "/src/PreviewProviders.tsx"')
+    expect(html).toContain('wrapMod["PreviewProviders"]')
+    expect(html).toContain('Wrapper ? createElement(Wrapper, null, inner) : inner')
   })
 })
 
@@ -40,6 +52,20 @@ describe('ComponentWorkbench', () => {
       'import * as mod from "/src/components/EmployerDashboard/EmailMigrationPage.tsx"',
     )
     expect(writes[0]?.content).toContain('mod["EmailMigrationPage"]')
+    expect(writes[0]?.content).toContain('const Wrapper = null')
+  })
+
+  it('includes the wrapper when one is provided', () => {
+    const writes: { content: string }[] = []
+    const workbench = new ComponentWorkbench({
+      write: (_path, content) => writes.push({ content }),
+      remove: vi.fn(),
+    })
+
+    workbench.prepare('/app', 'src/Cart.tsx', 'src/PreviewProviders.tsx')
+
+    expect(writes[0]?.content).toContain('import * as wrapMod from "/src/PreviewProviders.tsx"')
+    expect(writes[0]?.content).toContain('wrapMod["PreviewProviders"]')
   })
 
   it('normalizes a leading slash and backslashes in the component path', () => {
@@ -49,10 +75,12 @@ describe('ComponentWorkbench', () => {
       remove: vi.fn(),
     })
 
-    workbench.prepare('/app', '\\src\\ui\\Button.tsx')
+    workbench.prepare('/app', '\\src\\ui\\Button.tsx', '')
 
     expect(writes[0]?.content).toContain('import * as mod from "/src/ui/Button.tsx"')
     expect(writes[0]?.content).toContain('mod["Button"]')
+    // A blank wrapper is treated as none.
+    expect(writes[0]?.content).toContain('const Wrapper = null')
   })
 
   it('removes the entry on clear', () => {

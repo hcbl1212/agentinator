@@ -49,6 +49,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [error, setError] = useState<string | null>(null)
   const [componentRoot, setComponentRoot] = useState('')
   const [componentFile, setComponentFile] = useState('')
+  const [componentWrapper, setComponentWrapper] = useState('')
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -67,6 +68,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
       if (!cancelled && pinned !== null) {
         setComponentRoot(pinned.root)
         setComponentFile(pinned.file)
+        setComponentWrapper(pinned.wrapper ?? '')
       }
     })
     return () => {
@@ -154,12 +156,18 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
       return
     }
     const file = componentFile.trim()
-    void bridge.preview.setComponent(componentRoot.trim(), file === '' ? null : file)
+    const wrapper = componentWrapper.trim()
+    void bridge.preview.setComponent(
+      componentRoot.trim(),
+      file === '' ? null : file,
+      wrapper === '' ? null : wrapper,
+    )
   }
 
   const clearComponent = (): void => {
     setComponentRoot('')
     setComponentFile('')
+    setComponentWrapper('')
     void window.agentinator?.preview.setComponent('', null)
   }
 
@@ -254,6 +262,13 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           onChange={(event) => setComponentFile(event.target.value)}
           placeholder="Component file, e.g. src/Cart.tsx"
           aria-label="Component file"
+        />
+        <input
+          className="preview-target-input"
+          value={componentWrapper}
+          onChange={(event) => setComponentWrapper(event.target.value)}
+          placeholder="Wrapper file (optional, for context)"
+          aria-label="Wrapper file"
         />
         <button type="submit" className="preview-target-save">
           Pin

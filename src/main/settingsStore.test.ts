@@ -128,13 +128,26 @@ describe('SettingsStore', () => {
     store.close()
   })
 
-  it('persists the component-workbench target, clearing on empty root or file', () => {
+  it('persists the component-workbench target incl. an optional wrapper', () => {
     const store = new SettingsStore()
 
     expect(store.component()).toBeUndefined()
     store.setComponent('  /app  ', '  src/Cart.tsx  ')
     expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
-    // Clearing the file clears the whole target.
+
+    // A wrapper is stored alongside and returned.
+    store.setComponent('/app', 'src/Cart.tsx', '  src/PreviewProviders.tsx  ')
+    expect(store.component()).toEqual({
+      root: '/app',
+      file: 'src/Cart.tsx',
+      wrapper: 'src/PreviewProviders.tsx',
+    })
+    // Re-pinning without a wrapper drops it.
+    store.setComponent('/app', 'src/Cart.tsx', '  ')
+    expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
+
+    // Clearing the file clears the whole target (wrapper included).
+    store.setComponent('/app', 'src/Cart.tsx', 'src/PreviewProviders.tsx')
     store.setComponent('/app', null)
     expect(store.component()).toBeUndefined()
     // A blank root also clears it.

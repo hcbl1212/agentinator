@@ -9,8 +9,9 @@ import type { PreviewBrowser } from './previewBrowser'
 export interface PreviewTargeting {
   /** The configured dev-server URL, or undefined for the bundled sample. */
   previewTarget: () => string | undefined
-  /** A pinned component (app root + root-relative file), or undefined. */
-  component: () => { root: string; file: string } | undefined
+  /** A pinned component (app root + root-relative file, optional wrapper), or
+   * undefined. */
+  component: () => { root: string; file: string; wrapper?: string } | undefined
   /** Writes the component entry and returns its dev-server path. */
   workbench: ComponentWorkbench
   /** The bundled sample, used when nothing else is configured. */
@@ -50,7 +51,8 @@ export class PreviewController {
     const base = previewTarget()
     const pinned = component()
     if (pinned !== undefined && base !== undefined) {
-      return `${base.replace(/\/$/, '')}${workbench.prepare(pinned.root, pinned.file)}`
+      const entry = workbench.prepare(pinned.root, pinned.file, pinned.wrapper)
+      return `${base.replace(/\/$/, '')}${entry}`
     }
     return base ?? sample
   }

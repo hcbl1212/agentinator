@@ -98,25 +98,37 @@ export class SettingsStore {
     }
   }
 
-  /** The component-workbench target: the app root (to write the entry into) and
-   * the component file (root-relative). Undefined when no component is pinned —
-   * the preview then shows the whole app / sample. */
-  component(): { root: string; file: string } | undefined {
+  /** The component-workbench target: the app root (to write the entry into), the
+   * component file (root-relative), and an optional wrapper file that provides
+   * app context. Undefined when no component is pinned — the preview then shows
+   * the whole app / sample. */
+  component(): { root: string; file: string; wrapper?: string } | undefined {
     const root = (this.#get.get('componentRoot') as { value: string } | undefined)?.value
     const file = (this.#get.get('componentFile') as { value: string } | undefined)?.value
-    return root !== undefined && file !== undefined ? { root, file } : undefined
+    if (root === undefined || file === undefined) {
+      return undefined
+    }
+    const wrapper = (this.#get.get('componentWrapper') as { value: string } | undefined)?.value
+    return wrapper === undefined ? { root, file } : { root, file, wrapper }
   }
 
-  setComponent(root: string, file: string | null): void {
+  setComponent(root: string, file: string | null, wrapper?: string | null): void {
     const trimmedFile = file?.trim() ?? ''
     const trimmedRoot = root.trim()
     if (trimmedFile === '' || trimmedRoot === '') {
       this.#delete.run('componentRoot')
       this.#delete.run('componentFile')
+      this.#delete.run('componentWrapper')
       return
     }
     this.#set.run('componentRoot', trimmedRoot)
     this.#set.run('componentFile', trimmedFile)
+    const trimmedWrapper = wrapper?.trim() ?? ''
+    if (trimmedWrapper === '') {
+      this.#delete.run('componentWrapper')
+    } else {
+      this.#set.run('componentWrapper', trimmedWrapper)
+    }
   }
 
   /** Set (positive number) or clear (null) the cap for one scope. */

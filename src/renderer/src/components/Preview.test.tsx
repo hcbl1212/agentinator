@@ -40,7 +40,7 @@ function stub(
     captures?: StoredEvent[]
     image?: string | null
     target?: string | null
-    component?: { root: string; file: string } | null
+    component?: { root: string; file: string; wrapper?: string } | null
   } = {},
 ): Stub {
   const { captures = [], image = 'YWJj', target = null, component = null } = options
@@ -121,27 +121,50 @@ describe('Preview', () => {
     expect(screen.getByRole('button', { name: 'Capture' })).toBeEnabled()
   })
 
-  it('loads, pins, and clears a component workbench target', async () => {
+  it('loads, pins (with wrapper), and clears a component workbench target', async () => {
+    const stubbed = stub({
+      component: { root: '/app', file: 'src/Cart.tsx', wrapper: 'src/Providers.tsx' },
+    })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    // The pinned component (and its wrapper) load into the inputs.
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
+    )
+    expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue('/app')
+    expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('src/Providers.tsx')
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Component file' }), {
+      target: { value: 'src/Button.tsx' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Wrapper file' }), {
+      target: { value: 'src/NewProviders.tsx' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    expect(stubbed.setComponent).toHaveBeenCalledWith(
+      '/app',
+      'src/Button.tsx',
+      'src/NewProviders.tsx',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('')
+    expect(stubbed.setComponent).toHaveBeenLastCalledWith('', null)
+  })
+
+  it('loads a pinned component that has no wrapper', async () => {
     const stubbed = stub({ component: { root: '/app', file: 'src/Cart.tsx' } })
     window.agentinator = stubbed.bridge
 
     render(<Preview sessionId="s" />)
 
-    // The pinned component loads into the inputs.
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
     )
-    expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue('/app')
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Component file' }), {
-      target: { value: 'src/Button.tsx' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
-    expect(stubbed.setComponent).toHaveBeenCalledWith('/app', 'src/Button.tsx')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
-    expect(stubbed.setComponent).toHaveBeenLastCalledWith('', null)
+    expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('')
   })
 
   it('pins nothing when the component file is left blank', async () => {
@@ -155,7 +178,7 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
 
     // A blank file unpins (null), it doesn't pin an empty component.
-    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null))
+    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null, null))
   })
 
   it('surfaces a failed capture instead of failing silently', async () => {
