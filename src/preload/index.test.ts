@@ -141,10 +141,12 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('credentials:clear', 'claude')
   })
 
-  it('routes preview capture (with and without a url) and image over IPC', async () => {
+  it('routes preview capture, image, and component pinning over IPC', async () => {
     await bridge.preview.capture('session_9')
     await bridge.preview.capture('session_9', 'http://localhost:5173/')
     await bridge.preview.image('shot_1')
+    await bridge.preview.getComponent()
+    await bridge.preview.setComponent('/app', 'src/Cart.tsx')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
@@ -153,6 +155,12 @@ describe('preload bridge', () => {
       'http://localhost:5173/',
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:image', 'shot_1')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:get-component')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:set-component',
+      '/app',
+      'src/Cart.tsx',
+    )
   })
 
   it('routes approvals over IPC', async () => {

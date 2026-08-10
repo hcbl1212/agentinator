@@ -1,26 +1,32 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ArtifactStore } from './artifacts'
+import type { ComponentWorkbench } from './componentWorkbench'
 import { PreviewController } from './preview'
 import type { PreviewBrowser, Screenshot } from './previewBrowser'
 
 const SAMPLE = '/app/examples/sample-web/index.html'
 
 function setup(
-  shot: Screenshot = {
-    png: new Uint8Array([1, 2, 3]),
-    width: 800,
-    height: 600,
-    console: [{ level: 'warning', text: 'heads up' }],
-    network: [{ method: 'GET', url: '/api/ok', status: 200, ok: true }],
-  },
-  target: string = SAMPLE,
+  options: {
+    shot?: Screenshot
+    previewTarget?: string
+    component?: { root: string; file: string }
+  } = {},
 ): {
   controller: PreviewController
   browser: { capture: ReturnType<typeof vi.fn> }
   store: Map<string, Uint8Array>
   emit: ReturnType<typeof vi.fn>
+  prepare: ReturnType<typeof vi.fn>
 } {
+  const shot: Screenshot = options.shot ?? {
+    png: new Uint8Array([1, 2, 3]),
+    width: 800,
+    height: 600,
+    console: [{ level: 'warning', text: 'heads up' }],
+    network: [{ method: 'GET', url: '/api/ok', status: 200, ok: true }],
+  }
   const store = new Map<string, Uint8Array>()
   let n = 0
   const artifacts: ArtifactStore = {
@@ -35,13 +41,19 @@ function setup(
     capture: vi.fn(() => Promise.resolve(shot)),
   }
   const emit = vi.fn((type: string, payload: unknown) => ({ seq: 1, ts: 't', type, payload }))
+  const prepare = vi.fn(() => '/__agentinator_component.html')
   const controller = new PreviewController(
     browser as unknown as PreviewBrowser,
     artifacts,
     emit as never,
-    () => target,
+    {
+      previewTarget: () => options.previewTarget,
+      component: () => options.component,
+      workbench: { prepare, clear: vi.fn() } as unknown as ComponentWorkbench,
+      sample: SAMPLE,
+    },
   )
-  return { controller, browser, store, emit }
+  return { controller, browser, store, emit, prepare }
 }
 
 describe('PreviewController', () => {
@@ -64,7 +76,7 @@ describe('PreviewController', () => {
   })
 
   it('captures the configured target when one is set', async () => {
-    const { controller, browser, emit } = setup(undefined, 'http://localhost:3001/')
+    const { controller, browser, emit } = setup({ previewTarget: 'http://localhost:3001/' })
 
     await controller.capture('session_1')
 
@@ -73,6 +85,32 @@ describe('PreviewController', () => {
       'preview.captured',
       expect.objectContaining({ url: 'http://localhost:3001/' }),
     )
+  })
+
+  it('captures a pinned component through the dev server', async () => {
+    const { controller, browser, prepare } = setup({
+      previewTarget: 'http://localhost:3001/',
+      component: { root: '/app', file: 'src/Cart.tsx' },
+    })
+
+    await controller.capture('session_1')
+
+    expect(prepare).toHaveBeenCalledWith('/app', 'src/Cart.tsx')
+    // Trailing slash collapsed; the workbench entry path appended.
+    expect(browser.capture).toHaveBeenCalledWith(
+      'http://localhost:3001/__agentinator_component.html',
+    )
+  })
+
+  it('ignores a pinned component when no dev server URL is set', async () => {
+    const { controller, browser, prepare } = setup({
+      component: { root: '/app', file: 'src/Cart.tsx' },
+    })
+
+    await controller.capture('session_1')
+
+    expect(prepare).not.toHaveBeenCalled()
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
   })
 
   it('captures an explicit url when one is provided', async () => {
@@ -85,11 +123,13 @@ describe('PreviewController', () => {
 
   it('captures for the agent, returning base64 PNG and still logging the event', async () => {
     const { controller, browser, emit } = setup({
-      png: new Uint8Array([10, 20, 30]),
-      width: 640,
-      height: 480,
-      console: [{ level: 'error', text: 'boom' }],
-      network: [{ method: 'POST', url: '/api/cart', status: 500, ok: false }],
+      shot: {
+        png: new Uint8Array([10, 20, 30]),
+        width: 640,
+        height: 480,
+        console: [{ level: 'error', text: 'boom' }],
+        network: [{ method: 'POST', url: '/api/cart', status: 500, ok: false }],
+      },
     })
 
     const image = await controller.captureImage('session_1')
@@ -110,11 +150,7 @@ describe('PreviewController', () => {
 
   it('reads a captured screenshot back as base64', async () => {
     const { controller } = setup({
-      png: new Uint8Array([255, 0, 128]),
-      width: 1,
-      height: 1,
-      console: [],
-      network: [],
+      shot: { png: new Uint8Array([255, 0, 128]), width: 1, height: 1, console: [], network: [] },
     })
 
     const ref = await controller.capture('session_1')

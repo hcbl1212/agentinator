@@ -63,6 +63,8 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       preview: {
         capture: vi.fn(() => Promise.resolve('shot_1')),
         image: vi.fn(() => Promise.resolve(null)),
+        getComponent: vi.fn(() => Promise.resolve(null)),
+        setComponent: vi.fn(() => Promise.resolve()),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),

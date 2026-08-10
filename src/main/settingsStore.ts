@@ -98,6 +98,27 @@ export class SettingsStore {
     }
   }
 
+  /** The component-workbench target: the app root (to write the entry into) and
+   * the component file (root-relative). Undefined when no component is pinned —
+   * the preview then shows the whole app / sample. */
+  component(): { root: string; file: string } | undefined {
+    const root = (this.#get.get('componentRoot') as { value: string } | undefined)?.value
+    const file = (this.#get.get('componentFile') as { value: string } | undefined)?.value
+    return root !== undefined && file !== undefined ? { root, file } : undefined
+  }
+
+  setComponent(root: string, file: string | null): void {
+    const trimmedFile = file?.trim() ?? ''
+    const trimmedRoot = root.trim()
+    if (trimmedFile === '' || trimmedRoot === '') {
+      this.#delete.run('componentRoot')
+      this.#delete.run('componentFile')
+      return
+    }
+    this.#set.run('componentRoot', trimmedRoot)
+    this.#set.run('componentFile', trimmedFile)
+  }
+
   /** Set (positive number) or clear (null) the cap for one scope. */
   setBudget(scope: BudgetScope, usd: number | null): void {
     if (usd === null || !Number.isFinite(usd) || usd <= 0) {

@@ -9,6 +9,7 @@ import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
 import { FileArtifactStore } from './artifacts'
 import type { ArtifactStore } from './artifacts'
+import { ComponentWorkbench } from './componentWorkbench'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
@@ -196,6 +197,8 @@ export function registerCredentialsIpc(
 
 export function registerPreviewIpc(
   preview: PreviewController,
+  settings: SettingsStore,
+  workbench: ComponentWorkbench,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -204,6 +207,18 @@ export function registerPreviewIpc(
     preview.capture(sessionId as string, url as string | undefined),
   )
   handle('preview:image', (_event, ref) => preview.image(ref as string))
+  handle('preview:get-component', () => settings.component() ?? null)
+  handle('preview:set-component', (_event, root, file) => {
+    const trimmed = typeof file === 'string' ? file.trim() : ''
+    // Clearing the pin removes the entry we wrote into the app root.
+    if (trimmed === '') {
+      const current = settings.component()
+      if (current !== undefined) {
+        workbench.clear(current.root)
+      }
+    }
+    settings.setComponent(root as string, file as string | null)
+  })
 }
 
 /** Encrypt credentials with the OS keychain via Electron safeStorage. */
@@ -276,12 +291,18 @@ export async function bootstrap(
   // `electron out/main/entry.js`. A real workspace dev-server URL becomes the
   // target later.
   const sampleTarget = join(import.meta.dirname, '../../examples/sample-web/index.html')
+  const workbench = new ComponentWorkbench()
   const preview = new PreviewController(
     createPreviewBrowser(),
     createArtifacts(join(userData, 'screenshots')),
     makeEmitStored(store),
-    // Point at the configured dev-server URL when set, else the bundled sample.
-    () => settings.previewTarget() ?? sampleTarget,
+    // A pinned component wins; else the configured dev-server URL; else sample.
+    {
+      previewTarget: settings.previewTarget.bind(settings),
+      component: settings.component.bind(settings),
+      workbench,
+      sample: sampleTarget,
+    },
   )
 
   const vault = new CredentialVault(settings, createEncryptor())
@@ -315,7 +336,7 @@ export async function bootstrap(
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
-  registerPreviewIpc(preview)
+  registerPreviewIpc(preview, settings, workbench)
 
   createWindow()
   if (replayPath !== undefined) {

@@ -1,7 +1,21 @@
 import type { ConsoleEntry, NetworkEntry } from '../shared/events'
 import type { EmitStored } from './approvals'
 import type { ArtifactStore } from './artifacts'
+import type { ComponentWorkbench } from './componentWorkbench'
 import type { PreviewBrowser } from './previewBrowser'
+
+/** How the controller resolves what URL/file to capture, resolved fresh each
+ * shot so a changed target/component takes effect immediately. */
+export interface PreviewTargeting {
+  /** The configured dev-server URL, or undefined for the bundled sample. */
+  previewTarget: () => string | undefined
+  /** A pinned component (app root + root-relative file), or undefined. */
+  component: () => { root: string; file: string } | undefined
+  /** Writes the component entry and returns its dev-server path. */
+  workbench: ComponentWorkbench
+  /** The bundled sample, used when nothing else is configured. */
+  sample: string
+}
 
 /**
  * The visual feedback loop's main-process brain: capture the target app, stash
@@ -14,20 +28,31 @@ export class PreviewController {
   #browser: PreviewBrowser
   #artifacts: ArtifactStore
   #emit: EmitStored
-  #resolveTarget: () => string
+  #targeting: PreviewTargeting
 
   constructor(
     browser: PreviewBrowser,
     artifacts: ArtifactStore,
     emit: EmitStored,
-    // Resolved per capture so a changed target (a real dev-server URL) takes
-    // effect immediately; falls back to the bundled sample.
-    resolveTarget: () => string,
+    targeting: PreviewTargeting,
   ) {
     this.#browser = browser
     this.#artifacts = artifacts
     this.#emit = emit
-    this.#resolveTarget = resolveTarget
+    this.#targeting = targeting
+  }
+
+  /** What to capture, resolved per shot: a pinned component (rendered in
+   * isolation through the dev server) wins; else the configured dev-server URL;
+   * else the bundled sample. */
+  #resolveTarget(): string {
+    const { previewTarget, component, workbench, sample } = this.#targeting
+    const base = previewTarget()
+    const pinned = component()
+    if (pinned !== undefined && base !== undefined) {
+      return `${base.replace(/\/$/, '')}${workbench.prepare(pinned.root, pinned.file)}`
+    }
+    return base ?? sample
   }
 
   /** Capture a target (the configured one when none is given) for a session,

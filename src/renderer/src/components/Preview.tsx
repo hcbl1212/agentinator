@@ -46,9 +46,11 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [mark, setMark] = useState<Mark | null>(null)
   const [note, setNote] = useState('')
   const [target, setTarget] = useState('')
+  const [componentRoot, setComponentRoot] = useState('')
+  const [componentFile, setComponentFile] = useState('')
 
   // Load the configured preview target (a real dev-server URL, or blank for the
-  // bundled sample) once.
+  // bundled sample) and any pinned component once.
   useEffect(() => {
     const bridge = window.agentinator
     if (bridge === undefined) {
@@ -58,6 +60,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.getPreviewTarget().then((url) => {
       if (!cancelled) {
         setTarget(url ?? '')
+      }
+    })
+    void bridge.preview.getComponent().then((pinned) => {
+      if (!cancelled && pinned !== null) {
+        setComponentRoot(pinned.root)
+        setComponentFile(pinned.file)
       }
     })
     return () => {
@@ -129,6 +137,23 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.setPreviewTarget(trimmed === '' ? null : trimmed)
   }
 
+  // Pin a component to render in isolation (through the dev server above), or
+  // clear the pin to go back to the whole app.
+  const saveComponent = (): void => {
+    const bridge = window.agentinator
+    if (bridge === undefined) {
+      return
+    }
+    const file = componentFile.trim()
+    void bridge.preview.setComponent(componentRoot.trim(), file === '' ? null : file)
+  }
+
+  const clearComponent = (): void => {
+    setComponentRoot('')
+    setComponentFile('')
+    void window.agentinator?.preview.setComponent('', null)
+  }
+
   // Point at it: turn a click on the screenshot into a normalized mark.
   const pointAt = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -191,6 +216,35 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         />
         <button type="submit" className="preview-target-save">
           Set
+        </button>
+      </form>
+      <form
+        className="preview-component"
+        aria-label="Component workbench"
+        onSubmit={(event) => {
+          event.preventDefault()
+          saveComponent()
+        }}
+      >
+        <input
+          className="preview-target-input"
+          value={componentRoot}
+          onChange={(event) => setComponentRoot(event.target.value)}
+          placeholder="App root (folder)"
+          aria-label="Component app root"
+        />
+        <input
+          className="preview-target-input"
+          value={componentFile}
+          onChange={(event) => setComponentFile(event.target.value)}
+          placeholder="Component file, e.g. src/Cart.tsx"
+          aria-label="Component file"
+        />
+        <button type="submit" className="preview-target-save">
+          Pin
+        </button>
+        <button type="button" className="preview-target-save" onClick={clearComponent}>
+          Clear
         </button>
       </form>
       {src === null ? (

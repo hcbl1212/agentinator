@@ -60,6 +60,10 @@ export const bridge: AgentinatorBridge = {
     capture: (sessionId, url) =>
       ipcRenderer.invoke('preview:capture', sessionId, url) as Promise<string>,
     image: (ref) => ipcRenderer.invoke('preview:image', ref) as Promise<string | null>,
+    getComponent: () =>
+      ipcRenderer.invoke('preview:get-component') as Promise<{ root: string; file: string } | null>,
+    setComponent: (root, file) =>
+      ipcRenderer.invoke('preview:set-component', root, file) as Promise<void>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,

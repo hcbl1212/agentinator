@@ -204,7 +204,8 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.preview-target {
+.preview-target,
+.preview-component {
   display: flex;
   gap: 0.5rem;
 }

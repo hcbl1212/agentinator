@@ -31,12 +31,19 @@ interface Stub {
   agentSend: ReturnType<typeof vi.fn>
   getPreviewTarget: ReturnType<typeof vi.fn>
   setPreviewTarget: ReturnType<typeof vi.fn>
+  getComponent: ReturnType<typeof vi.fn>
+  setComponent: ReturnType<typeof vi.fn>
 }
 
 function stub(
-  options: { captures?: StoredEvent[]; image?: string | null; target?: string | null } = {},
+  options: {
+    captures?: StoredEvent[]
+    image?: string | null
+    target?: string | null
+    component?: { root: string; file: string } | null
+  } = {},
 ): Stub {
-  const { captures = [], image = 'YWJj', target = null } = options
+  const { captures = [], image = 'YWJj', target = null, component = null } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
   const search = vi.fn(() => Promise.resolve(captures))
@@ -45,6 +52,8 @@ function stub(
   const agentSend = vi.fn(() => Promise.resolve())
   const getPreviewTarget = vi.fn(() => Promise.resolve(target))
   const setPreviewTarget = vi.fn(() => Promise.resolve())
+  const getComponent = vi.fn(() => Promise.resolve(component))
+  const setComponent = vi.fn(() => Promise.resolve())
   const bridge = {
     events: {
       search,
@@ -53,7 +62,7 @@ function stub(
         return unsubscribe as () => void
       }),
     },
-    preview: { capture, image: imageFn },
+    preview: { capture, image: imageFn, getComponent, setComponent },
     agent: { send: agentSend },
     settings: { getPreviewTarget, setPreviewTarget },
   } as unknown as AgentinatorBridge
@@ -67,6 +76,8 @@ function stub(
     agentSend,
     getPreviewTarget,
     setPreviewTarget,
+    getComponent,
+    setComponent,
   }
 }
 
@@ -102,10 +113,49 @@ describe('Preview', () => {
     render(<Preview sessionId="s" />)
 
     expect(screen.getByText(/Capture a screenshot of the target app/)).toBeInTheDocument()
-    // Clicking without a bridge must not throw — capture or set-target.
+    // Clicking without a bridge must not throw — capture, set-target, or pin/clear.
     fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'Capture' })).toBeEnabled()
+  })
+
+  it('loads, pins, and clears a component workbench target', async () => {
+    const stubbed = stub({ component: { root: '/app', file: 'src/Cart.tsx' } })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    // The pinned component loads into the inputs.
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
+    )
+    expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue('/app')
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Component file' }), {
+      target: { value: 'src/Button.tsx' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    expect(stubbed.setComponent).toHaveBeenCalledWith('/app', 'src/Button.tsx')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
+    expect(stubbed.setComponent).toHaveBeenLastCalledWith('', null)
+  })
+
+  it('pins nothing when the component file is left blank', async () => {
+    const stubbed = stub()
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Component app root' }), {
+      target: { value: '/app' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+
+    // A blank file unpins (null), it doesn't pin an empty component.
+    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null))
   })
 
   it('loads the configured preview target into the input', async () => {

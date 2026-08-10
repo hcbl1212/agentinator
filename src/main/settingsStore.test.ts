@@ -128,6 +128,22 @@ describe('SettingsStore', () => {
     store.close()
   })
 
+  it('persists the component-workbench target, clearing on empty root or file', () => {
+    const store = new SettingsStore()
+
+    expect(store.component()).toBeUndefined()
+    store.setComponent('  /app  ', '  src/Cart.tsx  ')
+    expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
+    // Clearing the file clears the whole target.
+    store.setComponent('/app', null)
+    expect(store.component()).toBeUndefined()
+    // A blank root also clears it.
+    store.setComponent('/app', 'src/Cart.tsx')
+    store.setComponent('   ', 'src/Cart.tsx')
+    expect(store.component()).toBeUndefined()
+    store.close()
+  })
+
   it('stores, reads, lists, and deletes credential ciphertext', () => {
     const store = new SettingsStore()
 

@@ -89,6 +89,11 @@ export interface AgentinatorBridge {
     capture(sessionId: string, url?: string): Promise<string>
     /** A captured screenshot's PNG as base64, or null if it's gone. */
     image(ref: string): Promise<string | null>
+    /** The pinned component workbench target (app root + root-relative file), or
+     * null when no component is pinned. */
+    getComponent(): Promise<{ root: string; file: string } | null>
+    /** Pin a component to render in isolation; a null/blank file unpins it. */
+    setComponent(root: string, file: string | null): Promise<void>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>
