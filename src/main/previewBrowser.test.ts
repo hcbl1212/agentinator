@@ -137,10 +137,20 @@ describe('ElectronPreviewBrowser', () => {
     expect(shot.console).toEqual([{ level: 'error', text: 'Failed to load http://x/: boom' }])
   })
 
-  it('destroys the window even when the capture fails', async () => {
-    capturePage.mockRejectedValueOnce(new Error('render crashed'))
+  it('retries a transient capturePage rejection and succeeds', async () => {
+    capturePage.mockRejectedValueOnce(new Error('UnknownVizError'))
 
-    await expect(mk().capture('http://x/')).rejects.toThrow('render crashed')
+    const shot = await mk().capture('http://x/')
+
+    expect(shot.png).toEqual(Buffer.from([137, 80, 78, 71]))
+    expect(capturePage).toHaveBeenCalledTimes(2)
+  })
+
+  it('destroys the window and throws when every capture attempt fails', async () => {
+    capturePage.mockRejectedValue(new Error('UnknownVizError'))
+
+    await expect(mk().capture('http://x/')).rejects.toThrow('UnknownVizError')
+    expect(capturePage).toHaveBeenCalledTimes(3)
     expect(MockBrowserWindow.instances[0]?.destroy).toHaveBeenCalledOnce()
   })
 

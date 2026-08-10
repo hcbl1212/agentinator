@@ -42,11 +42,36 @@ export const settleDelay = (): Promise<void> => new Promise((resolve) => setTime
  * recorded as a console error, then a (blank) shot is still returned — so the
  * agent sees "blank screen + here's why" rather than an opaque tool error.
  */
+/** The minimal shape of the NativeImage capturePage returns — kept structural so
+ * tests can supply a fake without constructing a real Electron image. */
+interface CapturedImage {
+  getSize(): { width: number; height: number }
+  toPNG(): Buffer
+}
+
 export class ElectronPreviewBrowser implements PreviewBrowser {
   #settle: () => Promise<void>
 
   constructor(settle: () => Promise<void> = settleDelay) {
     this.#settle = settle
+  }
+
+  /** capturePage intermittently rejects (e.g. UnknownVizError) when the Viz
+   * compositor hasn't produced a frame yet — common on a hidden window over a
+   * near-empty page. Settle and retry a couple times before giving up. */
+  async #captureFrame(webContents: {
+    capturePage(): Promise<CapturedImage>
+  }): Promise<CapturedImage> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await webContents.capturePage()
+      } catch (error) {
+        if (attempt >= 2) {
+          throw error
+        }
+        await this.#settle()
+      }
+    }
   }
 
   async capture(target: string): Promise<Screenshot> {
@@ -55,6 +80,9 @@ export class ElectronPreviewBrowser implements PreviewBrowser {
       show: false,
       width: 1280,
       height: 800,
+      // Opaque backing — a transparent/black default can leave the compositor
+      // with no frame to hand capturePage on a sparse page.
+      backgroundColor: '#ffffff',
       webPreferences: { partition },
     })
     const messages: ConsoleEntry[] = []
@@ -85,7 +113,7 @@ export class ElectronPreviewBrowser implements PreviewBrowser {
         messages.push({ level: 'error', text: `Failed to load ${target}: ${errorMessage(error)}` })
       }
       await this.#settle()
-      const image = await window.webContents.capturePage()
+      const image = await this.#captureFrame(window.webContents)
       const { width, height } = image.getSize()
       // Cap on return so a chatty page can't bloat the event log.
       return {
