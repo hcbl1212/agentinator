@@ -24,6 +24,8 @@ describe('componentEntryHtml', () => {
     expect(html).toContain('ReactDOM.render(element, root)')
     // No wrapper → no wrap import; renders the component directly.
     expect(html).toContain('const Wrapper = null')
+    // Shims Node's `global` before the module runs (apps expect it present).
+    expect(html).toContain('window.global = window')
   })
 
   it('wraps the component in a provider when a wrapper is given', () => {

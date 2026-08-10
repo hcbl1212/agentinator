@@ -43,6 +43,13 @@ export function componentEntryHtml(
   <head>
     <meta charset="utf-8" />
     <title>Component workbench</title>
+    <!-- Many app bundles reference Node's \`global\`; the app's own index.html
+         shims it, but this isolated entry doesn't include that HTML. A plain
+         (non-module) script runs before the deferred module below, so the
+         shim is in place before any dependency dereferences \`global\`. -->
+    <script>
+      window.global = window
+    </script>
   </head>
   <body>
     <div id="agentinator-root"></div>
