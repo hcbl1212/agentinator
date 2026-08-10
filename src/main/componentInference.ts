@@ -68,3 +68,59 @@ export function makePropInferrer(
     return infer(source, root)
   }
 }
+
+const WRAPPER_SYSTEM =
+  'You generate a React wrapper for previewing one component in isolation. Explore the app (Read/' +
+  'Grep/Glob) to find the context the target component needs — router, Apollo/GraphQL client, ' +
+  'Redux store, i18n, and any React contexts it consumes — and produce a wrapper that supplies ' +
+  'them with mocked or in-memory values so it renders with NO running backend or login. Prefer the ' +
+  "app's own provider components when they self-contain their client; otherwise use MemoryRouter, " +
+  'Apollo MockedProvider, and mock context values. Output ONLY a complete .tsx module that ' +
+  'default-exports a component taking `children`. No prose, no code fences.'
+
+/** Read-only tools the wrapper generator may use to explore the app. */
+const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead'])
+
+/** Extract a code module from the model's reply — the fence body if fenced,
+ * else the whole trimmed text. */
+export function extractModule(text: string): string {
+  const fenced = /```(?:tsx?|jsx?|typescript|javascript)?\n?([\s\S]*?)```/.exec(text)
+  return (fenced === null ? text : fenced[1]).trim()
+}
+
+/** Generate a wrapper module for a component — reads its source, lets the agent
+ * explore read-only, and returns the wrapper .tsx source. */
+export function inferWrapperWith(
+  query: ClaudeQuery,
+): (source: string, cwd: string) => Promise<string> {
+  return async (source, cwd) => {
+    const stream = query({
+      prompt: 'Target component source:\n```tsx\n' + source + '\n```\nGenerate the wrapper module.',
+      options: {
+        cwd,
+        systemPrompt: WRAPPER_SYSTEM,
+        canUseTool: (toolName, input) =>
+          Promise.resolve(
+            READ_ONLY_TOOLS.has(toolName)
+              ? { behavior: 'allow', updatedInput: input }
+              : { behavior: 'deny', message: 'Preview setup is read-only.' },
+          ),
+      },
+    })
+    let text = ''
+    for await (const message of stream) {
+      text += assistantText(message)
+    }
+    return extractModule(text)
+  }
+}
+
+export function makeWrapperInferrer(
+  query: ClaudeQuery,
+): (root: string, file: string) => Promise<string> {
+  const infer = inferWrapperWith(query)
+  return async (root, file) => {
+    const source = readFileSync(join(root, file), 'utf8')
+    return infer(source, root)
+  }
+}

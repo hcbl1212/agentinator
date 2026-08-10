@@ -64,6 +64,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         getComponent: vi.fn(() => Promise.resolve(null)),
         setComponent: vi.fn(() => Promise.resolve()),
         inferProps: vi.fn(() => Promise.resolve('{}')),
+        inferWrapper: vi.fn(() => Promise.resolve('__agentinator_wrapper.tsx')),
         chooseFolder: vi.fn(() => Promise.resolve(null)),
         chooseFile: vi.fn(() => Promise.resolve(null)),
       },

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   COMPONENT_ENTRY,
   ComponentWorkbench,
+  WRAPPER_FILE,
   componentEntryHtml,
   nodeWorkbenchFs,
 } from './componentWorkbench'
@@ -96,11 +97,26 @@ describe('ComponentWorkbench', () => {
     expect(writes[0]?.content).toContain('const Wrapper = null')
   })
 
-  it('removes the entry on clear', () => {
+  it('writes an agent-generated wrapper and returns its name', () => {
+    const writes: { path: string; content: string }[] = []
+    const workbench = new ComponentWorkbench({
+      write: (path, content) => writes.push({ path, content }),
+      remove: vi.fn(),
+    })
+
+    const name = workbench.writeWrapper('/app', 'export default ({ children }) => children')
+
+    expect(name).toBe(WRAPPER_FILE)
+    expect(writes[0]?.path).toBe(join('/app', WRAPPER_FILE))
+    expect(writes[0]?.content).toContain('export default')
+  })
+
+  it('removes the entry and the generated wrapper on clear', () => {
     const remove = vi.fn()
     new ComponentWorkbench({ write: vi.fn(), remove }).clear('/app')
 
     expect(remove).toHaveBeenCalledWith(join('/app', COMPONENT_ENTRY))
+    expect(remove).toHaveBeenCalledWith(join('/app', WRAPPER_FILE))
   })
 })
 

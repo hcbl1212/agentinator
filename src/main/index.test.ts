@@ -556,6 +556,9 @@ describe('registerPreviewIpc', () => {
     inferProps: (root: string, file: string) => Promise<string> = vi.fn(() =>
       Promise.resolve('{}'),
     ),
+    inferWrapper: (root: string, file: string) => Promise<string> = vi.fn(() =>
+      Promise.resolve('export default ({ children }) => children'),
+    ),
   ): Handlers {
     const handlers: Handlers = new Map()
     registerPreviewIpc(
@@ -563,6 +566,7 @@ describe('registerPreviewIpc', () => {
       settings as SettingsStore,
       workbench as ComponentWorkbench,
       inferProps,
+      inferWrapper,
       (channel, listener) => {
         handlers.set(channel, listener)
       },
@@ -619,6 +623,27 @@ describe('registerPreviewIpc', () => {
     expect(inferProps).toHaveBeenCalledWith('/app', 'src/Cart.tsx')
   })
 
+  it('infers a wrapper: generates the source, writes it, and returns its name', async () => {
+    const inferWrapper = vi.fn(() => Promise.resolve('export default ({ children }) => children'))
+    const workbench = { clear: vi.fn(), writeWrapper: vi.fn(() => '__agentinator_wrapper.tsx') }
+    const handlers = register(
+      { capture: vi.fn(), image: vi.fn() },
+      previewSettings(),
+      workbench,
+      undefined,
+      inferWrapper,
+    )
+
+    expect(await handlers.get('preview:infer-wrapper')?.(undefined, '/app', 'src/Page.tsx')).toBe(
+      '__agentinator_wrapper.tsx',
+    )
+    expect(inferWrapper).toHaveBeenCalledWith('/app', 'src/Page.tsx')
+    expect(workbench.writeWrapper).toHaveBeenCalledWith(
+      '/app',
+      'export default ({ children }) => children',
+    )
+  })
+
   it('returns null for an unpinned component and skips the clear', () => {
     const settings = previewSettings(undefined)
     const workbench = { clear: vi.fn() }
@@ -636,6 +661,7 @@ describe('registerPreviewIpc', () => {
       previewSettings() as unknown as SettingsStore,
       { clear: vi.fn() } as unknown as ComponentWorkbench,
       vi.fn(() => Promise.resolve('{}')),
+      vi.fn(() => Promise.resolve('')),
     )
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
@@ -645,6 +671,7 @@ describe('registerPreviewIpc', () => {
       'preview:get-component',
       'preview:set-component',
       'preview:infer-props',
+      'preview:infer-wrapper',
     ])
   })
 })

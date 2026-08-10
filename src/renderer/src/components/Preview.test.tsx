@@ -34,6 +34,7 @@ interface Stub {
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
   inferProps: ReturnType<typeof vi.fn>
+  inferWrapper: ReturnType<typeof vi.fn>
   chooseFolder: ReturnType<typeof vi.fn>
   chooseFile: ReturnType<typeof vi.fn>
 }
@@ -45,6 +46,7 @@ function stub(
     target?: string | null
     component?: { root: string; file: string; wrapper?: string; props?: string } | null
     inferred?: string
+    inferredWrapper?: string
     chosenFolder?: string | null
     chosenFile?: string | null
   } = {},
@@ -55,6 +57,7 @@ function stub(
     target = null,
     component = null,
     inferred = '{ n: 1 }',
+    inferredWrapper = '__agentinator_wrapper.tsx',
     chosenFolder = '/picked/app',
     chosenFile = 'src/Picked.tsx',
   } = options
@@ -69,6 +72,7 @@ function stub(
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
+  const inferWrapper = vi.fn(() => Promise.resolve(inferredWrapper))
   const chooseFolder = vi.fn(() => Promise.resolve(chosenFolder))
   const chooseFile = vi.fn(() => Promise.resolve(chosenFile))
   const bridge = {
@@ -85,6 +89,7 @@ function stub(
       getComponent,
       setComponent,
       inferProps,
+      inferWrapper,
       chooseFolder,
       chooseFile,
     },
@@ -104,6 +109,7 @@ function stub(
     getComponent,
     setComponent,
     inferProps,
+    inferWrapper,
     chooseFolder,
     chooseFile,
   }
@@ -146,6 +152,7 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
     fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Infer wrapper' }))
     fireEvent.click(screen.getByRole('button', { name: 'Choose app root' }))
     fireEvent.click(screen.getByRole('button', { name: 'Choose component file' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
@@ -255,6 +262,28 @@ describe('Preview', () => {
       'src/Cart.tsx',
       null,
       '{ completedValue: 5, totalValue: 10 }',
+    )
+  })
+
+  it('generates a context wrapper via the agent and fills the wrapper field', async () => {
+    const stubbed = stub({
+      component: { root: '/app', file: 'src/Page.tsx' },
+      inferredWrapper: '__agentinator_wrapper.tsx',
+    })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Page.tsx'),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Infer wrapper' }))
+    expect(stubbed.inferWrapper).toHaveBeenCalledWith('/app', 'src/Page.tsx')
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue(
+        '__agentinator_wrapper.tsx',
+      ),
     )
   })
 

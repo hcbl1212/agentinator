@@ -108,6 +108,9 @@ export interface AgentinatorBridge {
     /** Ask the agent to read the component and generate a realistic props
      * literal for it. Resolves to the props string. */
     inferProps(root: string, file: string): Promise<string>
+    /** Ask the agent to generate a context wrapper for the component (mocked
+     * providers), write it into the app, and resolve to the wrapper's file. */
+    inferWrapper(root: string, file: string): Promise<string>
     /** Open a native folder picker for the app root; null if cancelled. */
     chooseFolder(): Promise<string | null>
     /** Open a native file picker; resolves to the path relative to `base`

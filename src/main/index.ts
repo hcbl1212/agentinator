@@ -10,7 +10,7 @@ import type { EmitStored } from './approvals'
 import { FileArtifactStore } from './artifacts'
 import type { ArtifactStore } from './artifacts'
 import { ComponentWorkbench } from './componentWorkbench'
-import { makePropInferrer } from './componentInference'
+import { makePropInferrer, makeWrapperInferrer } from './componentInference'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
@@ -201,6 +201,7 @@ export function registerPreviewIpc(
   settings: SettingsStore,
   workbench: ComponentWorkbench,
   inferProps: (root: string, file: string) => Promise<string>,
+  inferWrapperSource: (root: string, file: string) => Promise<string>,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -228,6 +229,11 @@ export function registerPreviewIpc(
   })
   // Ask the agent to read the component and generate realistic props for it.
   handle('preview:infer-props', (_event, root, file) => inferProps(root as string, file as string))
+  // Ask the agent to generate a context wrapper, write it, and return its name.
+  handle('preview:infer-wrapper', async (_event, root, file) => {
+    const source = await inferWrapperSource(root as string, file as string)
+    return workbench.writeWrapper(root as string, source)
+  })
 }
 
 /** The subset of Electron's dialog.showOpenDialog the pickers use — injected so
@@ -379,7 +385,13 @@ export async function bootstrap(
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
-  registerPreviewIpc(preview, settings, workbench, makePropInferrer(claudeQuery))
+  registerPreviewIpc(
+    preview,
+    settings,
+    workbench,
+    makePropInferrer(claudeQuery),
+    makeWrapperInferrer(claudeQuery),
+  )
   registerDialogIpc(dialog.showOpenDialog.bind(dialog))
 
   createWindow()

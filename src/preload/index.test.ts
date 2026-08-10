@@ -148,6 +148,7 @@ describe('preload bridge', () => {
     await bridge.preview.getComponent()
     await bridge.preview.setComponent('/app', 'src/Cart.tsx', 'src/Providers.tsx', '{ n: 1 }')
     await bridge.preview.inferProps('/app', 'src/Cart.tsx')
+    await bridge.preview.inferWrapper('/app', 'src/Cart.tsx')
     await bridge.preview.chooseFolder()
     await bridge.preview.chooseFile('/app')
 
@@ -168,6 +169,11 @@ describe('preload bridge', () => {
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
       'preview:infer-props',
+      '/app',
+      'src/Cart.tsx',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:infer-wrapper',
       '/app',
       'src/Cart.tsx',
     )

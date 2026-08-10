@@ -71,6 +71,8 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('preview:set-component', root, file, wrapper, props) as Promise<void>,
     inferProps: (root, file) =>
       ipcRenderer.invoke('preview:infer-props', root, file) as Promise<string>,
+    inferWrapper: (root, file) =>
+      ipcRenderer.invoke('preview:infer-wrapper', root, file) as Promise<string>,
     chooseFolder: () => ipcRenderer.invoke('dialog:choose-folder') as Promise<string | null>,
     chooseFile: (base) => ipcRenderer.invoke('dialog:choose-file', base) as Promise<string | null>,
   },

@@ -5,6 +5,9 @@ import { join } from 'node:path'
  * serves it at `/<COMPONENT_ENTRY>`. Distinctive so it's obvious it's ours. */
 export const COMPONENT_ENTRY = '__agentinator_component.html'
 
+/** An agent-generated wrapper module the workbench writes at the app root. */
+export const WRAPPER_FILE = '__agentinator_wrapper.tsx'
+
 /** A standalone page that mounts one React component through the app's own
  * module graph — bare imports (`react`) and the `/src/...` import resolve via
  * the running Vite, so the component renders with the app's real deps. No JSX
@@ -110,8 +113,16 @@ export class ComponentWorkbench {
     return `/${COMPONENT_ENTRY}`
   }
 
-  /** Remove the entry from `root` (best-effort — safe if it was never written). */
+  /** Write an agent-generated wrapper module at the app root and return its
+   * root-relative name (to use as the wrapper file). */
+  writeWrapper(root: string, source: string): string {
+    this.#fs.write(join(root, WRAPPER_FILE), source)
+    return WRAPPER_FILE
+  }
+
+  /** Remove the entry and any generated wrapper from `root` (best-effort). */
   clear(root: string): void {
     this.#fs.remove(join(root, COMPONENT_ENTRY))
+    this.#fs.remove(join(root, WRAPPER_FILE))
   }
 }

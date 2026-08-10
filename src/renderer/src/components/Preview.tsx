@@ -52,6 +52,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [componentWrapper, setComponentWrapper] = useState('')
   const [componentProps, setComponentProps] = useState('')
   const [inferring, setInferring] = useState(false)
+  const [wrappering, setWrappering] = useState(false)
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -177,23 +178,41 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void window.agentinator?.preview.setComponent('', null)
   }
 
-  // Ask the agent to read the component and generate realistic props.
-  const inferProps = (): void => {
-    const bridge = window.agentinator
+  // Ask the agent to set the component up for isolated preview — generate its
+  // props, or generate a context wrapper. Shared plumbing: both read the pinned
+  // root+file, run the bridge call, apply the result, and surface any error.
+  const runSetup = (
+    call: (root: string, file: string) => Promise<string>,
+    apply: (result: string) => void,
+    setBusy: (busy: boolean) => void,
+  ): void => {
     const root = componentRoot.trim()
     const file = componentFile.trim()
-    if (bridge === undefined || root === '' || file === '') {
+    if (root === '' || file === '') {
       return
     }
-    setInferring(true)
+    setBusy(true)
     setError(null)
-    void bridge.preview
-      .inferProps(root, file)
-      .then((props) => setComponentProps(props))
+    void call(root, file)
+      .then(apply)
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : String(reason))
       })
-      .finally(() => setInferring(false))
+      .finally(() => setBusy(false))
+  }
+
+  const inferProps = (): void => {
+    const preview = window.agentinator?.preview
+    if (preview !== undefined) {
+      runSetup(preview.inferProps, setComponentProps, setInferring)
+    }
+  }
+
+  const inferWrapper = (): void => {
+    const preview = window.agentinator?.preview
+    if (preview !== undefined) {
+      runSetup(preview.inferWrapper, setComponentWrapper, setWrappering)
+    }
   }
 
   // Native pickers so the app root and files aren't hand-typed.
@@ -343,6 +362,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           disabled={inferring}
         >
           {inferring ? 'Inferring…' : 'Infer props'}
+        </button>
+        <button
+          type="button"
+          className="preview-target-save"
+          onClick={inferWrapper}
+          disabled={wrappering}
+        >
+          {wrappering ? 'Generating…' : 'Infer wrapper'}
         </button>
         <button type="submit" className="preview-target-save">
           Pin
