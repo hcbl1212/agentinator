@@ -1,7 +1,7 @@
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
 import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
@@ -230,6 +230,40 @@ export function registerPreviewIpc(
   handle('preview:infer-props', (_event, root, file) => inferProps(root as string, file as string))
 }
 
+/** The subset of Electron's dialog.showOpenDialog the pickers use — injected so
+ * the handlers are testable without a real dialog. */
+export type OpenDialog = (options: {
+  properties: Array<'openDirectory' | 'openFile'>
+  defaultPath?: string
+  filters?: Array<{ name: string; extensions: string[] }>
+}) => Promise<{ canceled: boolean; filePaths: string[] }>
+
+export function registerDialogIpc(
+  showOpenDialog: OpenDialog,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  // Pick the app root (an absolute folder path).
+  handle('dialog:choose-folder', async () => {
+    const result = await showOpenDialog({ properties: ['openDirectory'] })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+  // Pick a component/wrapper file and return it relative to `base` (the app root)
+  // so it maps to a dev-server URL path.
+  handle('dialog:choose-file', async (_event, base) => {
+    const from = base as string
+    const result = await showOpenDialog({
+      properties: ['openFile'],
+      defaultPath: from,
+      filters: [{ name: 'Components', extensions: ['tsx', 'jsx', 'ts', 'js'] }],
+    })
+    return result.canceled || result.filePaths.length === 0
+      ? null
+      : relative(from, result.filePaths[0])
+  })
+}
+
 /** Encrypt credentials with the OS keychain via Electron safeStorage. */
 export function safeEncryptor(): Encryptor {
   return {
@@ -346,6 +380,7 @@ export async function bootstrap(
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
   registerPreviewIpc(preview, settings, workbench, makePropInferrer(claudeQuery))
+  registerDialogIpc(dialog.showOpenDialog.bind(dialog))
 
   createWindow()
   if (replayPath !== undefined) {

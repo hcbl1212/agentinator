@@ -6,53 +6,58 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EventStore } from './eventStore'
 
-const { mockApp, MockBrowserWindow, mockShell, mockIpcMain, mockSafeStorage } = vi.hoisted(() => {
-  type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
+const { mockApp, MockBrowserWindow, mockShell, mockDialog, mockIpcMain, mockSafeStorage } =
+  vi.hoisted(() => {
+    type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
 
-  class MockBrowserWindow {
-    static instances: MockBrowserWindow[] = []
-    static getAllWindows = vi.fn((): MockBrowserWindow[] => [])
-    options: Record<string, unknown>
-    loadFile = vi.fn()
-    loadURL = vi.fn()
-    windowOpenHandler: WindowOpenHandler | undefined
-    webContents = {
-      send: vi.fn(),
-      setWindowOpenHandler: (handler: WindowOpenHandler): void => {
-        this.windowOpenHandler = handler
+    class MockBrowserWindow {
+      static instances: MockBrowserWindow[] = []
+      static getAllWindows = vi.fn((): MockBrowserWindow[] => [])
+      options: Record<string, unknown>
+      loadFile = vi.fn()
+      loadURL = vi.fn()
+      windowOpenHandler: WindowOpenHandler | undefined
+      webContents = {
+        send: vi.fn(),
+        setWindowOpenHandler: (handler: WindowOpenHandler): void => {
+          this.windowOpenHandler = handler
+        },
+      }
+
+      constructor(options: Record<string, unknown>) {
+        this.options = options
+        MockBrowserWindow.instances.push(this)
+      }
+    }
+
+    return {
+      MockBrowserWindow,
+      mockApp: {
+        whenReady: vi.fn(() => Promise.resolve()),
+        on: vi.fn(),
+        quit: vi.fn(),
+        getPath: vi.fn(),
+        getAppPath: vi.fn(() => '/app'),
+        getVersion: vi.fn(() => '0.1.0-test'),
+      },
+      mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
+      mockDialog: {
+        showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true, filePaths: [] })),
+      },
+      mockIpcMain: { handle: vi.fn() },
+      mockSafeStorage: {
+        isEncryptionAvailable: vi.fn(() => true),
+        encryptString: vi.fn((s: string) => Buffer.from(s, 'utf8')),
+        decryptString: vi.fn((b: Buffer) => b.toString('utf8')),
       },
     }
-
-    constructor(options: Record<string, unknown>) {
-      this.options = options
-      MockBrowserWindow.instances.push(this)
-    }
-  }
-
-  return {
-    MockBrowserWindow,
-    mockApp: {
-      whenReady: vi.fn(() => Promise.resolve()),
-      on: vi.fn(),
-      quit: vi.fn(),
-      getPath: vi.fn(),
-      getAppPath: vi.fn(() => '/app'),
-      getVersion: vi.fn(() => '0.1.0-test'),
-    },
-    mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
-    mockIpcMain: { handle: vi.fn() },
-    mockSafeStorage: {
-      isEncryptionAvailable: vi.fn(() => true),
-      encryptString: vi.fn((s: string) => Buffer.from(s, 'utf8')),
-      decryptString: vi.fn((b: Buffer) => b.toString('utf8')),
-    },
-  }
-})
+  })
 
 vi.mock('electron', () => ({
   app: mockApp,
   BrowserWindow: MockBrowserWindow,
   shell: mockShell,
+  dialog: mockDialog,
   ipcMain: mockIpcMain,
   safeStorage: mockSafeStorage,
 }))
@@ -73,12 +78,14 @@ import {
   registerAgentIpc,
   registerApprovalIpc,
   registerCredentialsIpc,
+  registerDialogIpc,
   registerEventIpc,
   registerPreviewIpc,
   registerSettingsIpc,
   safeEncryptor,
   taskTitle,
 } from './index'
+import type { OpenDialog } from './index'
 import type { ComponentWorkbench } from './componentWorkbench'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
@@ -639,6 +646,48 @@ describe('registerPreviewIpc', () => {
       'preview:set-component',
       'preview:infer-props',
     ])
+  })
+})
+
+describe('registerDialogIpc', () => {
+  function handlersFor(dialog: OpenDialog): Map<string, (...args: unknown[]) => unknown> {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    registerDialogIpc(dialog, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    return handlers
+  }
+
+  it('returns the chosen folder, or null when cancelled', async () => {
+    const chosen: OpenDialog = vi.fn(() =>
+      Promise.resolve({ canceled: false, filePaths: ['/Users/me/app'] }),
+    )
+    expect(await handlersFor(chosen).get('dialog:choose-folder')?.(undefined)).toBe('/Users/me/app')
+
+    const cancelled: OpenDialog = vi.fn(() => Promise.resolve({ canceled: true, filePaths: [] }))
+    expect(await handlersFor(cancelled).get('dialog:choose-folder')?.(undefined)).toBeNull()
+  })
+
+  it('returns a chosen file relative to the base, or null when cancelled', async () => {
+    const chosen: OpenDialog = vi.fn(() =>
+      Promise.resolve({ canceled: false, filePaths: ['/app/src/ui/Cart.tsx'] }),
+    )
+    const handlers = handlersFor(chosen)
+
+    expect(await handlers.get('dialog:choose-file')?.(undefined, '/app')).toBe('src/ui/Cart.tsx')
+    expect(chosen).toHaveBeenCalledWith(
+      expect.objectContaining({ properties: ['openFile'], defaultPath: '/app' }),
+    )
+
+    const empty: OpenDialog = vi.fn(() => Promise.resolve({ canceled: false, filePaths: [] }))
+    expect(await handlersFor(empty).get('dialog:choose-file')?.(undefined, '/app')).toBeNull()
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerDialogIpc(mockDialog.showOpenDialog)
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['dialog:choose-folder', 'dialog:choose-file'])
   })
 })
 

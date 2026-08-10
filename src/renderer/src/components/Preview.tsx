@@ -196,6 +196,23 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
       .finally(() => setInferring(false))
   }
 
+  // Native pickers so the app root and files aren't hand-typed.
+  const chooseRoot = (): void => {
+    void window.agentinator?.preview.chooseFolder().then((dir) => {
+      if (dir !== null) {
+        setComponentRoot(dir)
+      }
+    })
+  }
+
+  const chooseFile = (apply: (file: string) => void): void => {
+    void window.agentinator?.preview.chooseFile(componentRoot.trim()).then((file) => {
+      if (file !== null) {
+        apply(file)
+      }
+    })
+  }
+
   // Point at it: turn a click on the screenshot into a normalized mark.
   const pointAt = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -281,6 +298,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           placeholder="App root (folder)"
           aria-label="Component app root"
         />
+        <button
+          type="button"
+          className="preview-target-save"
+          onClick={chooseRoot}
+          aria-label="Choose app root"
+        >
+          …
+        </button>
         <input
           className="preview-target-input"
           value={componentFile}
@@ -288,6 +313,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           placeholder="Component file, e.g. src/Cart.tsx"
           aria-label="Component file"
         />
+        <button
+          type="button"
+          className="preview-target-save"
+          onClick={() => chooseFile(setComponentFile)}
+          aria-label="Choose component file"
+        >
+          …
+        </button>
         <input
           className="preview-target-input"
           value={componentWrapper}
@@ -295,6 +328,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           placeholder="Wrapper file (optional, for context)"
           aria-label="Wrapper file"
         />
+        <button
+          type="button"
+          className="preview-target-save"
+          onClick={() => chooseFile(setComponentWrapper)}
+          aria-label="Choose wrapper file"
+        >
+          …
+        </button>
         <button
           type="button"
           className="preview-target-save"

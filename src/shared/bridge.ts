@@ -108,6 +108,11 @@ export interface AgentinatorBridge {
     /** Ask the agent to read the component and generate a realistic props
      * literal for it. Resolves to the props string. */
     inferProps(root: string, file: string): Promise<string>
+    /** Open a native folder picker for the app root; null if cancelled. */
+    chooseFolder(): Promise<string | null>
+    /** Open a native file picker; resolves to the path relative to `base`
+     * (the app root), or null if cancelled. */
+    chooseFile(base: string): Promise<string | null>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

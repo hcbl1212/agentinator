@@ -34,6 +34,8 @@ interface Stub {
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
   inferProps: ReturnType<typeof vi.fn>
+  chooseFolder: ReturnType<typeof vi.fn>
+  chooseFile: ReturnType<typeof vi.fn>
 }
 
 function stub(
@@ -43,6 +45,8 @@ function stub(
     target?: string | null
     component?: { root: string; file: string; wrapper?: string; props?: string } | null
     inferred?: string
+    chosenFolder?: string | null
+    chosenFile?: string | null
   } = {},
 ): Stub {
   const {
@@ -51,6 +55,8 @@ function stub(
     target = null,
     component = null,
     inferred = '{ n: 1 }',
+    chosenFolder = '/picked/app',
+    chosenFile = 'src/Picked.tsx',
   } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
@@ -63,6 +69,8 @@ function stub(
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
+  const chooseFolder = vi.fn(() => Promise.resolve(chosenFolder))
+  const chooseFile = vi.fn(() => Promise.resolve(chosenFile))
   const bridge = {
     events: {
       search,
@@ -71,7 +79,15 @@ function stub(
         return unsubscribe as () => void
       }),
     },
-    preview: { capture, image: imageFn, getComponent, setComponent, inferProps },
+    preview: {
+      capture,
+      image: imageFn,
+      getComponent,
+      setComponent,
+      inferProps,
+      chooseFolder,
+      chooseFile,
+    },
     agent: { send: agentSend },
     settings: { getPreviewTarget, setPreviewTarget },
   } as unknown as AgentinatorBridge
@@ -88,6 +104,8 @@ function stub(
     getComponent,
     setComponent,
     inferProps,
+    chooseFolder,
+    chooseFile,
   }
 }
 
@@ -128,8 +146,52 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
     fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose app root' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose component file' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'Capture' })).toBeEnabled()
+  })
+
+  it('picks the app root and files with the native dialogs', async () => {
+    const stubbed = stub({ chosenFolder: '/picked/app', chosenFile: 'src/ui/Cart.tsx' })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose app root' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue(
+        '/picked/app',
+      ),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose component file' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue(
+        'src/ui/Cart.tsx',
+      ),
+    )
+    // The file picker resolves relative to the chosen root.
+    expect(stubbed.chooseFile).toHaveBeenCalledWith('/picked/app')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose wrapper file' }))
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('src/ui/Cart.tsx'),
+    )
+  })
+
+  it('leaves fields unchanged when a picker is cancelled', async () => {
+    const stubbed = stub({ chosenFolder: null, chosenFile: null })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose app root' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose component file' }))
+    await waitFor(() => expect(stubbed.chooseFolder).toHaveBeenCalled())
+
+    expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
   })
 
   it('loads, pins (with wrapper), and clears a component workbench target', async () => {

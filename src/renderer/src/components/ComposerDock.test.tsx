@@ -66,6 +66,8 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         getComponent: vi.fn(() => Promise.resolve(null)),
         setComponent: vi.fn(() => Promise.resolve()),
         inferProps: vi.fn(() => Promise.resolve('{}')),
+        chooseFolder: vi.fn(() => Promise.resolve(null)),
+        chooseFile: vi.fn(() => Promise.resolve(null)),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),

@@ -148,6 +148,8 @@ describe('preload bridge', () => {
     await bridge.preview.getComponent()
     await bridge.preview.setComponent('/app', 'src/Cart.tsx', 'src/Providers.tsx', '{ n: 1 }')
     await bridge.preview.inferProps('/app', 'src/Cart.tsx')
+    await bridge.preview.chooseFolder()
+    await bridge.preview.chooseFile('/app')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
@@ -169,6 +171,8 @@ describe('preload bridge', () => {
       '/app',
       'src/Cart.tsx',
     )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('dialog:choose-folder')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('dialog:choose-file', '/app')
   })
 
   it('routes approvals over IPC', async () => {
