@@ -112,6 +112,8 @@ function fakeSettings(): SettingsStore {
     setBudget: vi.fn(),
     apiKeyMode: vi.fn(() => false),
     setApiKeyMode: vi.fn(),
+    previewTarget: vi.fn(() => undefined),
+    setPreviewTarget: vi.fn(),
     secrets: vi.fn(() => []),
     saveSecret: vi.fn(),
     readSecret: vi.fn(),
@@ -457,6 +459,8 @@ describe('registerSettingsIpc', () => {
       setBudget: vi.fn(),
       apiKeyMode: vi.fn(() => true),
       setApiKeyMode: vi.fn(),
+      previewTarget: vi.fn(() => 'http://localhost:3001/'),
+      setPreviewTarget: vi.fn(),
     }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
@@ -470,6 +474,20 @@ describe('registerSettingsIpc', () => {
     expect(handlers.get('settings:get-api-key-mode')?.(undefined)).toBe(true)
     handlers.get('settings:set-api-key-mode')?.(undefined, true)
     expect(settings.setApiKeyMode).toHaveBeenCalledWith(true)
+    expect(handlers.get('settings:get-preview-target')?.(undefined)).toBe('http://localhost:3001/')
+    handlers.get('settings:set-preview-target')?.(undefined, 'http://localhost:3001/')
+    expect(settings.setPreviewTarget).toHaveBeenCalledWith('http://localhost:3001/')
+  })
+
+  it('returns null for an unset preview target', () => {
+    const settings = { ...fakeSettings(), previewTarget: vi.fn(() => undefined) }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerSettingsIpc(settings as unknown as SettingsStore, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('settings:get-preview-target')?.(undefined)).toBeNull()
   })
 
   it('registers on ipcMain by default', () => {
@@ -481,6 +499,8 @@ describe('registerSettingsIpc', () => {
       'settings:set-budget',
       'settings:get-api-key-mode',
       'settings:set-api-key-mode',
+      'settings:get-preview-target',
+      'settings:set-preview-target',
     ])
   })
 })
@@ -606,7 +626,7 @@ describe('bootstrap', () => {
   it('wires the preview loop to capture the bundled sample into the store', async () => {
     const store = new EventStore(':memory:')
     const capture = vi.fn(() =>
-      Promise.resolve({ png: new Uint8Array([1]), width: 2, height: 3, console: [] }),
+      Promise.resolve({ png: new Uint8Array([1]), width: 2, height: 3, console: [], network: [] }),
     )
 
     await bootstrap(

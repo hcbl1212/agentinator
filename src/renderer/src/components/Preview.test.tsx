@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
-import type { ConsoleEntry, StoredEvent } from '../../../shared/events'
+import type { ConsoleEntry, NetworkEntry, StoredEvent } from '../../../shared/events'
 import { Preview } from './Preview'
 
 function captureEvent(
@@ -11,12 +11,13 @@ function captureEvent(
   seq: number,
   ref = `shot_${seq}`,
   console: ConsoleEntry[] = [],
+  network: NetworkEntry[] = [],
 ): StoredEvent {
   return {
     seq,
     ts: 't',
     type: 'preview.captured',
-    payload: { sessionId, ref, url: 'file:///sample', width: 1280, height: 800, console },
+    payload: { sessionId, ref, url: 'file:///sample', width: 1280, height: 800, console, network },
   }
 }
 
@@ -28,16 +29,22 @@ interface Stub {
   image: ReturnType<typeof vi.fn>
   capture: ReturnType<typeof vi.fn>
   agentSend: ReturnType<typeof vi.fn>
+  getPreviewTarget: ReturnType<typeof vi.fn>
+  setPreviewTarget: ReturnType<typeof vi.fn>
 }
 
-function stub(options: { captures?: StoredEvent[]; image?: string | null } = {}): Stub {
-  const { captures = [], image = 'YWJj' } = options
+function stub(
+  options: { captures?: StoredEvent[]; image?: string | null; target?: string | null } = {},
+): Stub {
+  const { captures = [], image = 'YWJj', target = null } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
   const search = vi.fn(() => Promise.resolve(captures))
   const imageFn = vi.fn(() => Promise.resolve(image))
   const capture = vi.fn(() => Promise.resolve('shot_new'))
   const agentSend = vi.fn(() => Promise.resolve())
+  const getPreviewTarget = vi.fn(() => Promise.resolve(target))
+  const setPreviewTarget = vi.fn(() => Promise.resolve())
   const bridge = {
     events: {
       search,
@@ -48,6 +55,7 @@ function stub(options: { captures?: StoredEvent[]; image?: string | null } = {})
     },
     preview: { capture, image: imageFn },
     agent: { send: agentSend },
+    settings: { getPreviewTarget, setPreviewTarget },
   } as unknown as AgentinatorBridge
   return {
     bridge,
@@ -57,6 +65,8 @@ function stub(options: { captures?: StoredEvent[]; image?: string | null } = {})
     image: imageFn,
     capture,
     agentSend,
+    getPreviewTarget,
+    setPreviewTarget,
   }
 }
 
@@ -88,13 +98,71 @@ describe('Preview', () => {
     expect(stubbed.search).not.toHaveBeenCalled()
   })
 
-  it('shows the capture prompt and no-ops the button without a bridge', () => {
+  it('shows the capture prompt and no-ops the buttons without a bridge', () => {
     render(<Preview sessionId="s" />)
 
     expect(screen.getByText(/Capture a screenshot of the target app/)).toBeInTheDocument()
-    // Clicking without a bridge must not throw.
+    // Clicking without a bridge must not throw — capture or set-target.
     fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     expect(screen.getByRole('button', { name: 'Capture' })).toBeEnabled()
+  })
+
+  it('loads the configured preview target into the input', async () => {
+    const stubbed = stub({ target: 'http://localhost:3001/' })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Preview target URL' })).toHaveValue(
+        'http://localhost:3001/',
+      ),
+    )
+  })
+
+  it('saves a new target, and clears it to the sample when blanked', async () => {
+    const stubbed = stub()
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    const input = screen.getByRole('textbox', { name: 'Preview target URL' })
+
+    fireEvent.change(input, { target: { value: 'http://localhost:3001/' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(stubbed.setPreviewTarget).toHaveBeenCalledWith('http://localhost:3001/')
+
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(stubbed.setPreviewTarget).toHaveBeenCalledWith(null))
+  })
+
+  it('renders captured network activity with failures flagged', async () => {
+    const stubbed = stub({
+      captures: [
+        captureEvent(
+          's',
+          1,
+          'shot_s',
+          [],
+          [
+            { method: 'GET', url: 'http://localhost:3001/', status: 200, ok: true },
+            { method: 'GET', url: 'http://localhost:4001/api/cart', status: 500, ok: false },
+            { method: 'GET', url: 'http://localhost:4001/down', status: 0, ok: false },
+          ],
+        ),
+      ],
+    })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    const net = await screen.findByRole('region', { name: 'App network' })
+    expect(net).toHaveTextContent('http://localhost:4001/api/cart')
+    expect(net).toHaveTextContent('500')
+    // An errored request (status 0) reads as "failed".
+    expect(net).toHaveTextContent('failed')
+    expect(net.querySelectorAll('.is-failed')).toHaveLength(2)
   })
 
   it('seeds the latest capture for the session and renders its screenshot', async () => {

@@ -1,5 +1,5 @@
 import { createEntityId } from '../../shared/events'
-import type { ConsoleEntry, ImageAttachment } from '../../shared/events'
+import type { ConsoleEntry, ImageAttachment, NetworkEntry } from '../../shared/events'
 import { normalizeLimit, normalizeUsage } from '../../shared/usage'
 import { assembleSystemPrompt } from './promptAssembly'
 import type {
@@ -96,9 +96,12 @@ export type SdkCreateServer = (config: {
  * tool. Absent for providers/tests that don't wire a preview.
  */
 export interface PreviewVision {
-  capture: (
-    sessionId: string,
-  ) => Promise<{ base64: string; mediaType: string; console: ConsoleEntry[] }>
+  capture: (sessionId: string) => Promise<{
+    base64: string
+    mediaType: string
+    console: ConsoleEntry[]
+    network: NetworkEntry[]
+  }>
   tool: SdkTool
   createSdkMcpServer: SdkCreateServer
 }
@@ -116,6 +119,18 @@ function consoleBlock(console: ConsoleEntry[]): SdkTextContent[] {
   }
   const lines = console.map((entry) => `[${entry.level}] ${entry.text}`).join('\n')
   return [{ type: 'text', text: `Console output from the app:\n${lines}` }]
+}
+
+/** The captured network activity for the model — a request summary plus the
+ * failing calls spelled out, so it can see a broken API next to the pixels. */
+function networkBlock(network: NetworkEntry[]): SdkTextContent[] {
+  if (network.length === 0) {
+    return []
+  }
+  const failed = network.filter((entry) => !entry.ok)
+  const summary = `Network: ${network.length} request(s), ${failed.length} failed.`
+  const detail = failed.map((entry) => `${entry.method} ${entry.url} → ${entry.status}`).join('\n')
+  return [{ type: 'text', text: failed.length === 0 ? summary : `${summary}\n${detail}` }]
 }
 
 export type ClaudeQuery = (
@@ -389,10 +404,11 @@ export function createClaudeProvider(
             'Use it to verify UI changes you have made.',
           {},
           async () => {
-            const { base64, mediaType, console } = await vision.capture(sessionId)
+            const { base64, mediaType, console, network } = await vision.capture(sessionId)
             return {
               content: [
                 ...consoleBlock(console),
+                ...networkBlock(network),
                 { type: 'image', data: base64, mimeType: mediaType },
               ],
             }

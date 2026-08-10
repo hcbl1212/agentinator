@@ -4,13 +4,17 @@ import type { ArtifactStore } from './artifacts'
 import { PreviewController } from './preview'
 import type { PreviewBrowser, Screenshot } from './previewBrowser'
 
+const SAMPLE = '/app/examples/sample-web/index.html'
+
 function setup(
   shot: Screenshot = {
     png: new Uint8Array([1, 2, 3]),
     width: 800,
     height: 600,
     console: [{ level: 'warning', text: 'heads up' }],
+    network: [{ method: 'GET', url: '/api/ok', status: 200, ok: true }],
   },
+  target: string = SAMPLE,
 ): {
   controller: PreviewController
   browser: { capture: ReturnType<typeof vi.fn> }
@@ -35,7 +39,7 @@ function setup(
     browser as unknown as PreviewBrowser,
     artifacts,
     emit as never,
-    '/app/examples/sample-web/index.html',
+    () => target,
   )
   return { controller, browser, store, emit }
 }
@@ -46,16 +50,29 @@ describe('PreviewController', () => {
 
     const ref = await controller.capture('session_1')
 
-    expect(browser.capture).toHaveBeenCalledWith('/app/examples/sample-web/index.html')
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
     expect(store.get(ref)).toEqual(new Uint8Array([1, 2, 3]))
     expect(emit).toHaveBeenCalledWith('preview.captured', {
       sessionId: 'session_1',
       ref,
-      url: '/app/examples/sample-web/index.html',
+      url: SAMPLE,
       width: 800,
       height: 600,
       console: [{ level: 'warning', text: 'heads up' }],
+      network: [{ method: 'GET', url: '/api/ok', status: 200, ok: true }],
     })
+  })
+
+  it('captures the configured target when one is set', async () => {
+    const { controller, browser, emit } = setup(undefined, 'http://localhost:3001/')
+
+    await controller.capture('session_1')
+
+    expect(browser.capture).toHaveBeenCalledWith('http://localhost:3001/')
+    expect(emit).toHaveBeenCalledWith(
+      'preview.captured',
+      expect.objectContaining({ url: 'http://localhost:3001/' }),
+    )
   })
 
   it('captures an explicit url when one is provided', async () => {
@@ -72,15 +89,17 @@ describe('PreviewController', () => {
       width: 640,
       height: 480,
       console: [{ level: 'error', text: 'boom' }],
+      network: [{ method: 'POST', url: '/api/cart', status: 500, ok: false }],
     })
 
     const image = await controller.captureImage('session_1')
 
-    expect(browser.capture).toHaveBeenCalledWith('/app/examples/sample-web/index.html')
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
     expect(image).toEqual({
       base64: Buffer.from([10, 20, 30]).toString('base64'),
       mediaType: 'image/png',
       console: [{ level: 'error', text: 'boom' }],
+      network: [{ method: 'POST', url: '/api/cart', status: 500, ok: false }],
     })
     // The agent capture still surfaces in the pane/timeline like a manual one.
     expect(emit).toHaveBeenCalledWith(
@@ -95,6 +114,7 @@ describe('PreviewController', () => {
       width: 1,
       height: 1,
       console: [],
+      network: [],
     })
 
     const ref = await controller.capture('session_1')

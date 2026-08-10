@@ -56,6 +56,8 @@ function stubBridge(
         setBudget: vi.fn(() => Promise.resolve()),
         getApiKeyMode: vi.fn(() => Promise.resolve(false)),
         setApiKeyMode: vi.fn(() => Promise.resolve()),
+        getPreviewTarget: vi.fn(() => Promise.resolve(null)),
+        setPreviewTarget: vi.fn(() => Promise.resolve()),
       },
       agent: {
         current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),

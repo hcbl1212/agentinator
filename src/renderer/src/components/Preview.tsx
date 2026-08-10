@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 
-import type { ConsoleEntry, EventPayloads, StoredEvent } from '../../../shared/events'
+import type { ConsoleEntry, EventPayloads, NetworkEntry, StoredEvent } from '../../../shared/events'
 
 interface Shot {
   ref: string
   width: number
   height: number
   console: ConsoleEntry[]
+  network: NetworkEntry[]
 }
 
 function toShot(event: StoredEvent): Shot {
@@ -16,6 +17,7 @@ function toShot(event: StoredEvent): Shot {
     width: payload.width,
     height: payload.height,
     console: payload.console ?? [],
+    network: payload.network ?? [],
   }
 }
 
@@ -43,6 +45,25 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [busy, setBusy] = useState(false)
   const [mark, setMark] = useState<Mark | null>(null)
   const [note, setNote] = useState('')
+  const [target, setTarget] = useState('')
+
+  // Load the configured preview target (a real dev-server URL, or blank for the
+  // bundled sample) once.
+  useEffect(() => {
+    const bridge = window.agentinator
+    if (bridge === undefined) {
+      return
+    }
+    let cancelled = false
+    void bridge.settings.getPreviewTarget().then((url) => {
+      if (!cancelled) {
+        setTarget(url ?? '')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Seed the latest capture from the log, keep it live off broadcasts, and load
   // each shot's PNG by ref as it becomes current.
@@ -99,6 +120,15 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     })
   }
 
+  const saveTarget = (): void => {
+    const bridge = window.agentinator
+    if (bridge === undefined) {
+      return
+    }
+    const trimmed = target.trim()
+    void bridge.settings.setPreviewTarget(trimmed === '' ? null : trimmed)
+  }
+
   // Point at it: turn a click on the screenshot into a normalized mark.
   const pointAt = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -145,6 +175,24 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           </span>
         )}
       </div>
+      <form
+        className="preview-target"
+        onSubmit={(event) => {
+          event.preventDefault()
+          saveTarget()
+        }}
+      >
+        <input
+          className="preview-target-input"
+          value={target}
+          onChange={(event) => setTarget(event.target.value)}
+          placeholder="Preview URL — blank for the bundled sample"
+          aria-label="Preview target URL"
+        />
+        <button type="submit" className="preview-target-save">
+          Set
+        </button>
+      </form>
       {src === null ? (
         <p className="empty-state">
           Capture a screenshot of the target app — it renders here, and streams to the agent next.
@@ -204,6 +252,20 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           {shot.console.map((entry, index) => (
             <p key={index} className={`preview-console-line level-${entry.level}`}>
               <span className="preview-console-level">{entry.level}</span> {entry.text}
+            </p>
+          ))}
+        </div>
+      )}
+      {shot !== null && shot.network.length > 0 && (
+        <div className="preview-network" role="region" aria-label="App network">
+          <span className="preview-console-label">Network</span>
+          {shot.network.map((entry, index) => (
+            <p key={index} className={`preview-net-line${entry.ok ? '' : ' is-failed'}`}>
+              <span className="preview-net-method">{entry.method}</span>{' '}
+              <span className="preview-net-url">{entry.url}</span>{' '}
+              <span className="preview-net-status">
+                {entry.status === 0 ? 'failed' : entry.status}
+              </span>
             </p>
           ))}
         </div>

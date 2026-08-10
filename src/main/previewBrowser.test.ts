@@ -8,12 +8,16 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
   const capturePage = vi.fn(() => Promise.resolve(image))
 
   type ConsoleListener = (details: { level: string; message: string }) => void
+  type CompletedListener = (details: { method: string; url: string; statusCode: number }) => void
+  type ErrorListener = (details: { method: string; url: string; error: string }) => void
 
   class MockBrowserWindow {
     static instances: MockBrowserWindow[] = []
     // When set, the next load() rejects with this value instead of resolving.
     static loadRejection: { value: unknown } | null = null
     consoleListener: ConsoleListener | undefined
+    completedListener: CompletedListener | undefined
+    errorListener: ErrorListener | undefined
 
     #load = (level: 'warning' | 'info', message: string): Promise<void> => {
       if (MockBrowserWindow.loadRejection !== null) {
@@ -22,8 +26,19 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         return Promise.reject(MockBrowserWindow.loadRejection.value)
       }
-      // A real page logs while loading — emit through the registered listener.
+      // A real page emits console + network during load.
       this.consoleListener?.({ level, message })
+      this.completedListener?.({
+        method: 'GET',
+        url: 'http://localhost:3001/api/ok',
+        statusCode: 200,
+      })
+      this.completedListener?.({
+        method: 'GET',
+        url: 'http://localhost:4001/api/cart',
+        statusCode: 500,
+      })
+      this.errorListener?.({ method: 'GET', url: 'http://localhost:4001/down', error: 'net::ERR' })
       return Promise.resolve()
     }
     loadURL = vi.fn(() => this.#load('warning', 'from url'))
@@ -35,6 +50,16 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
         if (event === 'console-message') {
           this.consoleListener = listener
         }
+      },
+      session: {
+        webRequest: {
+          onCompleted: (listener: CompletedListener): void => {
+            this.completedListener = listener
+          },
+          onErrorOccurred: (listener: ErrorListener): void => {
+            this.errorListener = listener
+          },
+        },
       },
     }
 
@@ -62,6 +87,8 @@ describe('ElectronPreviewBrowser', () => {
 
     const window = MockBrowserWindow.instances[0]
     expect(window?.options).toMatchObject({ show: false })
+    const webPreferences = window?.options.webPreferences as { partition: string } | undefined
+    expect(webPreferences?.partition).toMatch(/^preview-/)
     expect(window?.loadURL).toHaveBeenCalledWith('http://localhost:5173/')
     expect(window?.loadFile).not.toHaveBeenCalled()
     expect(shot).toEqual({
@@ -69,6 +96,11 @@ describe('ElectronPreviewBrowser', () => {
       width: 1280,
       height: 800,
       console: [{ level: 'warning', text: 'from url' }],
+      network: [
+        { method: 'GET', url: 'http://localhost:3001/api/ok', status: 200, ok: true },
+        { method: 'GET', url: 'http://localhost:4001/api/cart', status: 500, ok: false },
+        { method: 'GET', url: 'http://localhost:4001/down', status: 0, ok: false },
+      ],
     })
     expect(window?.destroy).toHaveBeenCalledOnce()
   })

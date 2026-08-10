@@ -83,6 +83,21 @@ export class SettingsStore {
     }
   }
 
+  /** The app URL the preview captures, or undefined to use the bundled sample.
+   * Attach mode: the user runs the dev server, the harness just points at it. */
+  previewTarget(): string | undefined {
+    return (this.#get.get('previewTarget') as { value: string } | undefined)?.value
+  }
+
+  setPreviewTarget(url: string | null): void {
+    const trimmed = url?.trim() ?? ''
+    if (trimmed === '') {
+      this.#delete.run('previewTarget')
+    } else {
+      this.#set.run('previewTarget', trimmed)
+    }
+  }
+
   /** Set (positive number) or clear (null) the cap for one scope. */
   setBudget(scope: BudgetScope, usd: number | null): void {
     if (usd === null || !Number.isFinite(usd) || usd <= 0) {

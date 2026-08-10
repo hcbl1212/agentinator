@@ -137,6 +137,10 @@ export function registerSettingsIpc(
   handle('settings:set-api-key-mode', (_event, on) => {
     settings.setApiKeyMode(on === true)
   })
+  handle('settings:get-preview-target', () => settings.previewTarget() ?? null)
+  handle('settings:set-preview-target', (_event, url) => {
+    settings.setPreviewTarget(url as string | null)
+  })
 }
 
 export function registerApprovalIpc(
@@ -270,11 +274,13 @@ export async function bootstrap(
   // inside the packaged asar — getAppPath is unreliable when launched as
   // `electron out/main/entry.js`. A real workspace dev-server URL becomes the
   // target later.
+  const sampleTarget = join(import.meta.dirname, '../../examples/sample-web/index.html')
   const preview = new PreviewController(
     createPreviewBrowser(),
     createArtifacts(join(userData, 'screenshots')),
     makeEmitStored(store),
-    join(import.meta.dirname, '../../examples/sample-web/index.html'),
+    // Point at the configured dev-server URL when set, else the bundled sample.
+    () => settings.previewTarget() ?? sampleTarget,
   )
 
   const vault = new CredentialVault(settings, createEncryptor())

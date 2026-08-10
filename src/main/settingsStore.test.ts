@@ -114,6 +114,20 @@ describe('SettingsStore', () => {
     store.close()
   })
 
+  it('persists the preview target, trimming and clearing on empty', () => {
+    const store = new SettingsStore()
+
+    expect(store.previewTarget()).toBeUndefined()
+    store.setPreviewTarget('  http://localhost:3001/  ')
+    expect(store.previewTarget()).toBe('http://localhost:3001/')
+    store.setPreviewTarget('   ')
+    expect(store.previewTarget()).toBeUndefined()
+    store.setPreviewTarget('http://localhost:3001/')
+    store.setPreviewTarget(null)
+    expect(store.previewTarget()).toBeUndefined()
+    store.close()
+  })
+
   it('stores, reads, lists, and deletes credential ciphertext', () => {
     const store = new SettingsStore()
 

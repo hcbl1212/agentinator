@@ -38,11 +38,18 @@ describe('preload bridge', () => {
     await bridge.settings.setBudget('day', 12)
     await bridge.settings.getApiKeyMode()
     await bridge.settings.setApiKeyMode(true)
+    await bridge.settings.getPreviewTarget()
+    await bridge.settings.setPreviewTarget('http://localhost:3001/')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budgets')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 'day', 12)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-api-key-mode')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-api-key-mode', true)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-preview-target')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'settings:set-preview-target',
+      'http://localhost:3001/',
+    )
   })
 
   it('routes events.list over IPC with the given cursor', async () => {

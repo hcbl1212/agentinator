@@ -27,7 +27,7 @@ describe.skipIf(process.env['CLAUDE_SMOKE'] === undefined)('preview vision (live
     { timeout: 180_000 },
     async () => {
       const capture = vi.fn(() =>
-        Promise.resolve({ base64: TINY_PNG, mediaType: 'image/png', console: [] }),
+        Promise.resolve({ base64: TINY_PNG, mediaType: 'image/png', console: [], network: [] }),
       )
       const provider = createClaudeProvider(query as unknown as ClaudeQuery, undefined, {
         capture,

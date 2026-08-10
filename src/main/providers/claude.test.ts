@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ConsoleEntry, EventPayloads, EventType } from '../../shared/events'
+import type { ConsoleEntry, EventPayloads, EventType, NetworkEntry } from '../../shared/events'
 import { createClaudeProvider } from './claude'
 import type { ClaudeQuery, PreviewVision, SdkUserMessage } from './claude'
 import type { PermissionDecider, SessionContext } from './types'
@@ -664,6 +664,7 @@ describe('createClaudeProvider', () => {
 describe('createClaudeProvider — preview vision', () => {
   function visionStub(
     consoleEntries: ConsoleEntry[] = [{ level: 'warning', text: 'hydration mismatch' }],
+    networkEntries: NetworkEntry[] = [],
   ): {
     vision: PreviewVision
     capture: ReturnType<typeof vi.fn>
@@ -671,7 +672,12 @@ describe('createClaudeProvider — preview vision', () => {
     createSdkMcpServer: ReturnType<typeof vi.fn>
   } {
     const capture = vi.fn(() =>
-      Promise.resolve({ base64: 'YmFzZTY0', mediaType: 'image/png', console: consoleEntries }),
+      Promise.resolve({
+        base64: 'YmFzZTY0',
+        mediaType: 'image/png',
+        console: consoleEntries,
+        network: networkEntries,
+      }),
     )
     const tool = vi.fn(
       (name: string, description: string, inputSchema: unknown, handler: unknown) => ({
@@ -694,12 +700,13 @@ describe('createClaudeProvider — preview vision', () => {
     messages: unknown[],
     decide?: PermissionDecider,
     consoleEntries?: ConsoleEntry[],
+    networkEntries?: NetworkEntry[],
   ): Promise<{
     events: Recorded[]
     queryArgs: Parameters<ClaudeQuery>[0]
     stub: ReturnType<typeof visionStub>
   }> {
-    const stub = visionStub(consoleEntries)
+    const stub = visionStub(consoleEntries, networkEntries)
     let queryArgs: Parameters<ClaudeQuery>[0] | undefined
     const query: ClaudeQuery = (args) => {
       queryArgs = args
@@ -757,6 +764,43 @@ describe('createClaudeProvider — preview vision', () => {
     expect(result).toEqual({
       content: [{ type: 'image', data: 'YmFzZTY0', mimeType: 'image/png' }],
     })
+  })
+
+  it('summarizes network activity and spells out the failing calls', async () => {
+    const { stub } = await runVisionSession(
+      [successResult],
+      undefined,
+      [],
+      [
+        { method: 'GET', url: 'http://localhost:3001/', status: 200, ok: true },
+        { method: 'GET', url: 'http://localhost:4001/api/cart', status: 500, ok: false },
+      ],
+    )
+
+    const handler = stub.tool.mock.calls[0]?.[3] as () => Promise<{
+      content: Array<{ type: string; text?: string }>
+    }>
+    const result = await handler()
+
+    const text = result.content.find((block) => block.type === 'text')?.text
+    expect(text).toBe('Network: 2 request(s), 1 failed.\nGET http://localhost:4001/api/cart → 500')
+  })
+
+  it('reports a clean network run without listing calls', async () => {
+    const { stub } = await runVisionSession(
+      [successResult],
+      undefined,
+      [],
+      [{ method: 'GET', url: 'http://localhost:3001/', status: 200, ok: true }],
+    )
+
+    const handler = stub.tool.mock.calls[0]?.[3] as () => Promise<{
+      content: Array<{ type: string; text?: string }>
+    }>
+    const result = await handler()
+
+    const text = result.content.find((block) => block.type === 'text')?.text
+    expect(text).toBe('Network: 1 request(s), 0 failed.')
   })
 
   it('auto-allows the capture tool without ever consulting the approval decider', async () => {

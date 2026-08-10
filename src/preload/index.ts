@@ -51,6 +51,10 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('settings:set-budget', scope, usd) as Promise<void>,
     getApiKeyMode: () => ipcRenderer.invoke('settings:get-api-key-mode') as Promise<boolean>,
     setApiKeyMode: (on) => ipcRenderer.invoke('settings:set-api-key-mode', on) as Promise<void>,
+    getPreviewTarget: () =>
+      ipcRenderer.invoke('settings:get-preview-target') as Promise<string | null>,
+    setPreviewTarget: (url) =>
+      ipcRenderer.invoke('settings:set-preview-target', url) as Promise<void>,
   },
   preview: {
     capture: (sessionId, url) =>

@@ -30,6 +30,16 @@ export interface ConsoleEntry {
   text: string
 }
 
+/** One network request the previewed app made during a capture — so a failing
+ * API call is visible alongside the pixels. `status` is 0 when the request
+ * errored before a response. */
+export interface NetworkEntry {
+  method: string
+  url: string
+  status: number
+  ok: boolean
+}
+
 /** One turn of a prior conversation, reconstructed from the log — the
  * vendor-agnostic material any provider can replay to resume a session. */
 export interface ResumeTurn {
@@ -114,6 +124,9 @@ export interface EventPayloads {
     /** Console output (and any load failure) captured during the shot. Optional
      * so older logs without it still replay. */
     console?: ConsoleEntry[]
+    /** Network requests the app made during the shot. Optional for the same
+     * schema-evolution reason. */
+    network?: NetworkEntry[]
   }
   /** A tool use is waiting on permission — the audit trail starts here. */
   'approval.requested': { sessionId: string; requestId: string; tool: string; input: unknown }

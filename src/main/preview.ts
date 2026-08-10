@@ -1,4 +1,4 @@
-import type { ConsoleEntry } from '../shared/events'
+import type { ConsoleEntry, NetworkEntry } from '../shared/events'
 import type { EmitStored } from './approvals'
 import type { ArtifactStore } from './artifacts'
 import type { PreviewBrowser } from './previewBrowser'
@@ -14,45 +14,56 @@ export class PreviewController {
   #browser: PreviewBrowser
   #artifacts: ArtifactStore
   #emit: EmitStored
-  #defaultTarget: string
+  #resolveTarget: () => string
 
   constructor(
     browser: PreviewBrowser,
     artifacts: ArtifactStore,
     emit: EmitStored,
-    defaultTarget: string,
+    // Resolved per capture so a changed target (a real dev-server URL) takes
+    // effect immediately; falls back to the bundled sample.
+    resolveTarget: () => string,
   ) {
     this.#browser = browser
     this.#artifacts = artifacts
     this.#emit = emit
-    this.#defaultTarget = defaultTarget
+    this.#resolveTarget = resolveTarget
   }
 
-  /** Capture a target (the bundled sample when none is given) for a session,
+  /** Capture a target (the configured one when none is given) for a session,
    * returning the artifact ref. */
   async capture(sessionId: string, url?: string): Promise<string> {
     return (await this.#snap(sessionId, url)).ref
   }
 
-  /** Capture for the agent: the same screenshot plus the page's console output,
-   * so the model sees runtime errors as well as pixels. Still surfaces in the
-   * pane like a manual capture. */
+  /** Capture for the agent: the same screenshot plus the page's console output
+   * and network requests, so the model sees runtime errors as well as pixels.
+   * Still surfaces in the pane like a manual capture. */
   async captureImage(
     sessionId: string,
     url?: string,
-  ): Promise<{ base64: string; mediaType: string; console: ConsoleEntry[] }> {
-    const { base64, console } = await this.#snap(sessionId, url)
-    return { base64, mediaType: 'image/png', console }
+  ): Promise<{
+    base64: string
+    mediaType: string
+    console: ConsoleEntry[]
+    network: NetworkEntry[]
+  }> {
+    const { base64, console, network } = await this.#snap(sessionId, url)
+    return { base64, mediaType: 'image/png', console, network }
   }
 
-  /** Take one screenshot: store it, log a lean event (with console output), and
-   * hand back the ref, bytes, and console for whoever asked (the UI needs the
-   * ref, the agent needs the bytes + console). */
+  /** Take one screenshot: store it, log a lean event (with console + network),
+   * and hand back the ref, bytes, console, and network for whoever asked. */
   async #snap(
     sessionId: string,
     url?: string,
-  ): Promise<{ ref: string; base64: string; console: ConsoleEntry[] }> {
-    const target = url ?? this.#defaultTarget
+  ): Promise<{
+    ref: string
+    base64: string
+    console: ConsoleEntry[]
+    network: NetworkEntry[]
+  }> {
+    const target = url ?? this.#resolveTarget()
     const shot = await this.#browser.capture(target)
     const ref = this.#artifacts.put(shot.png)
     this.#emit('preview.captured', {
@@ -62,8 +73,14 @@ export class PreviewController {
       width: shot.width,
       height: shot.height,
       console: shot.console,
+      network: shot.network,
     })
-    return { ref, base64: Buffer.from(shot.png).toString('base64'), console: shot.console }
+    return {
+      ref,
+      base64: Buffer.from(shot.png).toString('base64'),
+      console: shot.console,
+      network: shot.network,
+    }
   }
 
   /** A captured screenshot's PNG as base64 for the renderer, or null if gone. */
