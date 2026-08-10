@@ -2,6 +2,26 @@
 
 Every version tag ships a downloadable macOS build.
 
+## Before you tag: the smoke gate
+
+CI proves the harness against the deterministic mock/e2e provider, but that
+provider is only a **mirror** of the real Claude adapter (kept honest by the
+parity contract in `src/main/providers/contract.ts`). The one thing CI can't do
+is talk to real Claude — so anything that depends on the live SDK (a real edit
+becoming a `file.diffed`, tool calls, the model badge, resume, plan usage, the
+preview capture tool) is only guarded by the **live smoke suite**, which needs
+this machine's Claude login and is skipped everywhere else.
+
+Run it before cutting a release (a real edit → `file.diffed` regression is
+exactly what shipped once and what `smoke:diff` now catches):
+
+```sh
+npm run smoke:all     # all live smokes against real Claude (needs `claude` login)
+```
+
+These can't run in CI (no Claude credentials there), so this is a manual gate —
+don't tag on red smokes.
+
 ## Cut a release
 
 ```sh
