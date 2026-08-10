@@ -135,14 +135,15 @@ describe('SettingsStore', () => {
     store.setComponent('  /app  ', '  src/Cart.tsx  ')
     expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
 
-    // A wrapper is stored alongside and returned.
-    store.setComponent('/app', 'src/Cart.tsx', '  src/PreviewProviders.tsx  ')
+    // A wrapper and props are stored alongside and returned.
+    store.setComponent('/app', 'src/Cart.tsx', '  src/PreviewProviders.tsx  ', '  { a: 1 }  ')
     expect(store.component()).toEqual({
       root: '/app',
       file: 'src/Cart.tsx',
       wrapper: 'src/PreviewProviders.tsx',
+      props: '{ a: 1 }',
     })
-    // Re-pinning without a wrapper drops it.
+    // Re-pinning without a wrapper or props drops them.
     store.setComponent('/app', 'src/Cart.tsx', '  ')
     expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
 

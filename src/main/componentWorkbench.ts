@@ -21,13 +21,20 @@ export interface EntryModule {
   exportName: string
 }
 
-export function componentEntryHtml(component: EntryModule, wrapper?: EntryModule): string {
+export function componentEntryHtml(
+  component: EntryModule,
+  wrapper?: EntryModule,
+  props?: string,
+): string {
   const pick = (variable: string, mod: string, entry: EntryModule): string =>
     `import * as ${mod} from ${JSON.stringify(entry.importPath)}\n` +
     `      const ${variable} = ${mod}.default ?? ${mod}[${JSON.stringify(entry.exportName)}] ?? ` +
     `Object.values(${mod}).find((value) => typeof value === 'function')`
   const wrapperImport =
     wrapper === undefined ? 'const Wrapper = null' : pick('Wrapper', 'wrapMod', wrapper)
+  // Props are a JS object literal (author- or agent-supplied) rendered into the
+  // component; wrapped in parens so it's an expression, undefined when absent.
+  const propsExpr = props === undefined || props.trim() === '' ? 'undefined' : `(${props})`
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -41,9 +48,10 @@ export function componentEntryHtml(component: EntryModule, wrapper?: EntryModule
       import * as ReactDOM from 'react-dom'
       ${pick('Component', 'mod', component)}
       ${wrapperImport}
+      const props = ${propsExpr}
       const root = document.getElementById('agentinator-root')
       if (Component) {
-        const inner = createElement(Component)
+        const inner = createElement(Component, props)
         const element = Wrapper ? createElement(Wrapper, null, inner) : inner
         if (typeof ReactDOM.createRoot === 'function') {
           ReactDOM.createRoot(root).render(element)
@@ -91,14 +99,14 @@ export class ComponentWorkbench {
    * both root-relative), and return the dev-server URL path to preview. The
    * file's base name is used as the likely export name (e.g.
    * `EmailMigrationPage.tsx` → `EmailMigrationPage`). */
-  prepare(root: string, file: string, wrapper?: string): string {
+  prepare(root: string, file: string, wrapper?: string, props?: string): string {
     const entry = (path: string): EntryModule => {
       const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '')
       const base = normalized.substring(normalized.lastIndexOf('/') + 1)
       return { importPath: `/${normalized}`, exportName: base.replace(/\.[^.]+$/, '') }
     }
     const wrap = wrapper === undefined || wrapper === '' ? undefined : entry(wrapper)
-    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(entry(file), wrap))
+    this.#fs.write(join(root, COMPONENT_ENTRY), componentEntryHtml(entry(file), wrap, props))
     return `/${COMPONENT_ENTRY}`
   }
 

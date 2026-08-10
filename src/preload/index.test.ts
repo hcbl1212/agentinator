@@ -146,7 +146,8 @@ describe('preload bridge', () => {
     await bridge.preview.capture('session_9', 'http://localhost:5173/')
     await bridge.preview.image('shot_1')
     await bridge.preview.getComponent()
-    await bridge.preview.setComponent('/app', 'src/Cart.tsx', 'src/Providers.tsx')
+    await bridge.preview.setComponent('/app', 'src/Cart.tsx', 'src/Providers.tsx', '{ n: 1 }')
+    await bridge.preview.inferProps('/app', 'src/Cart.tsx')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
@@ -161,6 +162,12 @@ describe('preload bridge', () => {
       '/app',
       'src/Cart.tsx',
       'src/Providers.tsx',
+      '{ n: 1 }',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:infer-props',
+      '/app',
+      'src/Cart.tsx',
     )
   })
 

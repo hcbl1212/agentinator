@@ -540,22 +540,35 @@ describe('registerPreviewIpc', () => {
     return { component: vi.fn(() => component), setComponent: vi.fn() }
   }
 
+  type Handlers = Map<string, (event: unknown, ...args: unknown[]) => unknown>
+
+  function register(
+    preview: unknown,
+    settings: unknown,
+    workbench: unknown,
+    inferProps: (root: string, file: string) => Promise<string> = vi.fn(() =>
+      Promise.resolve('{}'),
+    ),
+  ): Handlers {
+    const handlers: Handlers = new Map()
+    registerPreviewIpc(
+      preview as PreviewController,
+      settings as SettingsStore,
+      workbench as ComponentWorkbench,
+      inferProps,
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
+    return handlers
+  }
+
   it('routes capture (with and without a url) and image to the controller', async () => {
     const preview = {
       capture: vi.fn(() => Promise.resolve('shot_1')),
       image: vi.fn(() => 'YWJj'),
     }
-    const workbench = { clear: vi.fn() }
-    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
-
-    registerPreviewIpc(
-      preview as unknown as PreviewController,
-      previewSettings() as unknown as SettingsStore,
-      workbench as unknown as ComponentWorkbench,
-      (channel, listener) => {
-        handlers.set(channel, listener)
-      },
-    )
+    const handlers = register(preview, previewSettings(), { clear: vi.fn() })
 
     expect(await handlers.get('preview:capture')?.(undefined, 'session_1', undefined)).toBe(
       'shot_1',
@@ -567,52 +580,47 @@ describe('registerPreviewIpc', () => {
     expect(preview.image).toHaveBeenCalledWith('shot_1')
   })
 
-  it('pins a component and clears the entry when unpinned', () => {
-    const preview = { capture: vi.fn(), image: vi.fn() }
+  it('pins a component (with props) and clears the entry when unpinned', () => {
     const settings = previewSettings({ root: '/app', file: 'src/Cart.tsx' })
     const workbench = { clear: vi.fn() }
-    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
-
-    registerPreviewIpc(
-      preview as unknown as PreviewController,
-      settings as unknown as SettingsStore,
-      workbench as unknown as ComponentWorkbench,
-      (channel, listener) => {
-        handlers.set(channel, listener)
-      },
-    )
+    const handlers = register({ capture: vi.fn(), image: vi.fn() }, settings, workbench)
 
     expect(handlers.get('preview:get-component')?.(undefined)).toEqual({
       root: '/app',
       file: 'src/Cart.tsx',
     })
-    handlers.get('preview:set-component')?.(undefined, '/app', 'src/Cart.tsx', 'src/Providers.tsx')
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', 'src/Cart.tsx', 'src/Providers.tsx')
+    handlers.get('preview:set-component')?.(undefined, '/app', 'src/Cart.tsx', 'src/Wrap.tsx', '{}')
+    expect(settings.setComponent).toHaveBeenCalledWith('/app', 'src/Cart.tsx', 'src/Wrap.tsx', '{}')
     // Clearing (blank file) removes the entry from the pinned root first.
     handlers.get('preview:set-component')?.(undefined, '/app', '  ')
     expect(workbench.clear).toHaveBeenCalledWith('/app')
-    expect(settings.setComponent).toHaveBeenLastCalledWith('/app', '  ', undefined)
+    expect(settings.setComponent).toHaveBeenLastCalledWith('/app', '  ', undefined, undefined)
+  })
+
+  it('infers props by delegating to the agent inferrer', async () => {
+    const inferProps = vi.fn(() => Promise.resolve('{ n: 1 }'))
+    const handlers = register(
+      { capture: vi.fn(), image: vi.fn() },
+      previewSettings(),
+      { clear: vi.fn() },
+      inferProps,
+    )
+
+    expect(await handlers.get('preview:infer-props')?.(undefined, '/app', 'src/Cart.tsx')).toBe(
+      '{ n: 1 }',
+    )
+    expect(inferProps).toHaveBeenCalledWith('/app', 'src/Cart.tsx')
   })
 
   it('returns null for an unpinned component and skips the clear', () => {
-    const preview = { capture: vi.fn(), image: vi.fn() }
     const settings = previewSettings(undefined)
     const workbench = { clear: vi.fn() }
-    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
-
-    registerPreviewIpc(
-      preview as unknown as PreviewController,
-      settings as unknown as SettingsStore,
-      workbench as unknown as ComponentWorkbench,
-      (channel, listener) => {
-        handlers.set(channel, listener)
-      },
-    )
+    const handlers = register({ capture: vi.fn(), image: vi.fn() }, settings, workbench)
 
     expect(handlers.get('preview:get-component')?.(undefined)).toBeNull()
     handlers.get('preview:set-component')?.(undefined, '/app', null)
     expect(workbench.clear).not.toHaveBeenCalled()
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', null, undefined)
+    expect(settings.setComponent).toHaveBeenCalledWith('/app', null, undefined, undefined)
   })
 
   it('registers on ipcMain by default', () => {
@@ -620,6 +628,7 @@ describe('registerPreviewIpc', () => {
       { capture: vi.fn(), image: vi.fn() } as unknown as PreviewController,
       previewSettings() as unknown as SettingsStore,
       { clear: vi.fn() } as unknown as ComponentWorkbench,
+      vi.fn(() => Promise.resolve('{}')),
     )
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
@@ -628,6 +637,7 @@ describe('registerPreviewIpc', () => {
       'preview:image',
       'preview:get-component',
       'preview:set-component',
+      'preview:infer-props',
     ])
   })
 })

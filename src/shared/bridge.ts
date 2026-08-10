@@ -89,12 +89,25 @@ export interface AgentinatorBridge {
     capture(sessionId: string, url?: string): Promise<string>
     /** A captured screenshot's PNG as base64, or null if it's gone. */
     image(ref: string): Promise<string | null>
-    /** The pinned component workbench target (app root + root-relative file, and
-     * an optional wrapper that provides context), or null when none is pinned. */
-    getComponent(): Promise<{ root: string; file: string; wrapper?: string } | null>
+    /** The pinned component workbench target (app root + root-relative file, an
+     * optional wrapper, and an optional props literal), or null when none. */
+    getComponent(): Promise<{
+      root: string
+      file: string
+      wrapper?: string
+      props?: string
+    } | null>
     /** Pin a component to render in isolation, optionally wrapped in a context
-     * provider; a null/blank file unpins it. */
-    setComponent(root: string, file: string | null, wrapper?: string | null): Promise<void>
+     * provider and rendered with a props literal; a null/blank file unpins it. */
+    setComponent(
+      root: string,
+      file: string | null,
+      wrapper?: string | null,
+      props?: string | null,
+    ): Promise<void>
+    /** Ask the agent to read the component and generate a realistic props
+     * literal for it. Resolves to the props string. */
+    inferProps(root: string, file: string): Promise<string>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

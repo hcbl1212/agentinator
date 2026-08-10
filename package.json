@@ -29,6 +29,7 @@
     "smoke:resume": "CLAUDE_SMOKE=1 vitest run resume.smoke --coverage.enabled=false",
     "smoke:preview": "CLAUDE_SMOKE=1 vitest run preview.smoke --coverage.enabled=false",
     "smoke:diff": "CLAUDE_SMOKE=1 vitest run diff.smoke --coverage.enabled=false",
+    "smoke:infer": "CLAUDE_SMOKE=1 vitest run componentInference.smoke --coverage.enabled=false",
     "smoke:all": "CLAUDE_SMOKE=1 vitest run .smoke --coverage.enabled=false",
     "smoke:usage": "CLAUDE_SMOKE=1 vitest run usage.smoke --coverage.enabled=false",
     "smoke:auth": "CLAUDE_SMOKE=1 vitest run auth.smoke --coverage.enabled=false",

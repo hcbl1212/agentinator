@@ -11,7 +11,7 @@ function setup(
   options: {
     shot?: Screenshot
     previewTarget?: string
-    component?: { root: string; file: string; wrapper?: string }
+    component?: { root: string; file: string; wrapper?: string; props?: string }
   } = {},
 ): {
   controller: PreviewController
@@ -90,12 +90,22 @@ describe('PreviewController', () => {
   it('captures a pinned component (with its wrapper) through the dev server', async () => {
     const { controller, browser, prepare } = setup({
       previewTarget: 'http://localhost:3001/',
-      component: { root: '/app', file: 'src/Cart.tsx', wrapper: 'src/PreviewProviders.tsx' },
+      component: {
+        root: '/app',
+        file: 'src/Cart.tsx',
+        wrapper: 'src/PreviewProviders.tsx',
+        props: '{ n: 1 }',
+      },
     })
 
     await controller.capture('session_1')
 
-    expect(prepare).toHaveBeenCalledWith('/app', 'src/Cart.tsx', 'src/PreviewProviders.tsx')
+    expect(prepare).toHaveBeenCalledWith(
+      '/app',
+      'src/Cart.tsx',
+      'src/PreviewProviders.tsx',
+      '{ n: 1 }',
+    )
     // Trailing slash collapsed; the workbench entry path appended.
     expect(browser.capture).toHaveBeenCalledWith(
       'http://localhost:3001/__agentinator_component.html',

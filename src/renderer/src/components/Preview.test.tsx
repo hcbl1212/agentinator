@@ -33,6 +33,7 @@ interface Stub {
   setPreviewTarget: ReturnType<typeof vi.fn>
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
+  inferProps: ReturnType<typeof vi.fn>
 }
 
 function stub(
@@ -40,10 +41,17 @@ function stub(
     captures?: StoredEvent[]
     image?: string | null
     target?: string | null
-    component?: { root: string; file: string; wrapper?: string } | null
+    component?: { root: string; file: string; wrapper?: string; props?: string } | null
+    inferred?: string
   } = {},
 ): Stub {
-  const { captures = [], image = 'YWJj', target = null, component = null } = options
+  const {
+    captures = [],
+    image = 'YWJj',
+    target = null,
+    component = null,
+    inferred = '{ n: 1 }',
+  } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
   const search = vi.fn(() => Promise.resolve(captures))
@@ -54,6 +62,7 @@ function stub(
   const setPreviewTarget = vi.fn(() => Promise.resolve())
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
+  const inferProps = vi.fn(() => Promise.resolve(inferred))
   const bridge = {
     events: {
       search,
@@ -62,7 +71,7 @@ function stub(
         return unsubscribe as () => void
       }),
     },
-    preview: { capture, image: imageFn, getComponent, setComponent },
+    preview: { capture, image: imageFn, getComponent, setComponent, inferProps },
     agent: { send: agentSend },
     settings: { getPreviewTarget, setPreviewTarget },
   } as unknown as AgentinatorBridge
@@ -78,6 +87,7 @@ function stub(
     setPreviewTarget,
     getComponent,
     setComponent,
+    inferProps,
   }
 }
 
@@ -113,10 +123,11 @@ describe('Preview', () => {
     render(<Preview sessionId="s" />)
 
     expect(screen.getByText(/Capture a screenshot of the target app/)).toBeInTheDocument()
-    // Clicking without a bridge must not throw — capture, set-target, or pin/clear.
+    // Clicking without a bridge must not throw — any control.
     fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'Capture' })).toBeEnabled()
   })
@@ -147,12 +158,71 @@ describe('Preview', () => {
       '/app',
       'src/Button.tsx',
       'src/NewProviders.tsx',
+      null,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
     expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('')
     expect(stubbed.setComponent).toHaveBeenLastCalledWith('', null)
+  })
+
+  it('infers props via the agent and fills the props field, then pins them', async () => {
+    const stubbed = stub({
+      component: { root: '/app', file: 'src/Cart.tsx' },
+      inferred: '{ completedValue: 3, totalValue: 10 }',
+    })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+    expect(stubbed.inferProps).toHaveBeenCalledWith('/app', 'src/Cart.tsx')
+
+    const props = screen.getByRole('textbox', { name: 'Component props' })
+    await waitFor(() => expect(props).toHaveValue('{ completedValue: 3, totalValue: 10 }'))
+
+    // The inferred props are editable before pinning.
+    fireEvent.change(props, { target: { value: '{ completedValue: 5, totalValue: 10 }' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    expect(stubbed.setComponent).toHaveBeenCalledWith(
+      '/app',
+      'src/Cart.tsx',
+      null,
+      '{ completedValue: 5, totalValue: 10 }',
+    )
+  })
+
+  it('does not infer without a component root and file', () => {
+    const stubbed = stub()
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+
+    expect(stubbed.inferProps).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an inference failure', async () => {
+    const stubbed = stub({ component: { root: '/app', file: 'src/Cart.tsx' } })
+    stubbed.inferProps.mockRejectedValueOnce(new Error('model unavailable'))
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('model unavailable'))
+
+    // A non-Error rejection is stringified too.
+    stubbed.inferProps.mockRejectedValueOnce('boom')
+    fireEvent.click(screen.getByRole('button', { name: 'Infer props' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('boom'))
   })
 
   it('loads a pinned component that has no wrapper', async () => {
@@ -178,7 +248,7 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
 
     // A blank file unpins (null), it doesn't pin an empty component.
-    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null, null))
+    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null, null, null))
   })
 
   it('surfaces a failed capture instead of failing silently', async () => {

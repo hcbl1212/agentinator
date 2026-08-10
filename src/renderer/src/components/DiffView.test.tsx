@@ -63,6 +63,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         image: vi.fn(() => Promise.resolve(null)),
         getComponent: vi.fn(() => Promise.resolve(null)),
         setComponent: vi.fn(() => Promise.resolve()),
+        inferProps: vi.fn(() => Promise.resolve('{}')),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),

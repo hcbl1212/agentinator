@@ -65,9 +65,12 @@ export const bridge: AgentinatorBridge = {
         root: string
         file: string
         wrapper?: string
+        props?: string
       } | null>,
-    setComponent: (root, file, wrapper) =>
-      ipcRenderer.invoke('preview:set-component', root, file, wrapper) as Promise<void>,
+    setComponent: (root, file, wrapper, props) =>
+      ipcRenderer.invoke('preview:set-component', root, file, wrapper, props) as Promise<void>,
+    inferProps: (root, file) =>
+      ipcRenderer.invoke('preview:infer-props', root, file) as Promise<string>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,

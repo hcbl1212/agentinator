@@ -50,6 +50,8 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [componentRoot, setComponentRoot] = useState('')
   const [componentFile, setComponentFile] = useState('')
   const [componentWrapper, setComponentWrapper] = useState('')
+  const [componentProps, setComponentProps] = useState('')
+  const [inferring, setInferring] = useState(false)
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -69,6 +71,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         setComponentRoot(pinned.root)
         setComponentFile(pinned.file)
         setComponentWrapper(pinned.wrapper ?? '')
+        setComponentProps(pinned.props ?? '')
       }
     })
     return () => {
@@ -157,10 +160,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     }
     const file = componentFile.trim()
     const wrapper = componentWrapper.trim()
+    const props = componentProps.trim()
     void bridge.preview.setComponent(
       componentRoot.trim(),
       file === '' ? null : file,
       wrapper === '' ? null : wrapper,
+      props === '' ? null : props,
     )
   }
 
@@ -168,7 +173,27 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     setComponentRoot('')
     setComponentFile('')
     setComponentWrapper('')
+    setComponentProps('')
     void window.agentinator?.preview.setComponent('', null)
+  }
+
+  // Ask the agent to read the component and generate realistic props.
+  const inferProps = (): void => {
+    const bridge = window.agentinator
+    const root = componentRoot.trim()
+    const file = componentFile.trim()
+    if (bridge === undefined || root === '' || file === '') {
+      return
+    }
+    setInferring(true)
+    setError(null)
+    void bridge.preview
+      .inferProps(root, file)
+      .then((props) => setComponentProps(props))
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      })
+      .finally(() => setInferring(false))
   }
 
   // Point at it: turn a click on the screenshot into a normalized mark.
@@ -270,6 +295,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           placeholder="Wrapper file (optional, for context)"
           aria-label="Wrapper file"
         />
+        <button
+          type="button"
+          className="preview-target-save"
+          onClick={inferProps}
+          disabled={inferring}
+        >
+          {inferring ? 'Inferring…' : 'Infer props'}
+        </button>
         <button type="submit" className="preview-target-save">
           Pin
         </button>
@@ -277,6 +310,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           Clear
         </button>
       </form>
+      <textarea
+        className="preview-props-input"
+        value={componentProps}
+        onChange={(event) => setComponentProps(event.target.value)}
+        placeholder="Props (a JS object literal, e.g. { label: 'Hi' }) — or click Infer props"
+        aria-label="Component props"
+        rows={2}
+      />
       {src === null ? (
         <p className="empty-state">
           Capture a screenshot of the target app — it renders here, and streams to the agent next.

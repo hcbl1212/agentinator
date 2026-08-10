@@ -10,6 +10,7 @@ import type { EmitStored } from './approvals'
 import { FileArtifactStore } from './artifacts'
 import type { ArtifactStore } from './artifacts'
 import { ComponentWorkbench } from './componentWorkbench'
+import { makePropInferrer } from './componentInference'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
@@ -199,6 +200,7 @@ export function registerPreviewIpc(
   preview: PreviewController,
   settings: SettingsStore,
   workbench: ComponentWorkbench,
+  inferProps: (root: string, file: string) => Promise<string>,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -208,7 +210,7 @@ export function registerPreviewIpc(
   )
   handle('preview:image', (_event, ref) => preview.image(ref as string))
   handle('preview:get-component', () => settings.component() ?? null)
-  handle('preview:set-component', (_event, root, file, wrapper) => {
+  handle('preview:set-component', (_event, root, file, wrapper, props) => {
     const trimmed = typeof file === 'string' ? file.trim() : ''
     // Clearing the pin removes the entry we wrote into the app root.
     if (trimmed === '') {
@@ -221,8 +223,11 @@ export function registerPreviewIpc(
       root as string,
       file as string | null,
       wrapper as string | null | undefined,
+      props as string | null | undefined,
     )
   })
+  // Ask the agent to read the component and generate realistic props for it.
+  handle('preview:infer-props', (_event, root, file) => inferProps(root as string, file as string))
 }
 
 /** Encrypt credentials with the OS keychain via Electron safeStorage. */
@@ -340,7 +345,7 @@ export async function bootstrap(
   registerAgentIpc(manager)
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
-  registerPreviewIpc(preview, settings, workbench)
+  registerPreviewIpc(preview, settings, workbench, makePropInferrer(claudeQuery))
 
   createWindow()
   if (replayPath !== undefined) {

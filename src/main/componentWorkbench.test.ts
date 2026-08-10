@@ -34,6 +34,19 @@ describe('componentEntryHtml', () => {
     expect(html).toContain('wrapMod["PreviewProviders"]')
     expect(html).toContain('Wrapper ? createElement(Wrapper, null, inner) : inner')
   })
+
+  it('renders with props when a props literal is given, else undefined', () => {
+    const withProps = componentEntryHtml(
+      { importPath: '/src/Cart.tsx', exportName: 'Cart' },
+      undefined,
+      '{ completedValue: 3, totalValue: 10 }',
+    )
+    expect(withProps).toContain('const props = ({ completedValue: 3, totalValue: 10 })')
+    expect(withProps).toContain('createElement(Component, props)')
+
+    const noProps = componentEntryHtml({ importPath: '/src/Cart.tsx', exportName: 'Cart' })
+    expect(noProps).toContain('const props = undefined')
+  })
 })
 
 describe('ComponentWorkbench', () => {

@@ -102,32 +102,49 @@ export class SettingsStore {
    * component file (root-relative), and an optional wrapper file that provides
    * app context. Undefined when no component is pinned — the preview then shows
    * the whole app / sample. */
-  component(): { root: string; file: string; wrapper?: string } | undefined {
+  component(): { root: string; file: string; wrapper?: string; props?: string } | undefined {
     const root = (this.#get.get('componentRoot') as { value: string } | undefined)?.value
     const file = (this.#get.get('componentFile') as { value: string } | undefined)?.value
     if (root === undefined || file === undefined) {
       return undefined
     }
     const wrapper = (this.#get.get('componentWrapper') as { value: string } | undefined)?.value
-    return wrapper === undefined ? { root, file } : { root, file, wrapper }
+    const props = (this.#get.get('componentProps') as { value: string } | undefined)?.value
+    return {
+      root,
+      file,
+      ...(wrapper === undefined ? {} : { wrapper }),
+      ...(props === undefined ? {} : { props }),
+    }
   }
 
-  setComponent(root: string, file: string | null, wrapper?: string | null): void {
+  setComponent(
+    root: string,
+    file: string | null,
+    wrapper?: string | null,
+    props?: string | null,
+  ): void {
     const trimmedFile = file?.trim() ?? ''
     const trimmedRoot = root.trim()
     if (trimmedFile === '' || trimmedRoot === '') {
       this.#delete.run('componentRoot')
       this.#delete.run('componentFile')
       this.#delete.run('componentWrapper')
+      this.#delete.run('componentProps')
       return
     }
     this.#set.run('componentRoot', trimmedRoot)
     this.#set.run('componentFile', trimmedFile)
-    const trimmedWrapper = wrapper?.trim() ?? ''
-    if (trimmedWrapper === '') {
-      this.#delete.run('componentWrapper')
+    this.#setOrClear('componentWrapper', wrapper)
+    this.#setOrClear('componentProps', props)
+  }
+
+  #setOrClear(key: string, value: string | null | undefined): void {
+    const trimmed = value?.trim() ?? ''
+    if (trimmed === '') {
+      this.#delete.run(key)
     } else {
-      this.#set.run('componentWrapper', trimmedWrapper)
+      this.#set.run(key, trimmed)
     }
   }
 
