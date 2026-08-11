@@ -49,6 +49,8 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         setApiKeyMode: vi.fn(() => Promise.resolve()),
         getPreviewTarget: vi.fn(() => Promise.resolve(null)),
         setPreviewTarget: vi.fn(() => Promise.resolve()),
+        getPreviewSettleMs: vi.fn(() => Promise.resolve(600)),
+        setPreviewSettleMs: vi.fn(() => Promise.resolve()),
       },
       agent: {
         current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),
