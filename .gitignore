@@ -19,3 +19,5 @@ secrets.json
 # Playwright
 test-results/
 playwright-report/
+# Scratch Vite fixtures scaffolded by the component-workbench e2e
+e2e/wb-*/

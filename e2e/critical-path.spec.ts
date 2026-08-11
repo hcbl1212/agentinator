@@ -1,9 +1,12 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { _electron as electron, expect, test } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
+import react from '@vitejs/plugin-react'
+import { createServer } from 'vite'
+import type { ViteDevServer } from 'vite'
 
 /**
  * End-to-end guards for the launch → stream critical paths. They drive the
@@ -34,6 +37,51 @@ async function launchTask(page: Page, text: string): Promise<void> {
   const prompt = page.getByRole('textbox', { name: 'Task for the agent' })
   await prompt.fill(text)
   await prompt.press('Enter')
+}
+
+/**
+ * Scaffold a tiny Vite React app and serve it, so the component workbench has a
+ * real dev server to render a single component through (bare `react` and the
+ * `/src/...` import only resolve via a running Vite). Kept under the repo so its
+ * imports resolve against the harness's own node_modules. The component logs on
+ * mount — a signal the isolated render actually ran, visible in captured
+ * console output even though the screenshot is opaque pixels to the test.
+ */
+async function startComponentFixture(): Promise<{
+  server: ViteDevServer
+  root: string
+  url: string
+}> {
+  const root = mkdtempSync(join(process.cwd(), 'e2e', 'wb-'))
+  mkdirSync(join(root, 'src'))
+  writeFileSync(join(root, 'index.html'), '<!doctype html><body><div id="root"></div></body>')
+  writeFileSync(
+    join(root, 'src', 'Widget.tsx'),
+    "import { useEffect } from 'react'\n" +
+      'export function Widget() {\n' +
+      "  useEffect(() => console.log('WIDGET_MOUNTED_OK'), [])\n" +
+      '  return <p>Hello from the isolated Widget</p>\n' +
+      '}\n',
+  )
+  writeFileSync(
+    join(root, 'src', 'PreviewWrapper.tsx'),
+    'export default function PreviewWrapper({ children }: { children?: unknown }) {\n' +
+      '  return <div data-preview-wrapper>{children as never}</div>\n' +
+      '}\n',
+  )
+  const server = await createServer({
+    root,
+    configFile: false,
+    logLevel: 'silent',
+    plugins: [react()],
+    server: { port: 4319 },
+  })
+  await server.listen()
+  const url = server.resolvedUrls?.local[0] ?? ''
+  // Warm the dep optimizer so the first harness capture isn't racing a cold
+  // esbuild prebundle + full-reload during its settle window.
+  await fetch(`${url}src/Widget.tsx`).catch(() => undefined)
+  return { server, root, url }
 }
 
 test('launching a task shows it in the timeline, scoped to the new agent', async () => {
@@ -316,6 +364,47 @@ test('pointing at a spot on the preview sends it to the agent', async () => {
     await expect(stream.getByText(/\[\+1 image\]/)).toBeVisible()
   } finally {
     await app.close()
+  }
+})
+
+test('the Preview tab renders a single component in isolation through a dev server', async () => {
+  const { server, root, url } = await startComponentFixture()
+  const { app, page } = await launchApp()
+  try {
+    // A selected agent scopes the preview; the mock task creates one.
+    await launchTask(page, 'isolate a component')
+    await page.getByRole('tab', { name: 'Preview' }).click()
+    const preview = page.getByRole('region', { name: 'App preview' })
+
+    // Point the harness at the fixture dev server.
+    await preview.getByRole('textbox', { name: 'Preview target URL' }).fill(url)
+    await preview.getByRole('button', { name: 'Set' }).click()
+
+    // Pin the component + its context wrapper (the setup block is open by default).
+    await preview.getByRole('textbox', { name: 'Component app root' }).fill(root)
+    await preview.getByRole('textbox', { name: 'Component file' }).fill('src/Widget.tsx')
+    await preview.getByRole('textbox', { name: 'Wrapper file' }).fill('src/PreviewWrapper.tsx')
+    // Give a cold-start Vite transform ample room before the shot (also exercises
+    // the configurable settle delay end-to-end).
+    await preview
+      .getByRole('spinbutton', { name: 'Capture settle delay in milliseconds' })
+      .fill('3000')
+    await preview.getByRole('button', { name: 'Pin' }).click()
+
+    await preview.getByRole('button', { name: 'Capture' }).click()
+
+    // A PNG lands — the offscreen capture of the isolated entry actually painted.
+    const shot = preview.getByRole('img', { name: /screenshot of the target app/i })
+    await expect(shot).toHaveAttribute('src', /^data:image\/png;base64,/)
+    // And the component's mount effect ran: proof it truly rendered in isolation
+    // through the app's own Vite (a blank or failed mount wouldn't log this).
+    await expect(preview.getByRole('region', { name: 'App console' })).toContainText(
+      'WIDGET_MOUNTED_OK',
+    )
+  } finally {
+    await app.close()
+    await server.close()
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

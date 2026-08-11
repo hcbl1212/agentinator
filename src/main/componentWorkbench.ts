@@ -17,8 +17,10 @@ export const WRAPPER_FILE = '__agentinator_wrapper.tsx'
  * router, i18n) is picked without assuming how it's exported: a default export,
  * then a named export matching the file, then the first function export. When a
  * wrapper is given the component renders as its children. Mounting is
- * version-agnostic — React 18's createRoot when available, else React 17's
- * render (no static `react-dom/client` import, which doesn't exist on 17). */
+ * version-agnostic across React 17/18/19: `react-dom`'s createRoot (18) or
+ * render (17) when present, else a dynamic `react-dom/client` import (19, where
+ * `react-dom` top-level has neither). No static `react-dom/client` import — it
+ * doesn't exist on 17 and would fail Vite's import analysis there. */
 export interface EntryModule {
   importPath: string
   exportName: string
@@ -65,8 +67,10 @@ export function componentEntryHtml(
         const element = Wrapper ? createElement(Wrapper, null, inner) : inner
         if (typeof ReactDOM.createRoot === 'function') {
           ReactDOM.createRoot(root).render(element)
-        } else {
+        } else if (typeof ReactDOM.render === 'function') {
           ReactDOM.render(element, root)
+        } else {
+          import('react-dom/client').then((client) => client.createRoot(root).render(element))
         }
       } else {
         root.textContent = 'No component export found in ${component.importPath}'
