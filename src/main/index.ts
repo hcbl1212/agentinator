@@ -14,7 +14,8 @@ import { makePropInferrer, makeWrapperInferrer } from './componentInference'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
-import { runGit } from './git'
+import { runGit, runGitSync } from './git'
+import { NodeWorktrees } from './worktrees'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
 import type { PreviewBrowser } from './previewBrowser'
@@ -365,6 +366,9 @@ export async function bootstrap(
     // Fresh/reopened sessions run on the API key only when the global toggle is
     // on and a key is stored for the provider — otherwise the plan.
     resolveApiKey: (providerId) => (settings.apiKeyMode() ? vault.get(providerId) : undefined),
+    // Each real agent gets its own git worktree under userData, so concurrent
+    // agents can't corrupt each other's working tree.
+    worktrees: new NodeWorktrees(join(userData, 'worktrees'), runGitSync),
   })
   manager.register(createMockProvider(undefined, undefined, decide))
   // Hand Claude the app-capture tool so the agent can see what it builds.

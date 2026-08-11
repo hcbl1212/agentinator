@@ -85,6 +85,11 @@ export function AgentRail(): React.JSX.Element {
                     </span>
                   </span>
                 )}
+                {session.branch !== undefined && (
+                  <span className="rail-agent-branch" title={`Isolated on ${session.branch}`}>
+                    ⑂ {session.branch}
+                  </span>
+                )}
               </button>
               <span className="rail-agent-actions">
                 <button

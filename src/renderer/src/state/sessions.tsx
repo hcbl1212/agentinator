@@ -19,6 +19,9 @@ export interface SessionInfo {
   /** True once the agent is running on a metered API key rather than the
    * subscription — drives the rail's switch toggle. */
   metered?: boolean
+  /** The isolated git branch this agent's worktree is on, when isolated —
+   * shown in the rail so the isolation is visible. */
+  branch?: string
 }
 
 /**
@@ -43,6 +46,7 @@ export function reduceSession(sessions: SessionInfo[], event: StoredEvent): Sess
               status: 'running',
               providerId: payload.providerId,
               costUsd: 0,
+              branch: payload.worktree?.branch,
             },
           ]
     }

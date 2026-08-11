@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }))
+const { execFileMock, execFileSyncMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
+  execFileSyncMock: vi.fn(),
+}))
 
-vi.mock('node:child_process', () => ({ execFile: execFileMock }))
+vi.mock('node:child_process', () => ({
+  execFile: execFileMock,
+  execFileSync: execFileSyncMock,
+}))
 
-import { runGit } from './git'
+import { runGit, runGitSync } from './git'
 
 type ExecCb = (error: unknown, stdout: string) => void
 
@@ -40,5 +46,28 @@ describe('runGit', () => {
     execFileMock.mockImplementation((_bin, _args, _opts, cb: ExecCb) => cb(failure, ''))
 
     await expect(runGit(['diff', 'HEAD'], '/nope')).rejects.toThrow('not a git repository')
+  })
+})
+
+describe('runGitSync', () => {
+  it('runs git synchronously with the args and cwd and returns stdout', () => {
+    execFileSyncMock.mockReturnValue('worktree added')
+
+    expect(runGitSync(['worktree', 'add', '-b', 'b', '/wt', 'HEAD'], '/repo')).toBe(
+      'worktree added',
+    )
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'git',
+      ['worktree', 'add', '-b', 'b', '/wt', 'HEAD'],
+      expect.objectContaining({ cwd: '/repo', encoding: 'utf8' }),
+    )
+  })
+
+  it('propagates a nonzero exit as a throw', () => {
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error('fatal: not a git repository')
+    })
+
+    expect(() => runGitSync(['worktree', 'list'], '/nope')).toThrow('not a git repository')
   })
 })

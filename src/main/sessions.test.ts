@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { StoredEvent } from '../shared/events'
+import type { EventPayloads, StoredEvent } from '../shared/events'
 import { EventStore } from './eventStore'
 import { createMockProvider } from './providers/mock'
 import { SessionManager } from './sessions'
 import type { AgentProvider } from './providers/types'
+import type { WorktreeInfo } from './worktrees'
 
-function instantProvider(id: string): AgentProvider {
+function instantProvider(id: string, isolates = false): AgentProvider {
   return {
     id,
     label: id,
@@ -19,6 +20,7 @@ function instantProvider(id: string): AgentProvider {
       batchApi: false,
       nativeSkills: false,
       meteredAuth: false,
+      worktreeIsolation: isolates,
       contextWindowTokens: 1,
     },
     startSession(context, emit) {
@@ -269,7 +271,154 @@ describe('SessionManager', () => {
     store.close()
   })
 
-  function recordingProvider(id: string): {
+  const fakeWorktrees = (
+    info: WorktreeInfo | null,
+    restore = true,
+  ): {
+    create: ReturnType<typeof vi.fn<(sessionId: string, repoRoot: string) => WorktreeInfo | null>>
+    restore: ReturnType<typeof vi.fn<(info: WorktreeInfo) => boolean>>
+    remove: ReturnType<typeof vi.fn<(info: WorktreeInfo) => void>>
+  } => ({
+    create: vi.fn<(sessionId: string, repoRoot: string) => WorktreeInfo | null>(() => info),
+    restore: vi.fn<(info: WorktreeInfo) => boolean>(() => restore),
+    remove: vi.fn<(info: WorktreeInfo) => void>(),
+  })
+
+  const startedWorktree = (store: EventStore, sessionId: string): WorktreeInfo | undefined =>
+    (
+      store.listBySession(sessionId).find((e) => e.type === 'session.started')?.payload as
+        EventPayloads['session.started'] | undefined
+    )?.worktree
+
+  it('runs an isolating agent in its own worktree and records the branch', () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s', branch: 'agentinator/s' }
+    const worktrees = fakeWorktrees(info)
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    const id = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/repo' })
+
+    expect(worktrees.create).toHaveBeenCalledWith(id, '/repo')
+    expect(recording.context()?.cwd).toBe('/wt/s') // the agent runs in the worktree
+    expect(startedWorktree(store, id)).toEqual(info) // …and it's persisted
+    store.close()
+  })
+
+  it('runs in the repo directly when the cwd is not an isolable git repo', () => {
+    const store = new EventStore()
+    const worktrees = fakeWorktrees(null) // create declines
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    const id = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/plain' })
+
+    expect(recording.context()?.cwd).toBe('/plain')
+    expect(startedWorktree(store, id)).toBeUndefined()
+    store.close()
+  })
+
+  it('does not isolate providers that never touch a working tree', () => {
+    const store = new EventStore()
+    const worktrees = fakeWorktrees({ repoRoot: '/repo', path: '/wt', branch: 'b' })
+    const recording = recordingProvider('mock', false)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    const id = manager.start({ providerId: 'mock', title: 'T', prompt: 'P', cwd: '/repo' })
+
+    expect(worktrees.create).not.toHaveBeenCalled()
+    expect(recording.context()?.cwd).toBe('/repo')
+    expect(startedWorktree(store, id)).toBeUndefined()
+    store.close()
+  })
+
+  it('reopens an isolated session back in its worktree', async () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s1', branch: 'agentinator/s1' }
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+      worktree: info,
+    })
+    const worktrees = fakeWorktrees(null, true)
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    await manager.send('s1', 'continue')
+
+    expect(worktrees.restore).toHaveBeenCalledWith(info)
+    expect(recording.context()?.cwd).toBe('/wt/s1')
+    store.close()
+  })
+
+  it('falls back to the repo root when a worktree cannot be restored', async () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s1', branch: 'agentinator/s1' }
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+      worktree: info,
+    })
+    const worktrees = fakeWorktrees(null, false) // restore fails
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    await manager.send('s1', 'continue')
+
+    expect(recording.context()?.cwd).toBe('/repo')
+    store.close()
+  })
+
+  it('reclaims the worktree when a live agent is dismissed', async () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s', branch: 'agentinator/s' }
+    const worktrees = fakeWorktrees(info)
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+    const id = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/repo' })
+
+    await manager.dismiss(id)
+
+    expect(worktrees.remove).toHaveBeenCalledWith(info)
+    store.close()
+  })
+
+  it('reclaims a worktree from the log for a session dismissed after a restart', async () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s1', branch: 'agentinator/s1' }
+    store.append('session.started', {
+      sessionId: 's1',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'T',
+      providerId: 'claude',
+      worktree: info,
+    })
+    const worktrees = fakeWorktrees(null) // fresh manager: nothing in the live map
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+
+    await manager.dismiss('s1')
+
+    expect(worktrees.remove).toHaveBeenCalledWith(info)
+    store.close()
+  })
+
+  function recordingProvider(
+    id: string,
+    isolates = false,
+  ): {
     provider: AgentProvider
     send: ReturnType<typeof vi.fn>
     context: () => Parameters<AgentProvider['startSession']>[0] | undefined
@@ -280,7 +429,7 @@ describe('SessionManager', () => {
       send,
       context: () => captured,
       provider: {
-        ...instantProvider(id),
+        ...instantProvider(id, isolates),
         id,
         startSession(context, emit) {
           captured = context

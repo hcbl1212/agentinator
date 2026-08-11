@@ -1336,6 +1336,17 @@ textarea.preview-props-input {
   color: var(--accent);
 }
 
+/* The isolated worktree branch — a quiet monospace chip under the vendor line. */
+.rail-agent-branch {
+  color: var(--faint);
+  display: block;
+  font-size: 0.65rem;
+  overflow: hidden;
+  padding-left: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rail-agent:hover,
 .rail-agent:focus-visible {
   border-color: var(--line);

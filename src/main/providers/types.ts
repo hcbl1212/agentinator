@@ -17,6 +17,11 @@ export interface ProviderCapabilities {
    * (subscription) credential — the basis for "switch to API key" when a plan
    * limit is hit. Vendor-neutral: each adapter applies the key its own way. */
   meteredAuth: boolean
+  /** Runs real file-editing tools, so each session should get its own git
+   * worktree + branch to keep concurrent agents from sharing a working tree.
+   * Scripted providers (mock/e2e) that never touch a real tree set this false,
+   * so the manager doesn't create worktrees for them. */
+  worktreeIsolation: boolean
   contextWindowTokens: number
 }
 

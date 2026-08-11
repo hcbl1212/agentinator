@@ -359,6 +359,7 @@ export function createClaudeProvider(
       batchApi: true,
       nativeSkills: true,
       meteredAuth: true,
+      worktreeIsolation: true,
       contextWindowTokens: 1_000_000,
     },
     startSession(context: SessionContext, emit: EmitEvent): AgentSessionHandle {

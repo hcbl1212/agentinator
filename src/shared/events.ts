@@ -57,6 +57,12 @@ export interface EventPayloads {
     title: string
     /** The provider running the session (e.g. "claude") — shown per agent. */
     providerId?: string
+    /** The isolated git worktree this session runs in — its own branch off the
+     * repo so concurrent agents never share a working tree. Present only when
+     * the provider isolates and the cwd is a git repo; absent otherwise (the
+     * session then runs directly in the repo). Persisted so resume can reuse it
+     * and dismiss can tear it down. */
+    worktree?: { repoRoot: string; path: string; branch: string }
   }
   'session.ended': { sessionId: string; outcome: 'completed' | 'cancelled' | 'failed' }
   'agent.text': { sessionId: string; text: string }

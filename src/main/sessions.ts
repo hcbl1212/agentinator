@@ -5,6 +5,8 @@ import type { EventPayloads, ImageAttachment, ResumeTurn, StoredEvent } from '..
 import { periodStartIso } from './budgetPeriods'
 import type { EventStore } from './eventStore'
 import type { AgentProvider, AgentSessionHandle, EmitEvent } from './providers/types'
+import { noopWorktrees } from './worktrees'
+import type { Worktrees, WorktreeInfo } from './worktrees'
 
 export interface StartSession {
   providerId: string
@@ -45,6 +47,11 @@ export class SessionManager {
   /** The credential a fresh/reopened session of a provider should use — a key
    * when "run on the API key" is on and one is stored, else undefined (plan). */
   readonly #resolveApiKey: (providerId: string) => string | undefined
+  /** Per-session git worktree isolation. */
+  readonly #worktrees: Worktrees
+  /** Live sessions' worktrees, so session.started carries the branch and
+   * dismiss can tear it down without re-reading the log. */
+  #worktreeBySession = new Map<string, WorktreeInfo>()
 
   constructor(
     store: EventStore,
@@ -53,6 +60,7 @@ export class SessionManager {
       getBudgets?: () => Budgets
       now?: () => Date
       resolveApiKey?: (providerId: string) => string | undefined
+      worktrees?: Worktrees
     } = {},
   ) {
     this.#store = store
@@ -61,6 +69,7 @@ export class SessionManager {
     this.#getBudgets = options.getBudgets ?? (() => NO_BUDGETS)
     this.#now = options.now ?? (() => new Date())
     this.#resolveApiKey = options.resolveApiKey ?? (() => undefined)
+    this.#worktrees = options.worktrees ?? noopWorktrees
   }
 
   register(provider: AgentProvider): void {
@@ -160,6 +169,16 @@ export class SessionManager {
       return sessionId
     }
 
+    // Isolate real file-editing agents in their own worktree + branch so
+    // concurrent sessions never share a working tree; scripted providers and
+    // non-repo cwds fall back to running directly in the cwd.
+    const worktree = provider.capabilities.worktreeIsolation
+      ? this.#worktrees.create(sessionId, options.cwd)
+      : null
+    if (worktree !== null) {
+      this.#worktreeBySession.set(sessionId, worktree)
+    }
+
     const apiKey = this.#resolveApiKey(options.providerId)
     const handle = provider.startSession(
       {
@@ -168,7 +187,7 @@ export class SessionManager {
         agentId,
         title: options.title,
         prompt: options.prompt,
-        cwd: options.cwd,
+        cwd: worktree?.path ?? options.cwd,
         model: options.model,
         images: options.images,
         apiKey,
@@ -209,11 +228,13 @@ export class SessionManager {
         this.#sessionSpentUsd.delete(sessionId)
         return
       }
+      const worktree = this.#worktreeBySession.get(sessionId)
       const stored =
         type === 'session.started'
           ? this.#store.append('session.started', {
               ...(payload as EventPayloads['session.started']),
               providerId,
+              ...(worktree === undefined ? {} : { worktree }),
             })
           : type === 'account.limit'
             ? this.#store.append('account.limit', {
@@ -273,6 +294,15 @@ export class SessionManager {
       }
       return []
     })
+    // Reopen in the session's own worktree (recreating it if the directory was
+    // cleaned); fall back to the repo root if it can't be restored, or to the
+    // process cwd for sessions that were never isolated.
+    const worktree = started.worktree
+    let cwd = process.cwd()
+    if (worktree !== undefined) {
+      this.#worktreeBySession.set(sessionId, worktree)
+      cwd = this.#worktrees.restore(worktree) ? worktree.path : worktree.repoRoot
+    }
     // An explicit switch wins; otherwise a reopened session follows the global
     // "run on the API key" setting (undefined = subscription).
     const apiKey = override === undefined ? this.#resolveApiKey(providerId) : override.apiKey
@@ -283,7 +313,7 @@ export class SessionManager {
         agentId: started.agentId,
         title: started.title,
         prompt: '',
-        cwd: process.cwd(),
+        cwd,
         resume: { token: resumable?.resumeToken, turns },
         // An explicit switch wins; otherwise a reopened session follows the
         // global "run on the API key" setting (undefined = subscription).
@@ -352,5 +382,19 @@ export class SessionManager {
     } else {
       this.#emit(this.#store.append('session.ended', { sessionId, outcome: 'cancelled' }))
     }
+    // Reclaim the worktree — from the live map, or the log for a session
+    // dismissed after a restart (its map entry is gone).
+    const worktree = this.#worktreeBySession.get(sessionId) ?? this.#worktreeFromLog(sessionId)
+    if (worktree !== undefined) {
+      this.#worktrees.remove(worktree)
+      this.#worktreeBySession.delete(sessionId)
+    }
+  }
+
+  /** A session's persisted worktree, read from its session.started event. */
+  #worktreeFromLog(sessionId: string): WorktreeInfo | undefined {
+    const started = this.#store.listBySession(sessionId).find((e) => e.type === 'session.started')
+      ?.payload as EventPayloads['session.started'] | undefined
+    return started?.worktree
   }
 }

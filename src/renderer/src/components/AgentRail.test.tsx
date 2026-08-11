@@ -68,12 +68,24 @@ function costEvent(sessionId: string, usd: number): StoredEvent {
   }
 }
 
-function started(sessionId: string, title: string, providerId?: string): StoredEvent {
+function started(
+  sessionId: string,
+  title: string,
+  providerId?: string,
+  branch?: string,
+): StoredEvent {
   return {
     seq: 1,
     ts: 't',
     type: 'session.started',
-    payload: { sessionId, agentId: 'a', workspaceId: 'w', title, providerId },
+    payload: {
+      sessionId,
+      agentId: 'a',
+      workspaceId: 'w',
+      title,
+      providerId,
+      ...(branch === undefined ? {} : { worktree: { repoRoot: '/repo', path: '/wt', branch } }),
+    },
   }
 }
 
@@ -164,6 +176,20 @@ describe('AgentRail', () => {
 
     expect(screen.getByText('Claude · opus-4-8')).toBeInTheDocument()
     expect(screen.getByText('Acme · x-9')).toBeInTheDocument()
+  })
+
+  it('shows the isolated worktree branch when the agent has one', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('a', 'Task A', 'claude', 'agentinator/session_a'))
+      stub.emit(started('b', 'Task B', 'claude')) // no worktree → no branch chip
+    })
+
+    expect(screen.getByText('⑂ agentinator/session_a')).toBeInTheDocument()
+    expect(screen.queryByText(/⑂ agentinator\/session_b/)).not.toBeInTheDocument()
   })
 
   it('keeps a freshly launched agent selected even before it appears in the list', async () => {
