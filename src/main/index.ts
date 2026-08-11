@@ -144,6 +144,10 @@ export function registerSettingsIpc(
   handle('settings:set-preview-target', (_event, url) => {
     settings.setPreviewTarget(url as string | null)
   })
+  handle('settings:get-preview-settle-ms', () => settings.previewSettleMs())
+  handle('settings:set-preview-settle-ms', (_event, ms) => {
+    settings.setPreviewSettleMs(ms as number | null)
+  })
 }
 
 export function registerApprovalIpc(
@@ -351,6 +355,7 @@ export async function bootstrap(
       component: settings.component.bind(settings),
       workbench,
       sample: sampleTarget,
+      settleMs: settings.previewSettleMs.bind(settings),
     },
   )
 

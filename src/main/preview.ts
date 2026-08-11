@@ -16,6 +16,8 @@ export interface PreviewTargeting {
   workbench: ComponentWorkbench
   /** The bundled sample, used when nothing else is configured. */
   sample: string
+  /** How long to let the page settle after load before the shot, in ms. */
+  settleMs: () => number
 }
 
 /**
@@ -91,7 +93,7 @@ export class PreviewController {
     network: NetworkEntry[]
   }> {
     const target = url ?? this.#resolveTarget()
-    const shot = await this.#browser.capture(target)
+    const shot = await this.#browser.capture(target, this.#targeting.settleMs())
     const ref = this.#artifacts.put(shot.png)
     this.#emit('preview.captured', {
       sessionId,

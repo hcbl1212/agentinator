@@ -2,6 +2,7 @@ import { DatabaseSync, StatementSync } from 'node:sqlite'
 
 import { BUDGET_SCOPES, EMPTY_BUDGETS } from '../shared/budget'
 import type { BudgetScope, Budgets } from '../shared/budget'
+import { clampSettleMs, DEFAULT_SETTLE_MS } from '../shared/preview'
 
 /** The session cap defaults to $5; time windows are uncapped until set. */
 const DEFAULT_SESSION_BUDGET_USD = 5
@@ -96,6 +97,25 @@ export class SettingsStore {
     } else {
       this.#set.run('previewTarget', trimmed)
     }
+  }
+
+  /** How long a preview capture waits for the page to settle after load, in ms.
+   * Falls back to the default when unset or stored garbage; always clamped to a
+   * sane range so a bad value can't hang every capture. */
+  previewSettleMs(): number {
+    const row = this.#get.get('previewSettleMs') as { value: string } | undefined
+    if (row === undefined) {
+      return DEFAULT_SETTLE_MS
+    }
+    return clampSettleMs(Number(row.value))
+  }
+
+  setPreviewSettleMs(ms: number | null): void {
+    if (ms === null) {
+      this.#delete.run('previewSettleMs')
+      return
+    }
+    this.#set.run('previewSettleMs', String(clampSettleMs(ms)))
   }
 
   /** The component-workbench target: the app root (to write the entry into), the

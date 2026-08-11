@@ -122,6 +122,8 @@ function fakeSettings(): SettingsStore {
     setApiKeyMode: vi.fn(),
     previewTarget: vi.fn(() => undefined),
     setPreviewTarget: vi.fn(),
+    previewSettleMs: vi.fn(() => 600),
+    setPreviewSettleMs: vi.fn(),
     component: vi.fn(() => undefined),
     setComponent: vi.fn(),
     secrets: vi.fn(() => []),
@@ -471,6 +473,8 @@ describe('registerSettingsIpc', () => {
       setApiKeyMode: vi.fn(),
       previewTarget: vi.fn(() => 'http://localhost:3001/'),
       setPreviewTarget: vi.fn(),
+      previewSettleMs: vi.fn(() => 700),
+      setPreviewSettleMs: vi.fn(),
     }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
@@ -487,6 +491,9 @@ describe('registerSettingsIpc', () => {
     expect(handlers.get('settings:get-preview-target')?.(undefined)).toBe('http://localhost:3001/')
     handlers.get('settings:set-preview-target')?.(undefined, 'http://localhost:3001/')
     expect(settings.setPreviewTarget).toHaveBeenCalledWith('http://localhost:3001/')
+    expect(handlers.get('settings:get-preview-settle-ms')?.(undefined)).toBe(700)
+    handlers.get('settings:set-preview-settle-ms')?.(undefined, 900)
+    expect(settings.setPreviewSettleMs).toHaveBeenCalledWith(900)
   })
 
   it('returns null for an unset preview target', () => {
@@ -511,6 +518,8 @@ describe('registerSettingsIpc', () => {
       'settings:set-api-key-mode',
       'settings:get-preview-target',
       'settings:set-preview-target',
+      'settings:get-preview-settle-ms',
+      'settings:set-preview-settle-ms',
     ])
   })
 })
@@ -808,7 +817,10 @@ describe('bootstrap', () => {
 
     expect(ref).toBe('shot_x')
     // The default target is the sample resolved next to the bundled main.
-    expect(capture).toHaveBeenCalledWith(expect.stringContaining('examples/sample-web/index.html'))
+    expect(capture).toHaveBeenCalledWith(
+      expect.stringContaining('examples/sample-web/index.html'),
+      600,
+    )
     expect(call('preview:image')(undefined, 'shot_x')).toBe(Buffer.from([1]).toString('base64'))
     expect(store.list().some((event) => event.type === 'preview.captured')).toBe(true)
     store.close()

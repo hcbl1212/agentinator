@@ -55,6 +55,10 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('settings:get-preview-target') as Promise<string | null>,
     setPreviewTarget: (url) =>
       ipcRenderer.invoke('settings:set-preview-target', url) as Promise<void>,
+    getPreviewSettleMs: () =>
+      ipcRenderer.invoke('settings:get-preview-settle-ms') as Promise<number>,
+    setPreviewSettleMs: (ms) =>
+      ipcRenderer.invoke('settings:set-preview-settle-ms', ms) as Promise<void>,
   },
   preview: {
     capture: (sessionId, url) =>

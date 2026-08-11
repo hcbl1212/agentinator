@@ -6,6 +6,7 @@ import { PreviewController } from './preview'
 import type { PreviewBrowser, Screenshot } from './previewBrowser'
 
 const SAMPLE = '/app/examples/sample-web/index.html'
+const SETTLE = 700
 
 function setup(
   options: {
@@ -51,6 +52,7 @@ function setup(
       component: () => options.component,
       workbench: { prepare, clear: vi.fn() } as unknown as ComponentWorkbench,
       sample: SAMPLE,
+      settleMs: () => SETTLE,
     },
   )
   return { controller, browser, store, emit, prepare }
@@ -62,7 +64,7 @@ describe('PreviewController', () => {
 
     const ref = await controller.capture('session_1')
 
-    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE, SETTLE)
     expect(store.get(ref)).toEqual(new Uint8Array([1, 2, 3]))
     expect(emit).toHaveBeenCalledWith('preview.captured', {
       sessionId: 'session_1',
@@ -80,7 +82,7 @@ describe('PreviewController', () => {
 
     await controller.capture('session_1')
 
-    expect(browser.capture).toHaveBeenCalledWith('http://localhost:3001/')
+    expect(browser.capture).toHaveBeenCalledWith('http://localhost:3001/', SETTLE)
     expect(emit).toHaveBeenCalledWith(
       'preview.captured',
       expect.objectContaining({ url: 'http://localhost:3001/' }),
@@ -109,6 +111,7 @@ describe('PreviewController', () => {
     // Trailing slash collapsed; the workbench entry path appended.
     expect(browser.capture).toHaveBeenCalledWith(
       'http://localhost:3001/__agentinator_component.html',
+      SETTLE,
     )
   })
 
@@ -120,7 +123,7 @@ describe('PreviewController', () => {
     await controller.capture('session_1')
 
     expect(prepare).not.toHaveBeenCalled()
-    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE, SETTLE)
   })
 
   it('captures an explicit url when one is provided', async () => {
@@ -128,7 +131,7 @@ describe('PreviewController', () => {
 
     await controller.capture('session_1', 'http://localhost:5173/')
 
-    expect(browser.capture).toHaveBeenCalledWith('http://localhost:5173/')
+    expect(browser.capture).toHaveBeenCalledWith('http://localhost:5173/', SETTLE)
   })
 
   it('captures for the agent, returning base64 PNG and still logging the event', async () => {
@@ -144,7 +147,7 @@ describe('PreviewController', () => {
 
     const image = await controller.captureImage('session_1')
 
-    expect(browser.capture).toHaveBeenCalledWith(SAMPLE)
+    expect(browser.capture).toHaveBeenCalledWith(SAMPLE, SETTLE)
     expect(image).toEqual({
       base64: Buffer.from([10, 20, 30]).toString('base64'),
       mediaType: 'image/png',

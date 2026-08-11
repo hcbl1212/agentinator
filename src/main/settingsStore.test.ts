@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { DEFAULT_SETTLE_MS, MAX_SETTLE_MS } from '../shared/preview'
 import { SettingsStore } from './settingsStore'
 
 const stores: SettingsStore[] = []
@@ -125,6 +126,22 @@ describe('SettingsStore', () => {
     store.setPreviewTarget('http://localhost:3001/')
     store.setPreviewTarget(null)
     expect(store.previewTarget()).toBeUndefined()
+    store.close()
+  })
+
+  it('persists the preview settle delay, defaulting and clamping', () => {
+    const store = new SettingsStore()
+
+    // Default until set.
+    expect(store.previewSettleMs()).toBe(DEFAULT_SETTLE_MS)
+    store.setPreviewSettleMs(900)
+    expect(store.previewSettleMs()).toBe(900)
+    // Out-of-range is clamped on write.
+    store.setPreviewSettleMs(MAX_SETTLE_MS + 1000)
+    expect(store.previewSettleMs()).toBe(MAX_SETTLE_MS)
+    // Null clears back to the default.
+    store.setPreviewSettleMs(null)
+    expect(store.previewSettleMs()).toBe(DEFAULT_SETTLE_MS)
     store.close()
   })
 

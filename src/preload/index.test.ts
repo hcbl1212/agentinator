@@ -40,6 +40,8 @@ describe('preload bridge', () => {
     await bridge.settings.setApiKeyMode(true)
     await bridge.settings.getPreviewTarget()
     await bridge.settings.setPreviewTarget('http://localhost:3001/')
+    await bridge.settings.getPreviewSettleMs()
+    await bridge.settings.setPreviewSettleMs(900)
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budgets')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 'day', 12)
@@ -50,6 +52,8 @@ describe('preload bridge', () => {
       'settings:set-preview-target',
       'http://localhost:3001/',
     )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-preview-settle-ms')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-preview-settle-ms', 900)
   })
 
   it('routes events.list over IPC with the given cursor', async () => {

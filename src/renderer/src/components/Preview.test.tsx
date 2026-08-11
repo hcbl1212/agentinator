@@ -31,6 +31,8 @@ interface Stub {
   agentSend: ReturnType<typeof vi.fn>
   getPreviewTarget: ReturnType<typeof vi.fn>
   setPreviewTarget: ReturnType<typeof vi.fn>
+  getPreviewSettleMs: ReturnType<typeof vi.fn>
+  setPreviewSettleMs: ReturnType<typeof vi.fn>
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
   inferProps: ReturnType<typeof vi.fn>
@@ -49,6 +51,7 @@ function stub(
     inferredWrapper?: string
     chosenFolder?: string | null
     chosenFile?: string | null
+    settleMs?: number
   } = {},
 ): Stub {
   const {
@@ -60,6 +63,7 @@ function stub(
     inferredWrapper = '__agentinator_wrapper.tsx',
     chosenFolder = '/picked/app',
     chosenFile = 'src/Picked.tsx',
+    settleMs = 600,
   } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
@@ -69,6 +73,8 @@ function stub(
   const agentSend = vi.fn(() => Promise.resolve())
   const getPreviewTarget = vi.fn(() => Promise.resolve(target))
   const setPreviewTarget = vi.fn(() => Promise.resolve())
+  const getPreviewSettleMs = vi.fn(() => Promise.resolve(settleMs))
+  const setPreviewSettleMs = vi.fn(() => Promise.resolve())
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
@@ -94,7 +100,7 @@ function stub(
       chooseFile,
     },
     agent: { send: agentSend },
-    settings: { getPreviewTarget, setPreviewTarget },
+    settings: { getPreviewTarget, setPreviewTarget, getPreviewSettleMs, setPreviewSettleMs },
   } as unknown as AgentinatorBridge
   return {
     bridge,
@@ -106,6 +112,8 @@ function stub(
     agentSend,
     getPreviewTarget,
     setPreviewTarget,
+    getPreviewSettleMs,
+    setPreviewSettleMs,
     getComponent,
     setComponent,
     inferProps,
@@ -406,6 +414,38 @@ describe('Preview', () => {
     fireEvent.change(input, { target: { value: '   ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     await waitFor(() => expect(stubbed.setPreviewTarget).toHaveBeenCalledWith(null))
+  })
+
+  it('loads and persists the capture settle delay, clearing to default when blank', async () => {
+    const stubbed = stub({ settleMs: 800 })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    const input = await screen.findByRole('spinbutton', {
+      name: 'Capture settle delay in milliseconds',
+    })
+    expect(input).toHaveValue(800)
+
+    fireEvent.change(input, { target: { value: '1500' } })
+    fireEvent.blur(input)
+    expect(stubbed.setPreviewSettleMs).toHaveBeenCalledWith(1500)
+
+    // A blank field resets to the default (null).
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.blur(input)
+    expect(stubbed.setPreviewSettleMs).toHaveBeenCalledWith(null)
+  })
+
+  it('no-ops the settle field without a bridge', () => {
+    window.agentinator = undefined
+
+    render(<Preview sessionId="s" />)
+    const input = screen.getByRole('spinbutton', {
+      name: 'Capture settle delay in milliseconds',
+    })
+    fireEvent.change(input, { target: { value: '1500' } })
+    fireEvent.blur(input)
+    // No bridge → nothing thrown, nothing persisted.
   })
 
   it('renders captured network activity with failures flagged', async () => {

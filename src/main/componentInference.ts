@@ -78,8 +78,13 @@ const WRAPPER_SYSTEM =
   "Apollo MockedProvider, and mock context values. CRITICAL: also import the app's GLOBAL " +
   'STYLESHEETS at the top of the wrapper — Tailwind, SCSS, and any CSS reset that the app entry ' +
   '(index/main/App) imports — and reproduce the app root wrapper element (e.g. the id/class on ' +
-  '#app) so the component renders STYLED, not as unstyled plain text. Output ONLY a complete .tsx ' +
-  'module that default-exports a component taking `children`. No prose, no code fences.'
+  '#app) so the component renders STYLED, not as unstyled plain text. ALSO reproduce the ' +
+  "component's LAYOUT ANCESTORS — the page container, content-background, and header/nav chrome " +
+  'divs it is nested inside in the real app (trace up from where the component is routed/rendered ' +
+  'and copy those wrapper elements and their classes around `children`) — so page-level styling ' +
+  'like the content background and padding shows in isolation, not just the component itself. ' +
+  'Output ONLY a complete .tsx module that default-exports a component taking `children`. No ' +
+  'prose, no code fences.'
 
 /** Read-only tools the wrapper generator may use to explore the app. */
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead'])

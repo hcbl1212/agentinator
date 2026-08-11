@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 
 import type { ConsoleEntry, NetworkEntry } from '../shared/events'
+import { DEFAULT_SETTLE_MS } from '../shared/preview'
 
 /** A rendered screenshot of a target page: PNG bytes, pixel dimensions, and the
  * console output + network requests captured while it loaded. */
@@ -19,8 +20,9 @@ export interface Screenshot {
  * stays swappable behind one seam.
  */
 export interface PreviewBrowser {
-  /** Load a target (http(s) URL or a local file path) and capture it. */
-  capture(target: string): Promise<Screenshot>
+  /** Load a target (http(s) URL or a local file path) and capture it, pausing
+   * `settleMs` after load so async data/console/network settle first. */
+  capture(target: string, settleMs?: number): Promise<Screenshot>
 }
 
 function errorMessage(error: unknown): string {
@@ -30,9 +32,15 @@ function errorMessage(error: unknown): string {
 /** Cap on captured entries so a chatty page can't bloat the event log. */
 const MAX_ENTRIES = 100
 
-/** A brief pause after load so console/network events (delivered a tick after
- * they fire) are all in before the shot — otherwise the capture races them. */
-export const settleDelay = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 200))
+/** A pause after load so console/network events (delivered a tick after they
+ * fire) and async page data are all in before the shot — otherwise the capture
+ * races them. Duration is caller-supplied (user-configurable per workspace). */
+export const settleDelay = (ms: number = DEFAULT_SETTLE_MS): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Fixed short pause between capturePage retries (compositor warm-up), separate
+ * from the configurable post-load settle. */
+const RETRY_SETTLE_MS = 200
 
 /**
  * Captures via a hidden Electron BrowserWindow — Chromium ships with the app,
@@ -50,9 +58,9 @@ interface CapturedImage {
 }
 
 export class ElectronPreviewBrowser implements PreviewBrowser {
-  #settle: () => Promise<void>
+  #settle: (ms: number) => Promise<void>
 
-  constructor(settle: () => Promise<void> = settleDelay) {
+  constructor(settle: (ms: number) => Promise<void> = settleDelay) {
     this.#settle = settle
   }
 
@@ -69,12 +77,12 @@ export class ElectronPreviewBrowser implements PreviewBrowser {
         if (attempt >= 2) {
           throw error
         }
-        await this.#settle()
+        await this.#settle(RETRY_SETTLE_MS)
       }
     }
   }
 
-  async capture(target: string): Promise<Screenshot> {
+  async capture(target: string, settleMs: number = DEFAULT_SETTLE_MS): Promise<Screenshot> {
     const partition = `preview-${crypto.randomUUID()}`
     const window = new BrowserWindow({
       show: false,
@@ -112,7 +120,7 @@ export class ElectronPreviewBrowser implements PreviewBrowser {
       } catch (error) {
         messages.push({ level: 'error', text: `Failed to load ${target}: ${errorMessage(error)}` })
       }
-      await this.#settle()
+      await this.#settle(settleMs)
       const image = await this.#captureFrame(window.webContents)
       const { width, height } = image.getSize()
       // Cap on return so a chatty page can't bloat the event log.

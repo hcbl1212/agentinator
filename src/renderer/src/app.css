@@ -285,6 +285,31 @@ body {
   flex: 1;
 }
 
+/* Capture settle delay — a small numeric knob under the target URL. */
+.preview-settle {
+  align-items: center;
+  color: var(--faint);
+  display: flex;
+  font-size: 0.7rem;
+  gap: 0.4rem;
+  letter-spacing: 0.06em;
+}
+
+.preview-settle-input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.4rem;
+  width: 5rem;
+}
+
+.preview-settle-unit {
+  text-transform: none;
+}
+
 textarea.preview-props-input {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.75rem;

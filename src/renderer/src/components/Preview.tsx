@@ -54,6 +54,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [inferring, setInferring] = useState(false)
   const [wrappering, setWrappering] = useState(false)
   const [setupOpen, setSetupOpen] = useState(true)
+  const [settleMs, setSettleMs] = useState('')
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -66,6 +67,11 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.getPreviewTarget().then((url) => {
       if (!cancelled) {
         setTarget(url ?? '')
+      }
+    })
+    void bridge.settings.getPreviewSettleMs().then((ms) => {
+      if (!cancelled) {
+        setSettleMs(String(ms))
       }
     })
     void bridge.preview.getComponent().then((pinned) => {
@@ -151,6 +157,17 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     }
     const trimmed = target.trim()
     void bridge.settings.setPreviewTarget(trimmed === '' ? null : trimmed)
+  }
+
+  // Persist the settle delay; a blank field clears it back to the default.
+  const saveSettle = (): void => {
+    const bridge = window.agentinator
+    if (bridge === undefined) {
+      return
+    }
+    const trimmed = settleMs.trim()
+    const ms = Number(trimmed)
+    void bridge.settings.setPreviewSettleMs(trimmed === '' || !Number.isFinite(ms) ? null : ms)
   }
 
   // Pin a component to render in isolation (through the dev server above), or
@@ -297,6 +314,20 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           Set
         </button>
       </form>
+      <label className="preview-settle">
+        <span className="preview-field-label">Settle</span>
+        <input
+          type="number"
+          className="preview-settle-input"
+          value={settleMs}
+          min={0}
+          step={100}
+          onChange={(event) => setSettleMs(event.target.value)}
+          onBlur={saveSettle}
+          aria-label="Capture settle delay in milliseconds"
+        />
+        <span className="preview-settle-unit">ms — wait before capturing so async data loads</span>
+      </label>
       {error !== null && (
         <p className="preview-error" role="alert">
           Capture failed: {error}

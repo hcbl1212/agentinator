@@ -73,6 +73,7 @@ const { MockBrowserWindow, capturePage } = vi.hoisted(() => {
 
 vi.mock('electron', () => ({ BrowserWindow: MockBrowserWindow }))
 
+import { DEFAULT_SETTLE_MS } from '../shared/preview'
 import { ElectronPreviewBrowser, settleDelay } from './previewBrowser'
 
 // Inject a no-op settle so the real 200ms pause doesn't slow the unit tests.
@@ -117,6 +118,13 @@ describe('ElectronPreviewBrowser', () => {
     expect(shot.console).toEqual([{ level: 'info', text: 'from file' }])
   })
 
+  it('passes the requested settle delay through to the settle hook', async () => {
+    const settle = vi.fn(() => Promise.resolve())
+    await new ElectronPreviewBrowser(settle).capture('http://x/', 1234)
+
+    expect(settle).toHaveBeenCalledWith(1234)
+  })
+
   it('records a load failure as a console error and still returns a shot', async () => {
     MockBrowserWindow.loadRejection = { value: new Error('ERR_CONNECTION_REFUSED') }
 
@@ -154,17 +162,28 @@ describe('ElectronPreviewBrowser', () => {
     expect(MockBrowserWindow.instances[0]?.destroy).toHaveBeenCalledOnce()
   })
 
-  it('settles before capturing so console/network events aren’t raced', async () => {
+  it('settles for the default delay, or a custom one when given', async () => {
     vi.useFakeTimers()
     try {
+      // No argument → the default settle delay.
       const settled = settleDelay()
       let done = false
       void settled.then(() => {
         done = true
       })
-      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(DEFAULT_SETTLE_MS)
       await settled
       expect(done).toBe(true)
+
+      // An explicit delay is honored.
+      const quick = settleDelay(50)
+      let quickDone = false
+      void quick.then(() => {
+        quickDone = true
+      })
+      await vi.advanceTimersByTimeAsync(50)
+      await quick
+      expect(quickDone).toBe(true)
     } finally {
       vi.useRealTimers()
     }

@@ -80,6 +80,9 @@ export interface AgentinatorBridge {
     /** The dev-server URL the preview captures, or null for the bundled sample. */
     getPreviewTarget(): Promise<string | null>
     setPreviewTarget(url: string | null): Promise<void>
+    /** How long a capture waits for the page to settle after load, in ms. */
+    getPreviewSettleMs(): Promise<number>
+    setPreviewSettleMs(ms: number | null): Promise<void>
   }
   /** The visual feedback loop: capture the target app and read screenshots
    * back. Bytes stay in the main process; the renderer holds only refs. */
