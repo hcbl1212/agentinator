@@ -86,6 +86,12 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('approvals:resolve', requestId, approved) as Promise<void>,
     undo: (requestId) => ipcRenderer.invoke('approvals:undo', requestId) as Promise<void>,
   },
+  worktrees: {
+    summary: () =>
+      ipcRenderer.invoke('worktrees:summary') as Promise<{ count: number; bytes: number }>,
+    cleanup: () =>
+      ipcRenderer.invoke('worktrees:cleanup') as Promise<{ count: number; bytes: number }>,
+  },
 }
 
 contextBridge.exposeInMainWorld('agentinator', bridge)

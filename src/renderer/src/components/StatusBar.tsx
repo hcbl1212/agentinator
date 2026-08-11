@@ -6,6 +6,7 @@ import type { EventPayloads } from '../../../shared/events'
 import type { AccountUsage } from '../../../shared/usage'
 import { BudgetPanel } from './BudgetPanel'
 import { CredentialsPanel } from './CredentialsPanel'
+import { WorktreeCleanup } from './WorktreeCleanup'
 
 const SHORT_WINDOW: Record<string, string> = { five_hour: '5h', seven_day: '7d' }
 
@@ -110,6 +111,7 @@ export function StatusBar(): React.JSX.Element {
       >
         keys
       </button>
+      <WorktreeCleanup />
       <span className="statusbar-right">v0.1.0</span>
       {editing && loaded && (
         <BudgetPanel budgets={budgets} onChange={changeBudget} onClose={() => setEditing(false)} />

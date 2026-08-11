@@ -74,6 +74,10 @@ function stubBridge(
         resolve: vi.fn(() => Promise.resolve()),
         undo: vi.fn(() => Promise.resolve()),
       },
+      worktrees: {
+        summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
+        cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
+      },
       credentials: {
         set: vi.fn(() => Promise.resolve()),
         has: vi.fn(() => Promise.resolve(false)),
@@ -242,7 +246,8 @@ describe('StatusBar', () => {
     resolve([9, 9, budgets()])
     await Promise.resolve()
 
-    expect(stub.unsubscribe).toHaveBeenCalledOnce()
+    // Both StatusBar and its child WorktreeCleanup subscribe, and both clean up.
+    expect(stub.unsubscribe).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('log 9 events')).not.toBeInTheDocument()
   })
 })

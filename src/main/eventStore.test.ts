@@ -86,6 +86,38 @@ describe('EventStore', () => {
     expect(store.openSessionIds()).toEqual(['open_1'])
   })
 
+  it('lists ended sessions that ran in a worktree, skipping open or unisolated ones', () => {
+    const store = open()
+    const worktree = { repoRoot: '/repo', path: '/wt/ended', branch: 'agentinator/ended' }
+    // Ended + isolated → returned.
+    store.append('session.started', {
+      sessionId: 'ended',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'Ended',
+      worktree,
+    })
+    store.append('session.ended', { sessionId: 'ended', outcome: 'completed' })
+    // Isolated but still open → excluded (still resumable).
+    store.append('session.started', {
+      sessionId: 'open',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'Open',
+      worktree: { repoRoot: '/repo', path: '/wt/open', branch: 'agentinator/open' },
+    })
+    // Ended but never isolated → excluded (no worktree to reclaim).
+    store.append('session.started', {
+      sessionId: 'plain',
+      agentId: 'a',
+      workspaceId: 'w',
+      title: 'Plain',
+    })
+    store.append('session.ended', { sessionId: 'plain', outcome: 'failed' })
+
+    expect(store.endedWorktrees()).toEqual([{ sessionId: 'ended', worktree }])
+  })
+
   it('lists events after a given sequence number, in order', () => {
     const store = open()
     store.append('app.started', { version: '0.1.0' })

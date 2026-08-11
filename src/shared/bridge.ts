@@ -127,4 +127,12 @@ export interface AgentinatorBridge {
     /** Abort a scheduled decision before the grace window closes. */
     undo(requestId: string): Promise<void>
   }
+  /** On-demand cleanup of finished agents' git worktrees. */
+  worktrees: {
+    /** How many finished worktrees are still on disk, and their total size. */
+    summary(): Promise<{ count: number; bytes: number }>
+    /** Remove every finished worktree and its branch; resolves to how many were
+     * removed and roughly the bytes freed. */
+    cleanup(): Promise<{ count: number; bytes: number }>
+  }
 }

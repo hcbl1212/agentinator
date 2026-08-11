@@ -194,4 +194,12 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:resolve', 'approval_1', true)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('approvals:undo', 'approval_1')
   })
+
+  it('routes worktree summary and cleanup over IPC', async () => {
+    await bridge.worktrees.summary()
+    await bridge.worktrees.cleanup()
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('worktrees:summary')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('worktrees:cleanup')
+  })
 })

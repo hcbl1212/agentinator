@@ -55,6 +55,7 @@ export class EventStore {
   #selectLatestDiffs: StatementSync
   #selectLatestDiffsBySession: StatementSync
   #selectOpenSessions: StatementSync
+  #selectEndedWorktrees: StatementSync
 
   constructor(path = ':memory:') {
     this.#db = new DatabaseSync(path)
@@ -122,6 +123,11 @@ export class EventStore {
     this.#selectOpenSessions = this.#db.prepare(
       "SELECT DISTINCT session_id AS id FROM events WHERE type = 'session.started' AND session_id IS NOT NULL AND session_id NOT IN (SELECT session_id FROM events WHERE type = 'session.ended' AND session_id IS NOT NULL)",
     )
+    // The started rows of sessions that have ended — the basis for reclaiming
+    // the worktrees of finished agents (worktree info lives on the payload).
+    this.#selectEndedWorktrees = this.#db.prepare(
+      "SELECT payload FROM events WHERE type = 'session.started' AND session_id IN (SELECT session_id FROM events WHERE type = 'session.ended' AND session_id IS NOT NULL)",
+    )
   }
 
   append<T extends EventType>(type: T, payload: EventPayloads[T]): StoredEvent<T> {
@@ -172,6 +178,21 @@ export class EventStore {
   openSessionIds(): string[] {
     const rows = this.#selectOpenSessions.all() as unknown as { id: string }[]
     return rows.map((row) => row.id)
+  }
+
+  /** Finished (ended) sessions that ran in a worktree, with the persisted
+   * worktree info — the candidates a cleanup pass reclaims from disk. */
+  endedWorktrees(): {
+    sessionId: string
+    worktree: NonNullable<EventPayloads['session.started']['worktree']>
+  }[] {
+    const rows = this.#selectEndedWorktrees.all() as unknown as { payload: string }[]
+    return rows.flatMap((row) => {
+      const payload = JSON.parse(row.payload) as EventPayloads['session.started']
+      return payload.worktree === undefined
+        ? []
+        : [{ sessionId: payload.sessionId, worktree: payload.worktree }]
+    })
   }
 
   count(): number {

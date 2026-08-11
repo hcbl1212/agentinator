@@ -86,6 +86,10 @@ function stubBridge(
         resolve: vi.fn(() => Promise.resolve()),
         undo: vi.fn(() => Promise.resolve()),
       },
+      worktrees: {
+        summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
+        cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
+      },
       credentials: {
         set: vi.fn(() => Promise.resolve()),
         has: vi.fn(() => Promise.resolve(false)),

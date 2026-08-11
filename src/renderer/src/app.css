@@ -1106,6 +1106,46 @@ textarea.preview-props-input {
   color: var(--err);
 }
 
+/* Finished-worktree cleanup — a status-bar chip that only appears when there's
+   something to reclaim. The confirm step reads as destructive (err), not accent. */
+.worktree-cleanup {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.worktree-clean,
+.worktree-clean-cancel {
+  background: transparent;
+  border: none;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.worktree-clean:hover,
+.worktree-clean:focus-visible,
+.worktree-clean-cancel:hover,
+.worktree-clean-cancel:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.worktree-clean-confirm {
+  background: transparent;
+  border: none;
+  color: var(--err);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.worktree-clean-confirm:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
 .budget-input {
   background: var(--panel);
   border: 1px solid var(--line);

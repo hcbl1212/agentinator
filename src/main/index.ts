@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
@@ -15,6 +16,7 @@ import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
 import { runGit, runGitSync } from './git'
+import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
 import { NodeWorktrees } from './worktrees'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
@@ -74,6 +76,16 @@ export function registerEventIpc(
     store.tail(limit as number, beforeSeq as number | undefined),
   )
   handle('events:search', (_event, query, limit) => store.search(query as string, limit as number))
+}
+
+export function registerWorktreeIpc(
+  janitor: WorktreeJanitor,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('worktrees:summary', () => janitor.summary())
+  handle('worktrees:cleanup', () => janitor.cleanup())
 }
 
 export function registerAgentIpc(
@@ -361,6 +373,7 @@ export async function bootstrap(
   )
 
   const vault = new CredentialVault(settings, createEncryptor())
+  const worktrees = new NodeWorktrees(join(userData, 'worktrees'), runGitSync)
   const manager = new SessionManager(store, broadcastEvent, {
     getBudgets: () => settings.budgets(),
     // Fresh/reopened sessions run on the API key only when the global toggle is
@@ -368,7 +381,7 @@ export async function bootstrap(
     resolveApiKey: (providerId) => (settings.apiKeyMode() ? vault.get(providerId) : undefined),
     // Each real agent gets its own git worktree under userData, so concurrent
     // agents can't corrupt each other's working tree.
-    worktrees: new NodeWorktrees(join(userData, 'worktrees'), runGitSync),
+    worktrees,
   })
   manager.register(createMockProvider(undefined, undefined, decide))
   // Hand Claude the app-capture tool so the agent can see what it builds.
@@ -392,6 +405,14 @@ export async function bootstrap(
   }
 
   registerAgentIpc(manager)
+  registerWorktreeIpc(
+    new WorktreeJanitor({
+      endedWorktrees: () => store.endedWorktrees(),
+      exists: existsSync,
+      sizeOf: dirSizeBytes,
+      worktrees,
+    }),
+  )
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)
   registerPreviewIpc(

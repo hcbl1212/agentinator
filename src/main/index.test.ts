@@ -82,11 +82,13 @@ import {
   registerEventIpc,
   registerPreviewIpc,
   registerSettingsIpc,
+  registerWorktreeIpc,
   safeEncryptor,
   taskTitle,
 } from './index'
 import type { OpenDialog } from './index'
 import type { ComponentWorkbench } from './componentWorkbench'
+import type { WorktreeJanitor } from './worktreeGc'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
 import type { SessionManager } from './sessions'
@@ -110,6 +112,7 @@ function fakeStore(
     search: vi.fn(() => []),
     openSessionIds: vi.fn(() => openSessions),
     listBySession: vi.fn((id: string) => sessionEvents[id] ?? []),
+    endedWorktrees: vi.fn(() => []),
     close: vi.fn(),
   } as unknown as EventStore
 }
@@ -524,6 +527,31 @@ describe('registerSettingsIpc', () => {
   })
 })
 
+describe('registerWorktreeIpc', () => {
+  it('routes worktree summary and cleanup to the janitor', () => {
+    const janitor = {
+      summary: vi.fn(() => ({ count: 2, bytes: 2048 })),
+      cleanup: vi.fn(() => ({ count: 2, bytes: 2048 })),
+    }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerWorktreeIpc(janitor as unknown as WorktreeJanitor, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    expect(handlers.get('worktrees:summary')?.(undefined)).toEqual({ count: 2, bytes: 2048 })
+    expect(handlers.get('worktrees:cleanup')?.(undefined)).toEqual({ count: 2, bytes: 2048 })
+    expect(janitor.cleanup).toHaveBeenCalledOnce()
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerWorktreeIpc({ summary: vi.fn(), cleanup: vi.fn() } as unknown as WorktreeJanitor)
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['worktrees:summary', 'worktrees:cleanup'])
+  })
+})
+
 describe('registerApprovalIpc', () => {
   it('serves pending approvals and routes resolve/undo to the broker', () => {
     const broker = { pending: vi.fn(() => []), resolve: vi.fn(), undo: vi.fn() }
@@ -823,6 +851,8 @@ describe('bootstrap', () => {
     )
     expect(call('preview:image')(undefined, 'shot_x')).toBe(Buffer.from([1]).toString('base64'))
     expect(store.list().some((event) => event.type === 'preview.captured')).toBe(true)
+    // The worktree janitor is wired to the store: nothing finished yet → empty.
+    expect(call('worktrees:summary')(undefined)).toEqual({ count: 0, bytes: 0 })
     store.close()
   })
 
