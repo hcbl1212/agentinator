@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { GitRunner } from './git'
-import { diffAgainstHead, parseGitDiff } from './workspaceDiff'
+import { diffAgainstHead, parseGitDiff, worktreeDepsChanged } from './workspaceDiff'
 
 const MODIFIED = `diff --git a/src/a.ts b/src/a.ts
 index 111..222 100644
@@ -103,5 +103,27 @@ describe('diffAgainstHead', () => {
     })
 
     await expect(diffAgainstHead('/repo', git)).resolves.toEqual([])
+  })
+})
+
+describe('worktreeDepsChanged', () => {
+  const gitReturning = (output: string): GitRunner => vi.fn(() => Promise.resolve(output))
+
+  it('is true when a manifest or lockfile changed (anywhere in the tree)', async () => {
+    await expect(
+      worktreeDepsChanged('/wt', gitReturning('src/App.tsx\nfrontend/package.json\n')),
+    ).resolves.toBe(true)
+    await expect(worktreeDepsChanged('/wt', gitReturning('package-lock.json'))).resolves.toBe(true)
+  })
+
+  it('is false when only source files changed', async () => {
+    await expect(
+      worktreeDepsChanged('/wt', gitReturning('src/App.tsx\nsrc/pkg/index.ts\n')),
+    ).resolves.toBe(false)
+  })
+
+  it('is false (not throwing) when the dir is not a git repo', async () => {
+    const git: GitRunner = vi.fn(() => Promise.reject(new Error('not a git repository')))
+    await expect(worktreeDepsChanged('/nope', git)).resolves.toBe(false)
   })
 })

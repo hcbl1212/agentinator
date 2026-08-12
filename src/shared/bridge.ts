@@ -135,6 +135,9 @@ export interface AgentinatorBridge {
     stopWorktreeServers(): Promise<void>
     /** How many worktree dev servers are currently running. */
     worktreeServerCount(): Promise<number>
+    /** Whether the agent changed dependency manifests in its worktree, so the
+     * linked node_modules (and thus the preview) may be stale. */
+    worktreeDepsChanged(sessionId: string): Promise<boolean>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>

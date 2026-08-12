@@ -83,3 +83,24 @@ export async function diffAgainstHead(cwd: string, git: GitRunner): Promise<File
 
   return [...tracked, ...untracked]
 }
+
+/** Dependency manifests + lockfiles: a change to any of these means the
+ * worktree's symlinked node_modules (the main checkout's) is likely stale. */
+const MANIFEST_FILES = new Set([
+  'package.json',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'npm-shrinkwrap.json',
+])
+
+/** Whether the agent changed any dependency manifest/lockfile in a worktree
+ * (vs HEAD) — the signal that a linked-in node_modules is out of date. Anywhere
+ * in the tree counts (a monorepo's root lockfile or a package's own manifest).
+ * Best-effort: a non-git dir returns false rather than throwing. */
+export async function worktreeDepsChanged(worktreePath: string, git: GitRunner): Promise<boolean> {
+  const output = await git(['diff', '--name-only', 'HEAD'], worktreePath).catch(() => '')
+  return output
+    .split('\n')
+    .some((line) => MANIFEST_FILES.has(line.slice(line.lastIndexOf('/') + 1)))
+}

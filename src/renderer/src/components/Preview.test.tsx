@@ -60,6 +60,7 @@ function stub(
     serverCommand?: string
     worktreeServer?: { url: string } | null
     serverCount?: number
+    depsChanged?: boolean
   } = {},
 ): Stub {
   const {
@@ -76,6 +77,7 @@ function stub(
     serverCommand = 'npm run dev',
     worktreeServer = null,
     serverCount = 0,
+    depsChanged = false,
   } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
@@ -94,6 +96,7 @@ function stub(
   const startWorktreeServer = vi.fn(() => Promise.resolve(worktreeServer))
   const stopWorktreeServers = vi.fn(() => Promise.resolve())
   const worktreeServerCount = vi.fn(() => Promise.resolve(serverCount))
+  const worktreeDepsChanged = vi.fn(() => Promise.resolve(depsChanged))
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
@@ -120,6 +123,7 @@ function stub(
       startWorktreeServer,
       stopWorktreeServers,
       worktreeServerCount,
+      worktreeDepsChanged,
     },
     agent: { send: agentSend },
     settings: {
@@ -524,6 +528,20 @@ describe('Preview', () => {
     expect(screen.getByRole('button', { name: 'Stop all preview servers' })).toHaveTextContent(
       'Stop 1 server',
     )
+    // Deps unchanged → no stale warning.
+    expect(screen.queryByText(/Dependencies changed on this branch/)).not.toBeInTheDocument()
+  })
+
+  it('warns when the agent changed dependencies on the branch', async () => {
+    const stubbed = stub({ worktreeServer: { url: 'http://localhost:5199' }, depsChanged: true })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    )
+
+    expect(await screen.findByText(/Dependencies changed on this branch/)).toBeInTheDocument()
   })
 
   it('hints when the selected agent has no worktree to preview', async () => {

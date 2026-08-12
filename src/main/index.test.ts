@@ -85,6 +85,7 @@ import {
   registerSettingsIpc,
   registerWorktreeIpc,
   registerWorktreeServerIpc,
+  resolveWorktreeDepsChanged,
   resolveWorktreePreview,
   safeEncryptor,
   taskTitle,
@@ -92,6 +93,7 @@ import {
 import type { OpenDialog } from './index'
 import type { ComponentWorkbench } from './componentWorkbench'
 import type { DevServers } from './devServers'
+import type { GitRunner } from './git'
 import type { WorktreeJanitor } from './worktreeGc'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
@@ -595,9 +597,10 @@ describe('registerWorktreeServerIpc', () => {
     const start = vi.fn(() => Promise.resolve({ url: 'http://localhost:5199' }))
     const stopAll = vi.fn()
     const count = vi.fn(() => 3)
+    const depsChanged = vi.fn(() => Promise.resolve(true))
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerWorktreeServerIpc(start, stopAll, count, (channel, listener) => {
+    registerWorktreeServerIpc(start, stopAll, count, depsChanged, (channel, listener) => {
       handlers.set(channel, listener)
     })
 
@@ -610,6 +613,39 @@ describe('registerWorktreeServerIpc', () => {
     handlers.get('preview:stop-worktree-servers')?.(undefined)
     expect(stopAll).toHaveBeenCalledOnce()
     expect(handlers.get('preview:worktree-server-count')?.(undefined)).toBe(3)
+    await expect(handlers.get('preview:worktree-deps-changed')?.(undefined, 's1')).resolves.toBe(
+      true,
+    )
+    expect(depsChanged).toHaveBeenCalledWith('s1')
+  })
+})
+
+describe('resolveWorktreeDepsChanged', () => {
+  const storeWith = (worktree?: { repoRoot: string; path: string; branch: string }): EventStore =>
+    ({
+      listBySession: vi.fn(() => [
+        { type: 'session.started', payload: { sessionId: 's1', worktree } },
+      ]),
+    }) as unknown as EventStore
+
+  it('is false (without touching git) when the session is not isolated', async () => {
+    const git = vi.fn()
+    await expect(
+      resolveWorktreeDepsChanged('s1', storeWith(undefined), git as unknown as GitRunner),
+    ).resolves.toBe(false)
+    expect(git).not.toHaveBeenCalled()
+  })
+
+  it('checks the worktree for manifest changes when isolated', async () => {
+    const git = vi.fn(() => Promise.resolve('frontend/package.json\n'))
+    await expect(
+      resolveWorktreeDepsChanged(
+        's1',
+        storeWith({ repoRoot: '/repo', path: '/wt/s1', branch: 'b' }),
+        git as unknown as GitRunner,
+      ),
+    ).resolves.toBe(true)
+    expect(git).toHaveBeenCalledWith(['diff', '--name-only', 'HEAD'], '/wt/s1')
   })
 })
 
@@ -993,6 +1029,7 @@ describe('bootstrap', () => {
     expect(await call('preview:start-worktree-server')(undefined, 'session_1')).toBeNull()
     call('preview:stop-worktree-servers')(undefined)
     expect(call('preview:worktree-server-count')(undefined)).toBe(0)
+    expect(await call('preview:worktree-deps-changed')(undefined, 'session_1')).toBe(false)
     store.close()
   })
 

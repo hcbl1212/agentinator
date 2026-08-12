@@ -16,7 +16,9 @@ import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
 import { DevServers, linkNodeModules, spawnDevServer } from './devServers'
+import type { GitRunner } from './git'
 import { runGit, runGitSync } from './git'
+import { worktreeDepsChanged } from './workspaceDiff'
 import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
 import { NodeWorktrees } from './worktrees'
 import { PreviewController } from './preview'
@@ -93,6 +95,7 @@ export function registerWorktreeServerIpc(
   start: (sessionId: string) => Promise<{ url: string } | null>,
   stopAll: () => void,
   count: () => number,
+  depsChanged: (sessionId: string) => Promise<boolean>,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -102,6 +105,7 @@ export function registerWorktreeServerIpc(
     stopAll()
   })
   handle('preview:worktree-server-count', () => count())
+  handle('preview:worktree-deps-changed', (_event, sessionId) => depsChanged(sessionId as string))
 }
 
 export function registerAgentIpc(
@@ -393,6 +397,19 @@ export async function resolveWorktreePreview(
   }
 }
 
+/** Whether the agent changed dependency manifests in a session's worktree (so
+ * the linked node_modules is stale). False when the session isn't isolated. */
+export async function resolveWorktreeDepsChanged(
+  sessionId: string,
+  store: EventStore,
+  git: GitRunner,
+): Promise<boolean> {
+  const started = store.listBySession(sessionId).find((event) => event.type === 'session.started')
+    ?.payload as EventPayloads['session.started'] | undefined
+  const worktree = started?.worktree
+  return worktree === undefined ? false : worktreeDepsChanged(worktree.path, git)
+}
+
 export async function bootstrap(
   electronApp = app,
   createStore: (dbPath: string) => EventStore = (dbPath) => new EventStore(dbPath),
@@ -505,6 +522,7 @@ export async function bootstrap(
     (sessionId) => resolveWorktreePreview(sessionId, store, settings, devServers),
     () => devServers.stopAll(),
     () => devServers.count(),
+    (sessionId) => resolveWorktreeDepsChanged(sessionId, store, runGit),
   )
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)

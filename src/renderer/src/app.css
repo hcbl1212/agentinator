@@ -352,6 +352,13 @@ body {
   padding: 0.15rem 0.5rem;
 }
 
+.preview-deps-warning {
+  color: var(--warn);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
 textarea.preview-props-input {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.75rem;

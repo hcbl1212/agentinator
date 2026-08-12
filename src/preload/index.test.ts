@@ -169,6 +169,7 @@ describe('preload bridge', () => {
     await bridge.preview.startWorktreeServer('session_9')
     await bridge.preview.stopWorktreeServers()
     await bridge.preview.worktreeServerCount()
+    await bridge.preview.worktreeDepsChanged('session_9')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
@@ -203,6 +204,10 @@ describe('preload bridge', () => {
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:stop-worktree-servers')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:worktree-server-count')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:worktree-deps-changed',
+      'session_9',
+    )
   })
 
   it('routes approvals over IPC', async () => {

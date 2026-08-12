@@ -78,6 +78,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         startWorktreeServer: vi.fn(() => Promise.resolve(null)),
         stopWorktreeServers: vi.fn(() => Promise.resolve()),
         worktreeServerCount: vi.fn(() => Promise.resolve(0)),
+        worktreeDepsChanged: vi.fn(() => Promise.resolve(false)),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve(pending)),

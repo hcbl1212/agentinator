@@ -63,6 +63,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [serverUrl, setServerUrl] = useState('')
   const [serverError, setServerError] = useState('')
   const [serverCount, setServerCount] = useState(0)
+  const [depsStale, setDepsStale] = useState(false)
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -203,6 +204,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   // running server.
   const toggleWorktreePreview = (on: boolean): void => {
     setWorktreePreview(on)
+    setDepsStale(false)
     const preview = window.agentinator?.preview
     void window.agentinator?.settings.setWorktreePreview(on)
     if (!on) {
@@ -222,6 +224,8 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         } else {
           setServerState('ready')
           setServerUrl(result.url)
+          // Warn if the agent changed deps — the linked node_modules is stale.
+          void preview.worktreeDepsChanged(sessionId).then(setDepsStale)
         }
       })
       .catch((reason: unknown) => {
@@ -444,6 +448,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
               </button>
             )}
           </div>
+          {depsStale && (
+            <p className="preview-deps-warning" role="alert">
+              ⚠ Dependencies changed on this branch — the preview may be stale (node_modules is the
+              main checkout&rsquo;s). Reinstall in the worktree if the change matters.
+            </p>
+          )}
         </>
       )}
       {error !== null && (

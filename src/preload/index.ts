@@ -94,6 +94,8 @@ export const bridge: AgentinatorBridge = {
     stopWorktreeServers: () => ipcRenderer.invoke('preview:stop-worktree-servers') as Promise<void>,
     worktreeServerCount: () =>
       ipcRenderer.invoke('preview:worktree-server-count') as Promise<number>,
+    worktreeDepsChanged: (sessionId) =>
+      ipcRenderer.invoke('preview:worktree-deps-changed', sessionId) as Promise<boolean>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,
