@@ -82,12 +82,15 @@ import {
   registerEventIpc,
   reapWorktreeServer,
   registerPreviewIpc,
+  registerQueueIpc,
   registerSettingsIpc,
   registerWorktreeIpc,
   registerWorktreeServerIpc,
   resolveWorktreeDepsChanged,
   resolveWorktreePreview,
   safeEncryptor,
+  startAgentTask,
+  taskProviderId,
   taskTitle,
 } from './index'
 import type { OpenDialog } from './index'
@@ -617,6 +620,63 @@ describe('registerWorktreeServerIpc', () => {
       true,
     )
     expect(depsChanged).toHaveBeenCalledWith('s1')
+  })
+})
+
+describe('taskProviderId and startAgentTask', () => {
+  it('picks e2e under the mock-tasks flag, else claude', () => {
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', undefined)
+    expect(taskProviderId()).toBe('claude')
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    expect(taskProviderId()).toBe('e2e')
+  })
+
+  it('starts an agent from a prompt with a derived title', () => {
+    const start = vi.fn(() => 'session_9')
+    const id = startAgentTask({ start } as unknown as SessionManager, 'Add a hello util')
+
+    expect(id).toBe('session_9')
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'claude',
+        title: 'Add a hello util',
+        prompt: 'Add a hello util',
+      }),
+    )
+  })
+})
+
+describe('registerQueueIpc', () => {
+  it('queues, removes, and dispatches tasks through the event log', () => {
+    const start = vi.fn(() => 'session_9')
+    const emit = vi.fn()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerQueueIpc({ start } as unknown as SessionManager, emit, (channel, listener) =>
+      handlers.set(channel, listener),
+    )
+
+    const taskId = handlers.get('queue:add')?.(undefined, 'do it')
+    expect(typeof taskId).toBe('string')
+    expect(emit).toHaveBeenCalledWith('task.queued', { taskId, prompt: 'do it' })
+
+    handlers.get('queue:remove')?.(undefined, 'task_1')
+    expect(emit).toHaveBeenCalledWith('task.removed', { taskId: 'task_1' })
+
+    const sessionId = handlers.get('queue:dispatch')?.(undefined, 'task_1', 'do it')
+    expect(start).toHaveBeenCalledOnce()
+    expect(sessionId).toBe('session_9')
+    expect(emit).toHaveBeenCalledWith('task.dispatched', {
+      taskId: 'task_1',
+      sessionId: 'session_9',
+    })
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerQueueIpc({ start: vi.fn() } as unknown as SessionManager, vi.fn())
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['queue:add', 'queue:remove', 'queue:dispatch'])
   })
 })
 

@@ -15,6 +15,7 @@ interface BridgeStub {
   startTask: ReturnType<typeof vi.fn>
   send: ReturnType<typeof vi.fn>
   resolve: ReturnType<typeof vi.fn>
+  queueAdd: ReturnType<typeof vi.fn>
 }
 
 function stubBridge(pending: PendingApproval[] = []): BridgeStub {
@@ -22,10 +23,12 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   const startTask = vi.fn(() => Promise.resolve('session_task'))
   const send = vi.fn(() => Promise.resolve())
   const resolve = vi.fn(() => Promise.resolve())
+  const queueAdd = vi.fn(() => Promise.resolve('task_x'))
   return {
     startTask,
     send,
     resolve,
+    queueAdd,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
@@ -88,6 +91,11 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       worktrees: {
         summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
         cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
+      },
+      queue: {
+        add: queueAdd,
+        remove: vi.fn(() => Promise.resolve()),
+        dispatch: vi.fn(() => Promise.resolve('session_new')),
       },
       credentials: {
         set: vi.fn(() => Promise.resolve()),
@@ -182,6 +190,30 @@ describe('ComposerDock', () => {
 
     expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [])
     expect(input).toHaveValue('')
+  })
+
+  it('parks a task in the backlog via Queue instead of launching it', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    await userEvent.type(input, 'a task for later')
+    await userEvent.click(screen.getByRole('button', { name: 'Queue task' }))
+
+    expect(stub.queueAdd).toHaveBeenCalledWith('a task for later')
+    expect(stub.startTask).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('does nothing when Queue is pressed with an empty prompt', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    await userEvent.click(screen.getByRole('button', { name: 'Queue task' }))
+
+    expect(stub.queueAdd).not.toHaveBeenCalled()
   })
 
   it('sends on Enter and treats Shift+Enter as a newline, not a send', async () => {

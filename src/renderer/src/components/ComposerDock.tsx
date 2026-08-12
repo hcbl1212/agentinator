@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { PendingApproval } from '../../../shared/bridge'
+import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads, ImageAttachment } from '../../../shared/events'
 import { useSelection } from '../state/selection'
 import { useSessions } from '../state/sessions'
@@ -122,6 +122,19 @@ export function ComposerDock(): React.JSX.Element {
         select({ kind: 'session', id })
       })
     }
+    setPrompt('')
+    setImages([])
+  }
+
+  // Park the prompt in the backlog instead of launching now (fresh tasks only,
+  // not replies). Images aren't queued — they're immediate context. Takes the
+  // bridge narrowed by the caller (the button only renders when it exists).
+  const queueTask = (activeBridge: AgentinatorBridge): void => {
+    const trimmed = prompt.trim()
+    if (trimmed === '') {
+      return
+    }
+    void activeBridge.queue.add(trimmed)
     setPrompt('')
     setImages([])
   }
@@ -251,6 +264,17 @@ export function ComposerDock(): React.JSX.Element {
               onKeyDown={onKeyDown}
               onPaste={onPaste}
             />
+            {!replying && (
+              <button
+                type="button"
+                className="console-queue"
+                aria-label="Queue task"
+                title="Park this task in the backlog"
+                onClick={() => queueTask(bridge)}
+              >
+                Queue
+              </button>
+            )}
           </div>
         </>
       )}

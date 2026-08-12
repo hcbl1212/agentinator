@@ -146,6 +146,15 @@ export interface AgentinatorBridge {
     /** Abort a scheduled decision before the grace window closes. */
     undo(requestId: string): Promise<void>
   }
+  /** The task backlog: park prompts, then dispatch them to agents on demand. */
+  queue: {
+    /** Park a prompt in the backlog; resolves to its task id. */
+    add(prompt: string): Promise<string>
+    /** Discard a queued task without running it. */
+    remove(taskId: string): Promise<void>
+    /** Launch a queued task as an agent; resolves to the new session id. */
+    dispatch(taskId: string, prompt: string): Promise<string>
+  }
   /** On-demand cleanup of finished agents' git worktrees. */
   worktrees: {
     /** How many finished worktrees are still on disk, and their total size. */

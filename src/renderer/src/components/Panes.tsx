@@ -4,6 +4,7 @@ import { AgentRail } from './AgentRail'
 import { Inspector } from './Inspector'
 import { PaneGutter } from './PaneGutter'
 import { Stream } from './Stream'
+import { TaskQueue } from './TaskQueue'
 
 const RAIL_MIN = 120
 const RAIL_MAX = 320
@@ -57,7 +58,10 @@ export function Panes(): React.JSX.Element {
       className="panes"
       style={{ gridTemplateColumns: `${railWidth}px 6px 1fr 6px ${inspectorWidth}px` }}
     >
-      <AgentRail />
+      <div className="rail-col">
+        <TaskQueue />
+        <AgentRail />
+      </div>
       <PaneGutter label="Resize agent rail" onResize={resizeRail} />
       <Stream />
       <PaneGutter label="Resize inspector" onResize={resizeInspector} />

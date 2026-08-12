@@ -109,6 +109,12 @@ export const bridge: AgentinatorBridge = {
     cleanup: () =>
       ipcRenderer.invoke('worktrees:cleanup') as Promise<{ count: number; bytes: number }>,
   },
+  queue: {
+    add: (prompt) => ipcRenderer.invoke('queue:add', prompt) as Promise<string>,
+    remove: (taskId) => ipcRenderer.invoke('queue:remove', taskId) as Promise<void>,
+    dispatch: (taskId, prompt) =>
+      ipcRenderer.invoke('queue:dispatch', taskId, prompt) as Promise<string>,
+  },
 }
 
 contextBridge.exposeInMainWorld('agentinator', bridge)

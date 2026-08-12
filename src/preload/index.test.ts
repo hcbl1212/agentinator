@@ -210,6 +210,16 @@ describe('preload bridge', () => {
     )
   })
 
+  it('routes the task queue over IPC', async () => {
+    await bridge.queue.add('a task')
+    await bridge.queue.remove('task_1')
+    await bridge.queue.dispatch('task_1', 'a task')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:add', 'a task')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:remove', 'task_1')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:dispatch', 'task_1', 'a task')
+  })
+
   it('routes approvals over IPC', async () => {
     await bridge.approvals.pending()
     await bridge.approvals.resolve('approval_1', true)

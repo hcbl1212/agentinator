@@ -105,6 +105,27 @@ test('launching a task shows it in the timeline, scoped to the new agent', async
   }
 })
 
+test('queues a task, then dispatches it to a new agent', async () => {
+  const { app, page } = await launchApp()
+  try {
+    // Park a task in the backlog instead of launching it.
+    await page.getByRole('textbox', { name: 'Task for the agent' }).fill('queued work')
+    await page.getByRole('button', { name: 'Queue task' }).click()
+
+    const queue = page.getByRole('region', { name: 'Task queue' })
+    await expect(queue.getByText('queued work')).toBeVisible()
+    // It's only in the queue — no agent yet.
+    await expect(page.getByRole('button', { name: /^queued work/ })).toHaveCount(0)
+
+    // Dispatch it → it becomes an agent in the rail and leaves the queue.
+    await queue.getByRole('button', { name: 'Dispatch queued work' }).click()
+    await expect(page.getByRole('button', { name: /^queued work/ })).toBeVisible()
+    await expect(queue.getByText('queued work')).toHaveCount(0)
+  } finally {
+    await app.close()
+  }
+})
+
 test('running two agents and switching scopes the stream to each (focus-follows)', async () => {
   const { app, page } = await launchApp()
   const stream = page.getByRole('region', { name: 'Conversation' })

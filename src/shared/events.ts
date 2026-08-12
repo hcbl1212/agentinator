@@ -84,6 +84,12 @@ export interface EventPayloads {
   'session.resumable': { sessionId: string; resumeToken: string }
   /** A dead session was reopened and is live again. */
   'session.resumed': { sessionId: string }
+  /** A task parked in the backlog, awaiting dispatch to an agent. */
+  'task.queued': { taskId: string; prompt: string }
+  /** A queued task was launched as an agent — links the task to its session. */
+  'task.dispatched': { taskId: string; sessionId: string }
+  /** A queued task was discarded without ever running. */
+  'task.removed': { taskId: string }
   /** The agent is asking the user to choose — answered via a follow-up. */
   'agent.question': {
     sessionId: string

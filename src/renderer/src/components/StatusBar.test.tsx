@@ -86,6 +86,11 @@ function stubBridge(
         summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
         cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
       },
+      queue: {
+        add: vi.fn(() => Promise.resolve('task_x')),
+        remove: vi.fn(() => Promise.resolve()),
+        dispatch: vi.fn(() => Promise.resolve('session_new')),
+      },
       credentials: {
         set: vi.fn(() => Promise.resolve()),
         has: vi.fn(() => Promise.resolve(false)),

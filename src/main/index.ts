@@ -5,6 +5,7 @@ import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
+import { createEntityId } from '../shared/events'
 import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
 import type { EmitStored } from './approvals'
@@ -114,10 +115,7 @@ export function registerAgentIpc(
     ipcMain.handle(channel, listener)
   },
 ): void {
-  // The provider a "Run task" uses. Swapping this (or making it user-selected)
-  // is all it takes to point the UI at another vendor. The e2e sets
-  // AGENTINATOR_MOCK_TASKS to drive the deterministic mock with no network.
-  const taskProvider = process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'e2e' : 'claude'
+  const taskProvider = taskProviderId()
   handle(
     'agent:current',
     () =>
@@ -135,21 +133,63 @@ export function registerAgentIpc(
     }),
   )
   handle('agent:start-task', (_event, prompt, images) =>
-    manager.start({
-      providerId: taskProvider,
-      title: taskTitle(prompt as string),
-      prompt: prompt as string,
-      images: images as ImageAttachment[] | undefined,
-      // The workspace repo — for now the process cwd (the repo when run via
-      // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
-      cwd: process.cwd(),
-    }),
+    startAgentTask(manager, prompt as string, images as ImageAttachment[] | undefined),
   )
   handle('agent:send', (_event, sessionId, text, images) =>
     manager.send(sessionId as string, text as string, images as ImageAttachment[] | undefined),
   )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
   handle('agent:dismiss', (_event, sessionId) => manager.dismiss(sessionId as string))
+}
+
+/** The task backlog: park prompts, then dispatch them to agents on demand.
+ * Queue state lives in the event log (task.queued/dispatched/removed) so the
+ * renderer reduces it live and it survives restarts. */
+export function registerQueueIpc(
+  manager: SessionManager,
+  emit: EmitStored,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('queue:add', (_event, prompt) => {
+    const taskId = createEntityId('task')
+    emit('task.queued', { taskId, prompt: prompt as string })
+    return taskId
+  })
+  handle('queue:remove', (_event, taskId) => {
+    emit('task.removed', { taskId: taskId as string })
+  })
+  handle('queue:dispatch', (_event, taskId, prompt) => {
+    const sessionId = startAgentTask(manager, prompt as string)
+    emit('task.dispatched', { taskId: taskId as string, sessionId })
+    return sessionId
+  })
+}
+
+/** The provider a "Run task" (and a dispatched queue item) uses. Swapping this
+ * is all it takes to point the UI at another vendor. The e2e sets
+ * AGENTINATOR_MOCK_TASKS to drive the deterministic mock with no network. */
+export function taskProviderId(): string {
+  return process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'e2e' : 'claude'
+}
+
+/** Start an agent from a task prompt (a fresh launch, or a dispatched queue
+ * item), returning the new session id. */
+export function startAgentTask(
+  manager: SessionManager,
+  prompt: string,
+  images?: ImageAttachment[],
+): string {
+  return manager.start({
+    providerId: taskProviderId(),
+    title: taskTitle(prompt),
+    prompt,
+    images,
+    // The workspace repo — for now the process cwd (the repo when run via
+    // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
+    cwd: process.cwd(),
+  })
 }
 
 /** A short one-line title from a task prompt for the roster and timeline. */
@@ -510,6 +550,7 @@ export async function bootstrap(
   }
 
   registerAgentIpc(manager)
+  registerQueueIpc(manager, makeEmitStored(store))
   registerWorktreeIpc(
     new WorktreeJanitor({
       endedWorktrees: () => store.endedWorktrees(),
