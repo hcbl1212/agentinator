@@ -35,6 +35,8 @@ interface Stub {
   setPreviewSettleMs: ReturnType<typeof vi.fn>
   setWorktreePreview: ReturnType<typeof vi.fn>
   setPreviewServerCommand: ReturnType<typeof vi.fn>
+  startWorktreeServer: ReturnType<typeof vi.fn>
+  stopWorktreeServers: ReturnType<typeof vi.fn>
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
   inferProps: ReturnType<typeof vi.fn>
@@ -56,6 +58,8 @@ function stub(
     settleMs?: number
     worktreePreview?: boolean
     serverCommand?: string
+    worktreeServer?: { url: string } | null
+    serverCount?: number
   } = {},
 ): Stub {
   const {
@@ -70,6 +74,8 @@ function stub(
     settleMs = 600,
     worktreePreview = false,
     serverCommand = 'npm run dev',
+    worktreeServer = null,
+    serverCount = 0,
   } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
@@ -85,6 +91,9 @@ function stub(
   const setWorktreePreview = vi.fn(() => Promise.resolve())
   const getPreviewServerCommand = vi.fn(() => Promise.resolve(serverCommand))
   const setPreviewServerCommand = vi.fn(() => Promise.resolve())
+  const startWorktreeServer = vi.fn(() => Promise.resolve(worktreeServer))
+  const stopWorktreeServers = vi.fn(() => Promise.resolve())
+  const worktreeServerCount = vi.fn(() => Promise.resolve(serverCount))
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
@@ -108,6 +117,9 @@ function stub(
       inferWrapper,
       chooseFolder,
       chooseFile,
+      startWorktreeServer,
+      stopWorktreeServers,
+      worktreeServerCount,
     },
     agent: { send: agentSend },
     settings: {
@@ -135,6 +147,8 @@ function stub(
     setPreviewSettleMs,
     setWorktreePreview,
     setPreviewServerCommand,
+    startWorktreeServer,
+    stopWorktreeServers,
     getComponent,
     setComponent,
     inferProps,
@@ -494,6 +508,84 @@ describe('Preview', () => {
       await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
     ).toBeChecked()
     expect(screen.getByRole('textbox', { name: 'Worktree dev-server command' })).toHaveValue('vite')
+  })
+
+  it('eagerly starts the worktree dev server and reports it ready', async () => {
+    const stubbed = stub({ worktreeServer: { url: 'http://localhost:5199' }, serverCount: 1 })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    )
+
+    expect(stubbed.startWorktreeServer).toHaveBeenCalledWith('s')
+    expect(await screen.findByText('Ready · http://localhost:5199')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop all preview servers' })).toHaveTextContent(
+      'Stop 1 server',
+    )
+  })
+
+  it('hints when the selected agent has no worktree to preview', async () => {
+    const stubbed = stub({ worktreeServer: null })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    )
+
+    expect(
+      await screen.findByText('Select an isolated agent with a component pinned.'),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces a worktree dev-server failure', async () => {
+    const stubbed = stub()
+    stubbed.startWorktreeServer.mockRejectedValue(new Error('port in use'))
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    )
+
+    expect(await screen.findByText('Dev server failed: port in use')).toBeInTheDocument()
+  })
+
+  it('stringifies a non-Error worktree failure', async () => {
+    const stubbed = stub()
+    stubbed.startWorktreeServer.mockRejectedValue('boom')
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    )
+
+    expect(await screen.findByText('Dev server failed: boom')).toBeInTheDocument()
+  })
+
+  it('stops all servers when preview is toggled off, and from the stop button', async () => {
+    const stubbed = stub({ worktreeServer: { url: 'http://localhost:5199' }, serverCount: 2 })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+    const toggle = await screen.findByRole('checkbox', {
+      name: "Preview the selected agent's branch",
+    })
+
+    // On → the stop button shows the (plural) running count.
+    fireEvent.click(toggle)
+    const stop = await screen.findByRole('button', { name: 'Stop all preview servers' })
+    expect(stop).toHaveTextContent('Stop 2 servers')
+
+    fireEvent.click(stop)
+    expect(stubbed.stopWorktreeServers).toHaveBeenCalledTimes(1)
+
+    // Off → stops everything too.
+    fireEvent.click(toggle)
+    expect(stubbed.stopWorktreeServers).toHaveBeenCalledTimes(2)
   })
 
   it('no-ops the settle and worktree controls without a bridge', () => {

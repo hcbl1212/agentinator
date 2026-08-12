@@ -324,6 +324,34 @@ body {
   width: 11rem;
 }
 
+.preview-worktree-status {
+  align-items: center;
+  color: var(--faint);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  gap: 0.6rem;
+}
+
+.preview-worktree-status .is-ready {
+  color: var(--accent);
+}
+
+.preview-worktree-status .is-failed {
+  color: var(--err);
+}
+
+.preview-server-stop {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+}
+
 textarea.preview-props-input {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.75rem;

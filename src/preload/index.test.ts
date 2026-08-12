@@ -166,6 +166,9 @@ describe('preload bridge', () => {
     await bridge.preview.inferWrapper('/app', 'src/Cart.tsx')
     await bridge.preview.chooseFolder()
     await bridge.preview.chooseFile('/app')
+    await bridge.preview.startWorktreeServer('session_9')
+    await bridge.preview.stopWorktreeServers()
+    await bridge.preview.worktreeServerCount()
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:capture', 'session_9', undefined)
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
@@ -194,6 +197,12 @@ describe('preload bridge', () => {
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('dialog:choose-folder')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('dialog:choose-file', '/app')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'preview:start-worktree-server',
+      'session_9',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:stop-worktree-servers')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:worktree-server-count')
   })
 
   it('routes approvals over IPC', async () => {

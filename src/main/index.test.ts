@@ -80,9 +80,11 @@ import {
   registerCredentialsIpc,
   registerDialogIpc,
   registerEventIpc,
+  reapWorktreeServer,
   registerPreviewIpc,
   registerSettingsIpc,
   registerWorktreeIpc,
+  registerWorktreeServerIpc,
   resolveWorktreePreview,
   safeEncryptor,
   taskTitle,
@@ -572,6 +574,45 @@ describe('registerWorktreeIpc', () => {
   })
 })
 
+describe('reapWorktreeServer', () => {
+  it('broadcasts every event and stops a session server only when it ends', () => {
+    const stop = vi.fn()
+    const broadcast = vi.fn()
+    const sink = reapWorktreeServer({ stop } as unknown as DevServers, broadcast)
+
+    const ended = { type: 'session.ended', payload: { sessionId: 's1' } } as unknown as StoredEvent
+    const text = { type: 'agent.text', payload: { sessionId: 's1' } } as unknown as StoredEvent
+    sink(text)
+    sink(ended)
+
+    expect(broadcast).toHaveBeenCalledTimes(2)
+    expect(stop).toHaveBeenCalledExactlyOnceWith('s1')
+  })
+})
+
+describe('registerWorktreeServerIpc', () => {
+  it('routes start, stop-all, and count to the dev-server manager', async () => {
+    const start = vi.fn(() => Promise.resolve({ url: 'http://localhost:5199' }))
+    const stopAll = vi.fn()
+    const count = vi.fn(() => 3)
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerWorktreeServerIpc(start, stopAll, count, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+
+    await expect(handlers.get('preview:start-worktree-server')?.(undefined, 's1')).resolves.toEqual(
+      {
+        url: 'http://localhost:5199',
+      },
+    )
+    expect(start).toHaveBeenCalledWith('s1')
+    handlers.get('preview:stop-worktree-servers')?.(undefined)
+    expect(stopAll).toHaveBeenCalledOnce()
+    expect(handlers.get('preview:worktree-server-count')?.(undefined)).toBe(3)
+  })
+})
+
 describe('resolveWorktreePreview', () => {
   const worktree = { repoRoot: '/repo', path: '/wt/s1', branch: 'agentinator/s1' }
   const startedEvent = (wt?: typeof worktree): { type: string; payload: unknown }[] => [
@@ -948,6 +989,10 @@ describe('bootstrap', () => {
     expect(store.list().some((event) => event.type === 'preview.captured')).toBe(true)
     // The worktree janitor is wired to the store: nothing finished yet → empty.
     expect(call('worktrees:summary')(undefined)).toEqual({ count: 0, bytes: 0 })
+    // Worktree-server IPC is wired: no isolated session → no server; none running.
+    expect(await call('preview:start-worktree-server')(undefined, 'session_1')).toBeNull()
+    call('preview:stop-worktree-servers')(undefined)
+    expect(call('preview:worktree-server-count')(undefined)).toBe(0)
     store.close()
   })
 

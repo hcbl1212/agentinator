@@ -148,12 +148,14 @@ describe('DevServers', () => {
     procs[1]?.emitStdout('Local: http://localhost:5174/')
     await b
 
+    expect(manager.count()).toBe(2)
     manager.stopAll()
 
     expect(procs[0]?.kill).toHaveBeenCalledOnce()
     expect(procs[1]?.kill).toHaveBeenCalledOnce()
     expect(manager.urlFor('s1')).toBeUndefined()
     expect(manager.urlFor('s2')).toBeUndefined()
+    expect(manager.count()).toBe(0)
   })
 })
 

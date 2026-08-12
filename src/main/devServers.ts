@@ -64,6 +64,11 @@ export class DevServers {
     return this.#servers.get(sessionId)?.url
   }
 
+  /** How many dev servers are currently running. */
+  count(): number {
+    return this.#servers.size
+  }
+
   /**
    * Ensure a dev server is running for `sessionId` in `serverCwd` (linking
    * node_modules from `sourceCwd` first), resolving to its URL. Idempotent: a

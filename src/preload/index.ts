@@ -87,6 +87,13 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('preview:infer-wrapper', root, file) as Promise<string>,
     chooseFolder: () => ipcRenderer.invoke('dialog:choose-folder') as Promise<string | null>,
     chooseFile: (base) => ipcRenderer.invoke('dialog:choose-file', base) as Promise<string | null>,
+    startWorktreeServer: (sessionId) =>
+      ipcRenderer.invoke('preview:start-worktree-server', sessionId) as Promise<{
+        url: string
+      } | null>,
+    stopWorktreeServers: () => ipcRenderer.invoke('preview:stop-worktree-servers') as Promise<void>,
+    worktreeServerCount: () =>
+      ipcRenderer.invoke('preview:worktree-server-count') as Promise<number>,
   },
   approvals: {
     pending: () => ipcRenderer.invoke('approvals:pending') as Promise<PendingApproval[]>,

@@ -73,6 +73,9 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         inferWrapper: vi.fn(() => Promise.resolve('__agentinator_wrapper.tsx')),
         chooseFolder: vi.fn(() => Promise.resolve(null)),
         chooseFile: vi.fn(() => Promise.resolve(null)),
+        startWorktreeServer: vi.fn(() => Promise.resolve(null)),
+        stopWorktreeServers: vi.fn(() => Promise.resolve()),
+        worktreeServerCount: vi.fn(() => Promise.resolve(0)),
       },
       approvals: {
         pending: vi.fn(() => Promise.resolve([])),

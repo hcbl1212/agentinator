@@ -57,6 +57,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [settleMs, setSettleMs] = useState('')
   const [worktreePreview, setWorktreePreview] = useState(false)
   const [serverCommand, setServerCommand] = useState('')
+  const [serverState, setServerState] = useState<'idle' | 'starting' | 'ready' | 'none' | 'failed'>(
+    'idle',
+  )
+  const [serverUrl, setServerUrl] = useState('')
+  const [serverError, setServerError] = useState('')
+  const [serverCount, setServerCount] = useState(0)
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -84,6 +90,11 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.getPreviewServerCommand().then((command) => {
       if (!cancelled) {
         setServerCommand(command)
+      }
+    })
+    void bridge.preview.worktreeServerCount().then((n) => {
+      if (!cancelled) {
+        setServerCount(n)
       }
     })
     void bridge.preview.getComponent().then((pinned) => {
@@ -182,11 +193,47 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.setPreviewSettleMs(trimmed === '' || !Number.isFinite(ms) ? null : ms)
   }
 
+  const refreshServerCount = (): void => {
+    void window.agentinator?.preview.worktreeServerCount().then(setServerCount)
+  }
+
   // Toggle rendering the selected agent's isolated worktree (its branch) via a
-  // harness-run dev server, and persist the command that starts it.
+  // harness-run dev server. Turning it on starts the server eagerly (so the
+  // first capture isn't slow) and reports progress; turning it off stops every
+  // running server.
   const toggleWorktreePreview = (on: boolean): void => {
     setWorktreePreview(on)
+    const preview = window.agentinator?.preview
     void window.agentinator?.settings.setWorktreePreview(on)
+    if (!on) {
+      setServerState('idle')
+      void preview?.stopWorktreeServers().then(refreshServerCount)
+      return
+    }
+    if (preview === undefined || sessionId === null || sessionId === undefined) {
+      return
+    }
+    setServerState('starting')
+    void preview
+      .startWorktreeServer(sessionId)
+      .then((result) => {
+        if (result === null) {
+          setServerState('none')
+        } else {
+          setServerState('ready')
+          setServerUrl(result.url)
+        }
+      })
+      .catch((reason: unknown) => {
+        setServerState('failed')
+        setServerError(reason instanceof Error ? reason.message : String(reason))
+      })
+      .finally(refreshServerCount)
+  }
+
+  const stopServers = (): void => {
+    setServerState('idle')
+    void window.agentinator?.preview.stopWorktreeServers().then(refreshServerCount)
   }
 
   const saveServerCommand = (): void => {
@@ -362,18 +409,42 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         <span>Preview the selected agent&rsquo;s branch (its worktree)</span>
       </label>
       {worktreePreview && (
-        <label className="preview-settle">
-          <span className="preview-field-label">Dev cmd</span>
-          <input
-            className="preview-settle-input preview-cmd-input"
-            value={serverCommand}
-            onChange={(event) => setServerCommand(event.target.value)}
-            onBlur={saveServerCommand}
-            placeholder="npm run dev"
-            aria-label="Worktree dev-server command"
-          />
-          <span className="preview-settle-unit">run in the agent&rsquo;s worktree to serve it</span>
-        </label>
+        <>
+          <label className="preview-settle">
+            <span className="preview-field-label">Dev cmd</span>
+            <input
+              className="preview-settle-input preview-cmd-input"
+              value={serverCommand}
+              onChange={(event) => setServerCommand(event.target.value)}
+              onBlur={saveServerCommand}
+              placeholder="npm run dev"
+              aria-label="Worktree dev-server command"
+            />
+            <span className="preview-settle-unit">
+              run in the agent&rsquo;s worktree to serve it
+            </span>
+          </label>
+          <div className="preview-worktree-status" role="status">
+            {serverState === 'starting' && <span>Starting dev server…</span>}
+            {serverState === 'ready' && <span className="is-ready">Ready · {serverUrl}</span>}
+            {serverState === 'none' && (
+              <span>Select an isolated agent with a component pinned.</span>
+            )}
+            {serverState === 'failed' && (
+              <span className="is-failed">Dev server failed: {serverError}</span>
+            )}
+            {serverCount > 0 && (
+              <button
+                type="button"
+                className="preview-server-stop"
+                onClick={stopServers}
+                aria-label="Stop all preview servers"
+              >
+                ⑂ Stop {serverCount} server{serverCount === 1 ? '' : 's'}
+              </button>
+            )}
+          </div>
+        </>
       )}
       {error !== null && (
         <p className="preview-error" role="alert">

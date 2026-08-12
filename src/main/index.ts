@@ -89,6 +89,21 @@ export function registerWorktreeIpc(
   handle('worktrees:cleanup', () => janitor.cleanup())
 }
 
+export function registerWorktreeServerIpc(
+  start: (sessionId: string) => Promise<{ url: string } | null>,
+  stopAll: () => void,
+  count: () => number,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('preview:start-worktree-server', (_event, sessionId) => start(sessionId as string))
+  handle('preview:stop-worktree-servers', () => {
+    stopAll()
+  })
+  handle('preview:worktree-server-count', () => count())
+}
+
 export function registerAgentIpc(
   manager: SessionManager,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
@@ -320,6 +335,21 @@ export function makeEmitStored(store: EventStore, broadcast = broadcastEvent): E
   }
 }
 
+/** The session-manager event sink: broadcast to the renderer, and stop a
+ * session's worktree dev server when it ends (dismissed / completed / failed)
+ * so preview servers don't outlive the agents that own them. */
+export function reapWorktreeServer(
+  devServers: DevServers,
+  broadcast = broadcastEvent,
+): (event: StoredEvent) => void {
+  return (event) => {
+    broadcast(event)
+    if (event.type === 'session.ended') {
+      devServers.stop((event.payload as { sessionId: string }).sessionId)
+    }
+  }
+}
+
 /**
  * Resolve the worktree dev-server preview for a session: null unless worktree
  * preview is on, a component is pinned, and the session is an isolated agent.
@@ -432,7 +462,7 @@ export async function bootstrap(
 
   const vault = new CredentialVault(settings, createEncryptor())
   const worktrees = new NodeWorktrees(join(userData, 'worktrees'), runGitSync)
-  const manager = new SessionManager(store, broadcastEvent, {
+  const manager = new SessionManager(store, reapWorktreeServer(devServers), {
     getBudgets: () => settings.budgets(),
     // Fresh/reopened sessions run on the API key only when the global toggle is
     // on and a key is stored for the provider — otherwise the plan.
@@ -470,6 +500,11 @@ export async function bootstrap(
       sizeOf: dirSizeBytes,
       worktrees,
     }),
+  )
+  registerWorktreeServerIpc(
+    (sessionId) => resolveWorktreePreview(sessionId, store, settings, devServers),
+    () => devServers.stopAll(),
+    () => devServers.count(),
   )
   registerApprovalIpc(broker)
   registerCredentialsIpc(vault, manager, store)

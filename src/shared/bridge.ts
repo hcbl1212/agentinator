@@ -127,6 +127,14 @@ export interface AgentinatorBridge {
     /** Open a native file picker; resolves to the path relative to `base`
      * (the app root), or null if cancelled. */
     chooseFile(base: string): Promise<string | null>
+    /** Start (or reuse) the dev server for a session's worktree, resolving to
+     * its URL — or null when the session isn't an isolated agent with a
+     * component pinned. Rejects if the server fails to come up. */
+    startWorktreeServer(sessionId: string): Promise<{ url: string } | null>
+    /** Stop every running worktree dev server. */
+    stopWorktreeServers(): Promise<void>
+    /** How many worktree dev servers are currently running. */
+    worktreeServerCount(): Promise<number>
   }
   approvals: {
     pending(): Promise<PendingApproval[]>
