@@ -36,11 +36,18 @@ export function StatusBar(): React.JSX.Element {
       bridge.events.count(),
       bridge.events.totalCost(),
       bridge.settings.getBudgets(),
-    ]).then(([count, total, loadedBudgets]) => {
+      // Backfill the last plan-usage snapshot so the gauge survives a reload —
+      // otherwise it only reappears once the next agent turn re-reports usage.
+      bridge.events.search('account.usage', 1),
+    ]).then(([count, total, loadedBudgets, usageEvents]) => {
       if (!cancelled) {
         setEventCount(count)
         setTotalUsd(total)
         setBudgets(loadedBudgets)
+        const lastUsage = usageEvents.at(-1)
+        if (lastUsage?.type === 'account.usage') {
+          setUsage(lastUsage.payload as EventPayloads['account.usage'])
+        }
         setLoaded(true)
       }
     })

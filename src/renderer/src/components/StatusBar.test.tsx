@@ -224,6 +224,26 @@ describe('StatusBar', () => {
     expect(screen.getByText('est. $2.3000')).toBeInTheDocument()
   })
 
+  it('backfills the plan gauge from the log on mount, surviving a reload', async () => {
+    const stub = stubBridge({ total: 2.3 })
+    const usageEvent = event(9, 'account.usage', {
+      sessionId: 's',
+      mode: 'subscription',
+      plan: 'Max',
+      windows: [{ key: 'five_hour', label: 'Session · 5h', utilization: 42, resetsAt: null }],
+      overage: null,
+      sessionCostUsd: 1,
+    })
+    ;(stub.bridge.events.search as ReturnType<typeof vi.fn>).mockResolvedValue([usageEvent])
+    window.agentinator = stub.bridge
+
+    render(<StatusBar />)
+
+    // No live event is emitted — the gauge is restored purely from the backfill.
+    expect(await screen.findByLabelText('Plan usage')).toHaveTextContent('5h 42%')
+    expect(screen.getByText('est. $2.3000')).toBeInTheDocument()
+  })
+
   it('unsubscribes on unmount and ignores a late load', async () => {
     let resolve: (values: [number, number, Budgets]) => void = () => undefined
     const stub = stubBridge()
