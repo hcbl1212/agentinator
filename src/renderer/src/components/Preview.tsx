@@ -55,6 +55,8 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [wrappering, setWrappering] = useState(false)
   const [setupOpen, setSetupOpen] = useState(true)
   const [settleMs, setSettleMs] = useState('')
+  const [worktreePreview, setWorktreePreview] = useState(false)
+  const [serverCommand, setServerCommand] = useState('')
 
   // Load the configured preview target (a real dev-server URL, or blank for the
   // bundled sample) and any pinned component once.
@@ -72,6 +74,16 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.getPreviewSettleMs().then((ms) => {
       if (!cancelled) {
         setSettleMs(String(ms))
+      }
+    })
+    void bridge.settings.getWorktreePreview().then((on) => {
+      if (!cancelled) {
+        setWorktreePreview(on)
+      }
+    })
+    void bridge.settings.getPreviewServerCommand().then((command) => {
+      if (!cancelled) {
+        setServerCommand(command)
       }
     })
     void bridge.preview.getComponent().then((pinned) => {
@@ -168,6 +180,18 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     const trimmed = settleMs.trim()
     const ms = Number(trimmed)
     void bridge.settings.setPreviewSettleMs(trimmed === '' || !Number.isFinite(ms) ? null : ms)
+  }
+
+  // Toggle rendering the selected agent's isolated worktree (its branch) via a
+  // harness-run dev server, and persist the command that starts it.
+  const toggleWorktreePreview = (on: boolean): void => {
+    setWorktreePreview(on)
+    void window.agentinator?.settings.setWorktreePreview(on)
+  }
+
+  const saveServerCommand = (): void => {
+    const trimmed = serverCommand.trim()
+    void window.agentinator?.settings.setPreviewServerCommand(trimmed === '' ? null : trimmed)
   }
 
   // Pin a component to render in isolation (through the dev server above), or
@@ -328,6 +352,29 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         />
         <span className="preview-settle-unit">ms — wait before capturing so async data loads</span>
       </label>
+      <label className="preview-worktree">
+        <input
+          type="checkbox"
+          checked={worktreePreview}
+          onChange={(event) => toggleWorktreePreview(event.target.checked)}
+          aria-label="Preview the selected agent's branch"
+        />
+        <span>Preview the selected agent&rsquo;s branch (its worktree)</span>
+      </label>
+      {worktreePreview && (
+        <label className="preview-settle">
+          <span className="preview-field-label">Dev cmd</span>
+          <input
+            className="preview-settle-input preview-cmd-input"
+            value={serverCommand}
+            onChange={(event) => setServerCommand(event.target.value)}
+            onBlur={saveServerCommand}
+            placeholder="npm run dev"
+            aria-label="Worktree dev-server command"
+          />
+          <span className="preview-settle-unit">run in the agent&rsquo;s worktree to serve it</span>
+        </label>
+      )}
       {error !== null && (
         <p className="preview-error" role="alert">
           Capture failed: {error}

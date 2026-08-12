@@ -83,11 +83,13 @@ import {
   registerPreviewIpc,
   registerSettingsIpc,
   registerWorktreeIpc,
+  resolveWorktreePreview,
   safeEncryptor,
   taskTitle,
 } from './index'
 import type { OpenDialog } from './index'
 import type { ComponentWorkbench } from './componentWorkbench'
+import type { DevServers } from './devServers'
 import type { WorktreeJanitor } from './worktreeGc'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
@@ -127,6 +129,10 @@ function fakeSettings(): SettingsStore {
     setPreviewTarget: vi.fn(),
     previewSettleMs: vi.fn(() => 600),
     setPreviewSettleMs: vi.fn(),
+    worktreePreview: vi.fn(() => false),
+    setWorktreePreview: vi.fn(),
+    previewServerCommand: vi.fn(() => 'npm run dev'),
+    setPreviewServerCommand: vi.fn(),
     component: vi.fn(() => undefined),
     setComponent: vi.fn(),
     secrets: vi.fn(() => []),
@@ -478,6 +484,10 @@ describe('registerSettingsIpc', () => {
       setPreviewTarget: vi.fn(),
       previewSettleMs: vi.fn(() => 700),
       setPreviewSettleMs: vi.fn(),
+      worktreePreview: vi.fn(() => true),
+      setWorktreePreview: vi.fn(),
+      previewServerCommand: vi.fn(() => 'npm run dev'),
+      setPreviewServerCommand: vi.fn(),
     }
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
@@ -497,6 +507,12 @@ describe('registerSettingsIpc', () => {
     expect(handlers.get('settings:get-preview-settle-ms')?.(undefined)).toBe(700)
     handlers.get('settings:set-preview-settle-ms')?.(undefined, 900)
     expect(settings.setPreviewSettleMs).toHaveBeenCalledWith(900)
+    expect(handlers.get('settings:get-worktree-preview')?.(undefined)).toBe(true)
+    handlers.get('settings:set-worktree-preview')?.(undefined, true)
+    expect(settings.setWorktreePreview).toHaveBeenCalledWith(true)
+    expect(handlers.get('settings:get-preview-server-command')?.(undefined)).toBe('npm run dev')
+    handlers.get('settings:set-preview-server-command')?.(undefined, 'pnpm dev')
+    expect(settings.setPreviewServerCommand).toHaveBeenCalledWith('pnpm dev')
   })
 
   it('returns null for an unset preview target', () => {
@@ -523,6 +539,10 @@ describe('registerSettingsIpc', () => {
       'settings:set-preview-target',
       'settings:get-preview-settle-ms',
       'settings:set-preview-settle-ms',
+      'settings:get-worktree-preview',
+      'settings:set-worktree-preview',
+      'settings:get-preview-server-command',
+      'settings:set-preview-server-command',
     ])
   })
 })
@@ -549,6 +569,81 @@ describe('registerWorktreeIpc', () => {
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual(['worktrees:summary', 'worktrees:cleanup'])
+  })
+})
+
+describe('resolveWorktreePreview', () => {
+  const worktree = { repoRoot: '/repo', path: '/wt/s1', branch: 'agentinator/s1' }
+  const startedEvent = (wt?: typeof worktree): { type: string; payload: unknown }[] => [
+    {
+      type: 'session.started',
+      payload: { sessionId: 's1', agentId: 'a', workspaceId: 'w', title: 'T', worktree: wt },
+    },
+  ]
+  const fakeStore = (events: { type: string; payload: unknown }[]): EventStore =>
+    ({ listBySession: vi.fn(() => events) }) as unknown as EventStore
+  const fakeSettingsFor = (
+    on: boolean,
+    component?: { root: string; file: string; wrapper?: string; props?: string },
+  ): SettingsStore =>
+    ({
+      worktreePreview: () => on,
+      component: () => component,
+      previewServerCommand: () => 'npm run dev',
+    }) as unknown as SettingsStore
+
+  it('returns null when worktree preview is off', async () => {
+    const ensure = vi.fn()
+    await expect(
+      resolveWorktreePreview('s1', fakeStore([]), fakeSettingsFor(false), {
+        ensure,
+      } as unknown as DevServers),
+    ).resolves.toBeNull()
+    expect(ensure).not.toHaveBeenCalled()
+  })
+
+  it('returns null when no component is pinned', async () => {
+    await expect(
+      resolveWorktreePreview('s1', fakeStore([]), fakeSettingsFor(true, undefined), {
+        ensure: vi.fn(),
+      } as unknown as DevServers),
+    ).resolves.toBeNull()
+  })
+
+  it('returns null when the session is not an isolated agent', async () => {
+    await expect(
+      resolveWorktreePreview(
+        's1',
+        fakeStore(startedEvent(undefined)),
+        fakeSettingsFor(true, { root: '/repo/frontend', file: 'src/X.tsx' }),
+        { ensure: vi.fn() } as unknown as DevServers,
+      ),
+    ).resolves.toBeNull()
+  })
+
+  it('starts the worktree dev server and returns where to write the entry', async () => {
+    const ensure = vi.fn(() => Promise.resolve('http://localhost:5199'))
+    const result = await resolveWorktreePreview(
+      's1',
+      fakeStore(startedEvent(worktree)),
+      fakeSettingsFor(true, {
+        root: '/repo/frontend',
+        file: 'src/X.tsx',
+        wrapper: 'src/Wrap.tsx',
+        props: '{}',
+      }),
+      { ensure } as unknown as DevServers,
+    )
+
+    // The server runs in the worktree's copy of the component's subdir.
+    expect(ensure).toHaveBeenCalledWith('s1', '/wt/s1/frontend', '/repo/frontend', 'npm run dev')
+    expect(result).toEqual({
+      url: 'http://localhost:5199',
+      root: '/wt/s1/frontend',
+      file: 'src/X.tsx',
+      wrapper: 'src/Wrap.tsx',
+      props: '{}',
+    })
   })
 })
 

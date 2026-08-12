@@ -59,6 +59,14 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('settings:get-preview-settle-ms') as Promise<number>,
     setPreviewSettleMs: (ms) =>
       ipcRenderer.invoke('settings:set-preview-settle-ms', ms) as Promise<void>,
+    getWorktreePreview: () =>
+      ipcRenderer.invoke('settings:get-worktree-preview') as Promise<boolean>,
+    setWorktreePreview: (on) =>
+      ipcRenderer.invoke('settings:set-worktree-preview', on) as Promise<void>,
+    getPreviewServerCommand: () =>
+      ipcRenderer.invoke('settings:get-preview-server-command') as Promise<string>,
+    setPreviewServerCommand: (command) =>
+      ipcRenderer.invoke('settings:set-preview-server-command', command) as Promise<void>,
   },
   preview: {
     capture: (sessionId, url) =>

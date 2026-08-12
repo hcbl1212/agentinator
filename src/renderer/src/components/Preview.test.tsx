@@ -33,6 +33,8 @@ interface Stub {
   setPreviewTarget: ReturnType<typeof vi.fn>
   getPreviewSettleMs: ReturnType<typeof vi.fn>
   setPreviewSettleMs: ReturnType<typeof vi.fn>
+  setWorktreePreview: ReturnType<typeof vi.fn>
+  setPreviewServerCommand: ReturnType<typeof vi.fn>
   getComponent: ReturnType<typeof vi.fn>
   setComponent: ReturnType<typeof vi.fn>
   inferProps: ReturnType<typeof vi.fn>
@@ -52,6 +54,8 @@ function stub(
     chosenFolder?: string | null
     chosenFile?: string | null
     settleMs?: number
+    worktreePreview?: boolean
+    serverCommand?: string
   } = {},
 ): Stub {
   const {
@@ -64,6 +68,8 @@ function stub(
     chosenFolder = '/picked/app',
     chosenFile = 'src/Picked.tsx',
     settleMs = 600,
+    worktreePreview = false,
+    serverCommand = 'npm run dev',
   } = options
   let appended: ((event: StoredEvent) => void) | undefined
   const unsubscribe = vi.fn()
@@ -75,6 +81,10 @@ function stub(
   const setPreviewTarget = vi.fn(() => Promise.resolve())
   const getPreviewSettleMs = vi.fn(() => Promise.resolve(settleMs))
   const setPreviewSettleMs = vi.fn(() => Promise.resolve())
+  const getWorktreePreview = vi.fn(() => Promise.resolve(worktreePreview))
+  const setWorktreePreview = vi.fn(() => Promise.resolve())
+  const getPreviewServerCommand = vi.fn(() => Promise.resolve(serverCommand))
+  const setPreviewServerCommand = vi.fn(() => Promise.resolve())
   const getComponent = vi.fn(() => Promise.resolve(component))
   const setComponent = vi.fn(() => Promise.resolve())
   const inferProps = vi.fn(() => Promise.resolve(inferred))
@@ -100,7 +110,16 @@ function stub(
       chooseFile,
     },
     agent: { send: agentSend },
-    settings: { getPreviewTarget, setPreviewTarget, getPreviewSettleMs, setPreviewSettleMs },
+    settings: {
+      getPreviewTarget,
+      setPreviewTarget,
+      getPreviewSettleMs,
+      setPreviewSettleMs,
+      getWorktreePreview,
+      setWorktreePreview,
+      getPreviewServerCommand,
+      setPreviewServerCommand,
+    },
   } as unknown as AgentinatorBridge
   return {
     bridge,
@@ -114,6 +133,8 @@ function stub(
     setPreviewTarget,
     getPreviewSettleMs,
     setPreviewSettleMs,
+    setWorktreePreview,
+    setPreviewServerCommand,
     getComponent,
     setComponent,
     inferProps,
@@ -436,7 +457,46 @@ describe('Preview', () => {
     expect(stubbed.setPreviewSettleMs).toHaveBeenCalledWith(null)
   })
 
-  it('no-ops the settle field without a bridge', () => {
+  it('toggles worktree preview on and edits the dev-server command', async () => {
+    const stubbed = stub()
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    // Off by default → no dev-command field yet.
+    const toggle = await screen.findByRole('checkbox', {
+      name: "Preview the selected agent's branch",
+    })
+    expect(toggle).not.toBeChecked()
+    expect(screen.queryByRole('textbox', { name: 'Worktree dev-server command' })).toBeNull()
+
+    fireEvent.click(toggle)
+    expect(stubbed.setWorktreePreview).toHaveBeenCalledWith(true)
+
+    const command = screen.getByRole('textbox', { name: 'Worktree dev-server command' })
+    fireEvent.change(command, { target: { value: 'pnpm dev' } })
+    fireEvent.blur(command)
+    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith('pnpm dev')
+
+    // Blanking the command clears it back to the default.
+    fireEvent.change(command, { target: { value: '  ' } })
+    fireEvent.blur(command)
+    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith(null)
+  })
+
+  it('loads worktree preview already enabled, showing the command', async () => {
+    const stubbed = stub({ worktreePreview: true, serverCommand: 'vite' })
+    window.agentinator = stubbed.bridge
+
+    render(<Preview sessionId="s" />)
+
+    expect(
+      await screen.findByRole('checkbox', { name: "Preview the selected agent's branch" }),
+    ).toBeChecked()
+    expect(screen.getByRole('textbox', { name: 'Worktree dev-server command' })).toHaveValue('vite')
+  })
+
+  it('no-ops the settle and worktree controls without a bridge', () => {
     window.agentinator = undefined
 
     render(<Preview sessionId="s" />)
@@ -445,6 +505,11 @@ describe('Preview', () => {
     })
     fireEvent.change(input, { target: { value: '1500' } })
     fireEvent.blur(input)
+
+    // Toggling worktree preview flips local state (revealing the command field)
+    // but persists nothing, and editing the command is a no-op too.
+    fireEvent.click(screen.getByRole('checkbox', { name: "Preview the selected agent's branch" }))
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Worktree dev-server command' }))
     // No bridge → nothing thrown, nothing persisted.
   })
 

@@ -42,6 +42,10 @@ describe('preload bridge', () => {
     await bridge.settings.setPreviewTarget('http://localhost:3001/')
     await bridge.settings.getPreviewSettleMs()
     await bridge.settings.setPreviewSettleMs(900)
+    await bridge.settings.getWorktreePreview()
+    await bridge.settings.setWorktreePreview(true)
+    await bridge.settings.getPreviewServerCommand()
+    await bridge.settings.setPreviewServerCommand('vite')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-budgets')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-budget', 'day', 12)
@@ -54,6 +58,13 @@ describe('preload bridge', () => {
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-preview-settle-ms')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-preview-settle-ms', 900)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-worktree-preview')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:set-worktree-preview', true)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('settings:get-preview-server-command')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'settings:set-preview-server-command',
+      'vite',
+    )
   })
 
   it('routes events.list over IPC with the given cursor', async () => {

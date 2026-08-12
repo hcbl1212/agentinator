@@ -310,6 +310,20 @@ body {
   text-transform: none;
 }
 
+.preview-worktree {
+  align-items: center;
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.4rem;
+}
+
+.preview-cmd-input {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  width: 11rem;
+}
+
 textarea.preview-props-input {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.75rem;

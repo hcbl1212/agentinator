@@ -15,6 +15,7 @@ import { makePropInferrer, makeWrapperInferrer } from './componentInference'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
 import { EventStore } from './eventStore'
+import { DevServers, linkNodeModules, spawnDevServer } from './devServers'
 import { runGit, runGitSync } from './git'
 import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
 import { NodeWorktrees } from './worktrees'
@@ -160,6 +161,14 @@ export function registerSettingsIpc(
   handle('settings:get-preview-settle-ms', () => settings.previewSettleMs())
   handle('settings:set-preview-settle-ms', (_event, ms) => {
     settings.setPreviewSettleMs(ms as number | null)
+  })
+  handle('settings:get-worktree-preview', () => settings.worktreePreview())
+  handle('settings:set-worktree-preview', (_event, on) => {
+    settings.setWorktreePreview(on === true)
+  })
+  handle('settings:get-preview-server-command', () => settings.previewServerCommand())
+  handle('settings:set-preview-server-command', (_event, command) => {
+    settings.setPreviewServerCommand(command as string | null)
   })
 }
 
@@ -311,6 +320,49 @@ export function makeEmitStored(store: EventStore, broadcast = broadcastEvent): E
   }
 }
 
+/**
+ * Resolve the worktree dev-server preview for a session: null unless worktree
+ * preview is on, a component is pinned, and the session is an isolated agent.
+ * Then start (or reuse) a dev server in the worktree's server dir and return
+ * its URL plus where the component entry should be written.
+ */
+export async function resolveWorktreePreview(
+  sessionId: string,
+  store: EventStore,
+  settings: SettingsStore,
+  devServers: DevServers,
+): Promise<{ url: string; root: string; file: string; wrapper?: string; props?: string } | null> {
+  if (!settings.worktreePreview()) {
+    return null
+  }
+  const component = settings.component()
+  if (component === undefined) {
+    return null
+  }
+  const started = store.listBySession(sessionId).find((event) => event.type === 'session.started')
+    ?.payload as EventPayloads['session.started'] | undefined
+  const worktree = started?.worktree
+  if (worktree === undefined) {
+    return null
+  }
+  // The component root sits under the repo (e.g. <repo>/frontend); the same
+  // subdir inside the worktree is where the isolated dev server runs.
+  const serverCwd = join(worktree.path, relative(worktree.repoRoot, component.root))
+  const url = await devServers.ensure(
+    sessionId,
+    serverCwd,
+    component.root,
+    settings.previewServerCommand(),
+  )
+  return {
+    url,
+    root: serverCwd,
+    file: component.file,
+    wrapper: component.wrapper,
+    props: component.props,
+  }
+}
+
 export async function bootstrap(
   electronApp = app,
   createStore: (dbPath: string) => EventStore = (dbPath) => new EventStore(dbPath),
@@ -358,6 +410,10 @@ export async function bootstrap(
   // target later.
   const sampleTarget = join(import.meta.dirname, '../../examples/sample-web/index.html')
   const workbench = new ComponentWorkbench()
+  // One dev server per agent worktree, so an isolated agent's component edits
+  // can be previewed on its own branch. node_modules is gitignored (absent in a
+  // fresh worktree), so link the main checkout's before starting.
+  const devServers = new DevServers({ spawn: spawnDevServer, linkModules: linkNodeModules })
   const preview = new PreviewController(
     createPreviewBrowser(),
     createArtifacts(join(userData, 'screenshots')),
@@ -369,6 +425,8 @@ export async function bootstrap(
       workbench,
       sample: sampleTarget,
       settleMs: settings.previewSettleMs.bind(settings),
+      worktreePreview: (sessionId) =>
+        resolveWorktreePreview(sessionId, store, settings, devServers),
     },
   )
 
@@ -433,6 +491,7 @@ export async function bootstrap(
   // `npm run dev`) alive is a trap. Revisit as a tray/dock mode once agents
   // run in the main process and must outlive the window.
   electronApp.on('window-all-closed', () => {
+    devServers.stopAll()
     electronApp.quit()
   })
 

@@ -145,6 +145,25 @@ describe('SettingsStore', () => {
     store.close()
   })
 
+  it('toggles worktree preview and persists the dev-server command', () => {
+    const store = new SettingsStore()
+
+    expect(store.worktreePreview()).toBe(false)
+    store.setWorktreePreview(true)
+    expect(store.worktreePreview()).toBe(true)
+    store.setWorktreePreview(false)
+    expect(store.worktreePreview()).toBe(false)
+
+    // Defaults to Vite's dev script; trims; blank clears back to default.
+    expect(store.previewServerCommand()).toBe('npm run dev')
+    store.setPreviewServerCommand('  pnpm dev  ')
+    expect(store.previewServerCommand()).toBe('pnpm dev')
+    store.setPreviewServerCommand('vite')
+    store.setPreviewServerCommand(null) // null clears too
+    expect(store.previewServerCommand()).toBe('npm run dev')
+    store.close()
+  })
+
   it('persists the component-workbench target incl. an optional wrapper', () => {
     const store = new SettingsStore()
 

@@ -18,6 +18,18 @@ export interface PreviewTargeting {
   sample: string
   /** How long to let the page settle after load before the shot, in ms. */
   settleMs: () => number
+  /** When worktree preview is on and the session is an isolated agent with a
+   * component pinned, resolves the worktree dev-server URL, the dir to write the
+   * entry into, and the pinned component's file/wrapper/props. Null otherwise —
+   * the capture then falls through to the normal target. Async because it may
+   * start the dev server. */
+  worktreePreview: (sessionId: string) => Promise<{
+    url: string
+    root: string
+    file: string
+    wrapper?: string
+    props?: string
+  } | null>
 }
 
 /**
@@ -59,6 +71,24 @@ export class PreviewController {
     return base ?? sample
   }
 
+  /** The capture URL for rendering the pinned component from the selected
+   * agent's worktree (its own branch via a harness-run dev server), or null to
+   * fall through to the normal target. Writes the entry into the worktree so
+   * the running dev server serves the agent's edits. */
+  async #worktreeTarget(sessionId: string): Promise<string | null> {
+    const worktree = await this.#targeting.worktreePreview(sessionId)
+    if (worktree === null) {
+      return null
+    }
+    const entry = this.#targeting.workbench.prepare(
+      worktree.root,
+      worktree.file,
+      worktree.wrapper,
+      worktree.props,
+    )
+    return `${worktree.url.replace(/\/$/, '')}${entry}`
+  }
+
   /** Capture a target (the configured one when none is given) for a session,
    * returning the artifact ref. */
   async capture(sessionId: string, url?: string): Promise<string> {
@@ -92,7 +122,7 @@ export class PreviewController {
     console: ConsoleEntry[]
     network: NetworkEntry[]
   }> {
-    const target = url ?? this.#resolveTarget()
+    const target = url ?? (await this.#worktreeTarget(sessionId)) ?? this.#resolveTarget()
     const shot = await this.#browser.capture(target, this.#targeting.settleMs())
     const ref = this.#artifacts.put(shot.png)
     this.#emit('preview.captured', {

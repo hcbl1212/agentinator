@@ -7,6 +7,9 @@ import { clampSettleMs, DEFAULT_SETTLE_MS } from '../shared/preview'
 /** The session cap defaults to $5; time windows are uncapped until set. */
 const DEFAULT_SESSION_BUDGET_USD = 5
 
+/** The default dev-server command for worktree preview — Vite-based apps. */
+const DEFAULT_SERVER_COMMAND = 'npm run dev'
+
 /**
  * A tiny persisted key–value store for user settings (distinct from the
  * append-only event log — settings are mutable state, not history). Backed by
@@ -116,6 +119,39 @@ export class SettingsStore {
       return
     }
     this.#set.run('previewSettleMs', String(clampSettleMs(ms)))
+  }
+
+  /** Whether a capture should render the selected agent's isolated worktree
+   * (its branch) via a harness-run dev server, instead of the main checkout.
+   * Off by default. */
+  worktreePreview(): boolean {
+    return (this.#get.get('worktreePreview') as { value: string } | undefined)?.value === '1'
+  }
+
+  setWorktreePreview(on: boolean): void {
+    if (on) {
+      this.#set.run('worktreePreview', '1')
+    } else {
+      this.#delete.run('worktreePreview')
+    }
+  }
+
+  /** The command the harness runs to start the app's dev server inside a
+   * worktree (e.g. `npm run dev`). */
+  previewServerCommand(): string {
+    return (
+      (this.#get.get('previewServerCommand') as { value: string } | undefined)?.value ??
+      DEFAULT_SERVER_COMMAND
+    )
+  }
+
+  setPreviewServerCommand(command: string | null): void {
+    const trimmed = command?.trim() ?? ''
+    if (trimmed === '') {
+      this.#delete.run('previewServerCommand')
+    } else {
+      this.#set.run('previewServerCommand', trimmed)
+    }
   }
 
   /** The component-workbench target: the app root (to write the entry into), the

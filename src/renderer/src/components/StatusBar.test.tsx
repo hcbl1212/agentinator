@@ -48,6 +48,10 @@ function stubBridge(
         setPreviewTarget: vi.fn(() => Promise.resolve()),
         getPreviewSettleMs: vi.fn(() => Promise.resolve(600)),
         setPreviewSettleMs: vi.fn(() => Promise.resolve()),
+        getWorktreePreview: vi.fn(() => Promise.resolve(false)),
+        setWorktreePreview: vi.fn(() => Promise.resolve()),
+        getPreviewServerCommand: vi.fn(() => Promise.resolve('npm run dev')),
+        setPreviewServerCommand: vi.fn(() => Promise.resolve()),
       },
       agent: {
         current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })),

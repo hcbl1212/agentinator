@@ -13,6 +13,13 @@ function setup(
     shot?: Screenshot
     previewTarget?: string
     component?: { root: string; file: string; wrapper?: string; props?: string }
+    worktreePreview?: {
+      url: string
+      root: string
+      file: string
+      wrapper?: string
+      props?: string
+    } | null
   } = {},
 ): {
   controller: PreviewController
@@ -53,6 +60,7 @@ function setup(
       workbench: { prepare, clear: vi.fn() } as unknown as ComponentWorkbench,
       sample: SAMPLE,
       settleMs: () => SETTLE,
+      worktreePreview: () => Promise.resolve(options.worktreePreview ?? null),
     },
   )
   return { controller, browser, store, emit, prepare }
@@ -111,6 +119,35 @@ describe('PreviewController', () => {
     // Trailing slash collapsed; the workbench entry path appended.
     expect(browser.capture).toHaveBeenCalledWith(
       'http://localhost:3001/__agentinator_component.html',
+      SETTLE,
+    )
+  })
+
+  it("captures the component from the selected agent's worktree when enabled", async () => {
+    const { controller, browser, prepare } = setup({
+      // The global target is the main checkout; the worktree wins for this shot.
+      previewTarget: 'http://localhost:3001/',
+      component: { root: '/app', file: 'src/Cart.tsx' },
+      worktreePreview: {
+        url: 'http://localhost:5199/',
+        root: '/wt/session_1/app',
+        file: 'src/Cart.tsx',
+        wrapper: 'src/PreviewProviders.tsx',
+        props: '{ n: 2 }',
+      },
+    })
+
+    await controller.capture('session_1')
+
+    // The entry is written into the worktree, and its dev server is captured.
+    expect(prepare).toHaveBeenCalledWith(
+      '/wt/session_1/app',
+      'src/Cart.tsx',
+      'src/PreviewProviders.tsx',
+      '{ n: 2 }',
+    )
+    expect(browser.capture).toHaveBeenCalledWith(
+      'http://localhost:5199/__agentinator_component.html',
       SETTLE,
     )
   })
