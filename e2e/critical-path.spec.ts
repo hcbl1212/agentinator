@@ -75,6 +75,11 @@ async function startComponentFixture(): Promise<{
     logLevel: 'silent',
     plugins: [react()],
     server: { port: 4319 },
+    // Pre-bundle the mount deps at startup — including react-dom/client, which
+    // the entry loads via a dynamic import (the React 19 mount path). Without
+    // this, a cold optimize (fresh CI node_modules) races that import and it
+    // 504s ("Failed to fetch dynamically imported module").
+    optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client'] },
   })
   await server.listen()
   const url = server.resolvedUrls?.local[0] ?? ''
