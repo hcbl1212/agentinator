@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, shell } from 'electron'
 
 import type { BudgetScope } from '../shared/budget'
 import { createEntityId } from '../shared/events'
@@ -15,6 +15,8 @@ import { ComponentWorkbench } from './componentWorkbench'
 import { makePropInferrer, makeWrapperInferrer } from './componentInference'
 import { CredentialVault } from './credentials'
 import type { Encryptor } from './credentials'
+import { AttentionTracker } from './attention'
+import type { AttentionNotifier } from './attention'
 import { EventStore } from './eventStore'
 import { DevServers, linkNodeModules, spawnDevServer } from './devServers'
 import type { GitRunner } from './git'
@@ -379,11 +381,13 @@ export function makeEmitStored(store: EventStore, broadcast = broadcastEvent): E
   }
 }
 
-/** The session-manager event sink: broadcast to the renderer, and stop a
- * session's worktree dev server when it ends (dismissed / completed / failed)
- * so preview servers don't outlive the agents that own them. */
-export function reapWorktreeServer(
+/** The one place every emitted event flows through: broadcast it to the
+ * renderer, stop a session's worktree dev server when it ends (so preview
+ * servers don't outlive their agents), and feed the attention tracker (native
+ * notifications + dock badge). */
+export function mainEventSink(
   devServers: DevServers,
+  attention: AttentionTracker,
   broadcast = broadcastEvent,
 ): (event: StoredEvent) => void {
   return (event) => {
@@ -391,6 +395,20 @@ export function reapWorktreeServer(
     if (event.type === 'session.ended') {
       devServers.stop((event.payload as { sessionId: string }).sessionId)
     }
+    attention.observe(event)
+  }
+}
+
+/** The native side of the attention inbox: a system notification and the dock
+ * badge (macOS only — app.dock is undefined elsewhere). */
+export function nativeAttentionNotifier(): AttentionNotifier {
+  return {
+    notify: (title, body) => {
+      new Notification({ title, body }).show()
+    },
+    setBadge: (count) => {
+      app.dock?.setBadge(count > 0 ? String(count) : '')
+    },
   }
 }
 
@@ -486,7 +504,16 @@ export async function bootstrap(
   registerEventIpc(store)
   registerSettingsIpc(settings)
 
-  const broker = new PermissionBroker(makeEmitStored(store))
+  // One dev server per agent worktree, so an isolated agent's component edits
+  // can be previewed on its own branch. node_modules is gitignored (absent in a
+  // fresh worktree), so link the main checkout's before starting.
+  const devServers = new DevServers({ spawn: spawnDevServer, linkModules: linkNodeModules })
+  const attention = new AttentionTracker(nativeAttentionNotifier())
+  // Every emitted event flows through this: broadcast, reap dev servers on end,
+  // and drive the attention inbox's notifications + dock badge.
+  const sink = mainEventSink(devServers, attention)
+
+  const broker = new PermissionBroker(makeEmitStored(store, sink))
   const decide = broker.decide.bind(broker)
 
   // The visual-feedback loop: capture the target app into the artifact store
@@ -497,14 +524,10 @@ export async function bootstrap(
   // target later.
   const sampleTarget = join(import.meta.dirname, '../../examples/sample-web/index.html')
   const workbench = new ComponentWorkbench()
-  // One dev server per agent worktree, so an isolated agent's component edits
-  // can be previewed on its own branch. node_modules is gitignored (absent in a
-  // fresh worktree), so link the main checkout's before starting.
-  const devServers = new DevServers({ spawn: spawnDevServer, linkModules: linkNodeModules })
   const preview = new PreviewController(
     createPreviewBrowser(),
     createArtifacts(join(userData, 'screenshots')),
-    makeEmitStored(store),
+    makeEmitStored(store, sink),
     // A pinned component wins; else the configured dev-server URL; else sample.
     {
       previewTarget: settings.previewTarget.bind(settings),
@@ -519,7 +542,7 @@ export async function bootstrap(
 
   const vault = new CredentialVault(settings, createEncryptor())
   const worktrees = new NodeWorktrees(join(userData, 'worktrees'), runGitSync)
-  const manager = new SessionManager(store, reapWorktreeServer(devServers), {
+  const manager = new SessionManager(store, sink, {
     getBudgets: () => settings.budgets(),
     // Fresh/reopened sessions run on the API key only when the global toggle is
     // on and a key is stored for the provider — otherwise the plan.
@@ -550,7 +573,7 @@ export async function bootstrap(
   }
 
   registerAgentIpc(manager)
-  registerQueueIpc(manager, makeEmitStored(store))
+  registerQueueIpc(manager, makeEmitStored(store, sink))
   registerWorktreeIpc(
     new WorktreeJanitor({
       endedWorktrees: () => store.endedWorktrees(),

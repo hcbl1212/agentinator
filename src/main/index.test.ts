@@ -6,56 +6,77 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EventStore } from './eventStore'
 
-const { mockApp, MockBrowserWindow, mockShell, mockDialog, mockIpcMain, mockSafeStorage } =
-  vi.hoisted(() => {
-    type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
+const {
+  mockApp,
+  MockBrowserWindow,
+  MockNotification,
+  mockShell,
+  mockDialog,
+  mockIpcMain,
+  mockSafeStorage,
+} = vi.hoisted(() => {
+  type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
 
-    class MockBrowserWindow {
-      static instances: MockBrowserWindow[] = []
-      static getAllWindows = vi.fn((): MockBrowserWindow[] => [])
-      options: Record<string, unknown>
-      loadFile = vi.fn()
-      loadURL = vi.fn()
-      windowOpenHandler: WindowOpenHandler | undefined
-      webContents = {
-        send: vi.fn(),
-        setWindowOpenHandler: (handler: WindowOpenHandler): void => {
-          this.windowOpenHandler = handler
-        },
-      }
-
-      constructor(options: Record<string, unknown>) {
-        this.options = options
-        MockBrowserWindow.instances.push(this)
-      }
-    }
-
-    return {
-      MockBrowserWindow,
-      mockApp: {
-        whenReady: vi.fn(() => Promise.resolve()),
-        on: vi.fn(),
-        quit: vi.fn(),
-        getPath: vi.fn(),
-        getAppPath: vi.fn(() => '/app'),
-        getVersion: vi.fn(() => '0.1.0-test'),
-      },
-      mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
-      mockDialog: {
-        showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true, filePaths: [] })),
-      },
-      mockIpcMain: { handle: vi.fn() },
-      mockSafeStorage: {
-        isEncryptionAvailable: vi.fn(() => true),
-        encryptString: vi.fn((s: string) => Buffer.from(s, 'utf8')),
-        decryptString: vi.fn((b: Buffer) => b.toString('utf8')),
+  class MockBrowserWindow {
+    static instances: MockBrowserWindow[] = []
+    static getAllWindows = vi.fn((): MockBrowserWindow[] => [])
+    options: Record<string, unknown>
+    loadFile = vi.fn()
+    loadURL = vi.fn()
+    windowOpenHandler: WindowOpenHandler | undefined
+    webContents = {
+      send: vi.fn(),
+      setWindowOpenHandler: (handler: WindowOpenHandler): void => {
+        this.windowOpenHandler = handler
       },
     }
-  })
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options
+      MockBrowserWindow.instances.push(this)
+    }
+  }
+
+  class MockNotification {
+    static instances: MockNotification[] = []
+    options: { title?: string; body?: string }
+    show = vi.fn()
+
+    constructor(options: { title?: string; body?: string }) {
+      this.options = options
+      MockNotification.instances.push(this)
+    }
+  }
+
+  return {
+    MockBrowserWindow,
+    MockNotification,
+    mockApp: {
+      whenReady: vi.fn(() => Promise.resolve()),
+      on: vi.fn(),
+      quit: vi.fn(),
+      getPath: vi.fn(),
+      getAppPath: vi.fn(() => '/app'),
+      getVersion: vi.fn(() => '0.1.0-test'),
+      dock: { setBadge: vi.fn() },
+    },
+    mockShell: { openExternal: vi.fn(() => Promise.resolve()) },
+    mockDialog: {
+      showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true, filePaths: [] })),
+    },
+    mockIpcMain: { handle: vi.fn() },
+    mockSafeStorage: {
+      isEncryptionAvailable: vi.fn(() => true),
+      encryptString: vi.fn((s: string) => Buffer.from(s, 'utf8')),
+      decryptString: vi.fn((b: Buffer) => b.toString('utf8')),
+    },
+  }
+})
 
 vi.mock('electron', () => ({
   app: mockApp,
   BrowserWindow: MockBrowserWindow,
+  Notification: MockNotification,
   shell: mockShell,
   dialog: mockDialog,
   ipcMain: mockIpcMain,
@@ -80,7 +101,8 @@ import {
   registerCredentialsIpc,
   registerDialogIpc,
   registerEventIpc,
-  reapWorktreeServer,
+  mainEventSink,
+  nativeAttentionNotifier,
   registerPreviewIpc,
   registerQueueIpc,
   registerSettingsIpc,
@@ -94,6 +116,7 @@ import {
   taskTitle,
 } from './index'
 import type { OpenDialog } from './index'
+import type { AttentionTracker } from './attention'
 import type { ComponentWorkbench } from './componentWorkbench'
 import type { DevServers } from './devServers'
 import type { GitRunner } from './git'
@@ -579,11 +602,16 @@ describe('registerWorktreeIpc', () => {
   })
 })
 
-describe('reapWorktreeServer', () => {
-  it('broadcasts every event and stops a session server only when it ends', () => {
+describe('mainEventSink', () => {
+  it('broadcasts, reaps the server on end, and feeds the attention tracker', () => {
     const stop = vi.fn()
     const broadcast = vi.fn()
-    const sink = reapWorktreeServer({ stop } as unknown as DevServers, broadcast)
+    const observe = vi.fn()
+    const sink = mainEventSink(
+      { stop } as unknown as DevServers,
+      { observe } as unknown as AttentionTracker,
+      broadcast,
+    )
 
     const ended = { type: 'session.ended', payload: { sessionId: 's1' } } as unknown as StoredEvent
     const text = { type: 'agent.text', payload: { sessionId: 's1' } } as unknown as StoredEvent
@@ -591,7 +619,35 @@ describe('reapWorktreeServer', () => {
     sink(ended)
 
     expect(broadcast).toHaveBeenCalledTimes(2)
+    expect(observe).toHaveBeenCalledTimes(2)
     expect(stop).toHaveBeenCalledExactlyOnceWith('s1')
+  })
+})
+
+describe('nativeAttentionNotifier', () => {
+  it('shows a system notification and sets/clears the dock badge', () => {
+    const notifier = nativeAttentionNotifier()
+
+    notifier.notify('Approval needed', 'run Bash')
+    const shown = MockNotification.instances.at(-1)
+    expect(shown?.options).toEqual({ title: 'Approval needed', body: 'run Bash' })
+    expect(shown?.show).toHaveBeenCalledOnce()
+
+    notifier.setBadge(3)
+    expect(mockApp.dock.setBadge).toHaveBeenCalledWith('3')
+    notifier.setBadge(0)
+    expect(mockApp.dock.setBadge).toHaveBeenCalledWith('')
+  })
+
+  it('is a no-op for the dock badge off macOS (no app.dock)', () => {
+    const real = mockApp.dock
+    // @ts-expect-error — simulate a platform where app.dock is absent.
+    mockApp.dock = undefined
+    try {
+      expect(() => nativeAttentionNotifier().setBadge(2)).not.toThrow()
+    } finally {
+      mockApp.dock = real
+    }
   })
 })
 
