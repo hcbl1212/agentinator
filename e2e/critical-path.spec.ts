@@ -244,6 +244,31 @@ test('a session survives an app restart and reopens on reply', async () => {
   }
 })
 
+test('the inbox surfaces an agent that needs you and jumps to it', async () => {
+  const { app, page } = await launchApp()
+  try {
+    await launchTask(page, 'needs approval to write')
+
+    // The status-bar inbox chip counts the pending approval.
+    const chip = page.getByRole('button', { name: 'inbox 1' })
+    await expect(chip).toBeVisible()
+    await chip.click()
+
+    // The triage panel lists it; clicking an item jumps to the agent and closes.
+    const panel = page.getByRole('dialog', { name: 'Attention inbox' })
+    await expect(panel.getByText(/wants to run/i)).toBeVisible()
+    await panel.getByRole('button', { name: /Go to/ }).click()
+    await expect(panel).toHaveCount(0)
+
+    // Handling the approval empties the inbox.
+    await page.getByLabel('Pending approvals').getByRole('button', { name: 'Approve' }).click()
+    await expect(page.getByRole('button', { name: 'inbox 1' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'inbox' })).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
+
 test('an approval card gates a write; approving lets it proceed', async () => {
   const { app, page } = await launchApp()
   const stream = page.getByRole('region', { name: 'Conversation' })

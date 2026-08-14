@@ -7,6 +7,9 @@ import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { Budgets } from '../../../shared/budget'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
 import { StatusBar } from './StatusBar'
+import { InboxProvider } from '../state/inbox'
+import { SelectionProvider } from '../state/selection'
+import { SessionsProvider } from '../state/sessions'
 
 interface BridgeStub {
   bridge: AgentinatorBridge
@@ -22,7 +25,7 @@ function budgets(overrides: Partial<Budgets> = {}): Budgets {
 function stubBridge(
   options: { count?: number; total?: number; budgets?: Budgets } = {},
 ): BridgeStub {
-  let appended: ((event: StoredEvent) => void) | undefined
+  const listeners: ((event: StoredEvent) => void)[] = []
   const unsubscribe = vi.fn()
   const setBudget = vi.fn(() => Promise.resolve())
   return {
@@ -35,7 +38,7 @@ function stubBridge(
         tail: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
-          appended = listener
+          listeners.push(listener)
           return unsubscribe as () => void
         }),
       },
@@ -97,7 +100,7 @@ function stubBridge(
         clear: vi.fn(() => Promise.resolve()),
       },
     },
-    emit: (event) => appended?.(event),
+    emit: (event) => listeners.forEach((listener) => listener(event)),
     unsubscribe,
     setBudget,
   }
@@ -123,7 +126,15 @@ afterEach(() => {
 
 describe('StatusBar', () => {
   it('shows placeholders when no bridge is available (plain browser/test)', () => {
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
 
     expect(screen.getByText('log —')).toBeInTheDocument()
     expect(screen.getByText('$0.0000')).toBeInTheDocument()
@@ -134,7 +145,15 @@ describe('StatusBar', () => {
   it('backfills total spend and event count on mount', async () => {
     window.agentinator = stubBridge({ count: 3, total: 1.2345 }).bridge
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
 
     await waitFor(() => {
       expect(screen.getByText('$1.2345')).toBeInTheDocument()
@@ -147,7 +166,15 @@ describe('StatusBar', () => {
     const stub = stubBridge({ total: 1 })
     window.agentinator = stub.bridge
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     await waitFor(() => {
       expect(screen.getByText('$1.0000')).toBeInTheDocument()
     })
@@ -169,7 +196,15 @@ describe('StatusBar', () => {
     window.agentinator = stub.bridge
     const user = userEvent.setup()
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'budgets' })).toBeInTheDocument()
     })
@@ -192,7 +227,15 @@ describe('StatusBar', () => {
     window.agentinator = stub.bridge
     const user = userEvent.setup()
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'keys' })).toBeInTheDocument()
     })
@@ -208,7 +251,15 @@ describe('StatusBar', () => {
     const stub = stubBridge({ total: 2.3 })
     window.agentinator = stub.bridge
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     await waitFor(() => {
       expect(screen.getByText('$2.3000')).toBeInTheDocument()
     })
@@ -250,7 +301,15 @@ describe('StatusBar', () => {
     ;(stub.bridge.events.search as ReturnType<typeof vi.fn>).mockResolvedValue([usageEvent])
     window.agentinator = stub.bridge
 
-    render(<StatusBar />)
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
 
     // No live event is emitted — the gauge is restored purely from the backfill.
     expect(await screen.findByLabelText('Plan usage')).toHaveTextContent('5h 42%')
@@ -274,13 +333,22 @@ describe('StatusBar', () => {
     )
     window.agentinator = stub.bridge
 
-    const { unmount } = render(<StatusBar />)
+    const { unmount } = render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <StatusBar />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
     unmount()
     resolve([9, 9, budgets()])
     await Promise.resolve()
 
-    // Both StatusBar and its child WorktreeCleanup subscribe, and both clean up.
-    expect(stub.unsubscribe).toHaveBeenCalledTimes(2)
+    // Four subscribers — StatusBar, the Sessions + Inbox provider wrappers, and
+    // WorktreeCleanup — each clean up on unmount.
+    expect(stub.unsubscribe).toHaveBeenCalledTimes(4)
     expect(screen.queryByText('log 9 events')).not.toBeInTheDocument()
   })
 })

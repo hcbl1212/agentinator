@@ -564,6 +564,7 @@ textarea.preview-props-input {
   --ok: #47b881;
   --err: #e06555;
   --warn: #e0a83c;
+  --working: #5b9bff;
 }
 
 .tone-warn {
@@ -1210,7 +1211,8 @@ textarea.preview-props-input {
 }
 
 .budget-panel,
-.credentials-panel {
+.credentials-panel,
+.inbox-panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1225,6 +1227,89 @@ textarea.preview-props-input {
 
 .credentials-panel {
   width: 18rem;
+}
+
+.inbox-panel {
+  width: 20rem;
+}
+
+/* The status-bar inbox chip glows amber when something's waiting on you. */
+.inbox-chip.has-items {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0.4rem 0 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.inbox-item {
+  align-items: center;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.inbox-item:hover,
+.inbox-item:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
+.inbox-kind {
+  border-radius: 3px;
+  flex: none;
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.3rem;
+  text-transform: uppercase;
+}
+
+.inbox-kind.is-approval {
+  background: rgba(224, 168, 60, 0.18);
+  color: var(--warn);
+}
+
+.inbox-kind.is-question {
+  background: rgba(91, 155, 255, 0.18);
+  color: var(--working);
+}
+
+.inbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.inbox-agent {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-detail {
+  color: var(--soft);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .credential-row {
