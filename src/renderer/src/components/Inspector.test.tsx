@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
+import { SessionsProvider } from '../state/sessions'
 import { Inspector } from './Inspector'
 
 function renderInspector(): void {
@@ -37,6 +38,26 @@ describe('Inspector', () => {
     // With no agent selected, the diff prompts to pick one.
     expect(screen.getByText(/Select an agent to see its changes/)).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'App preview' })).not.toBeInTheDocument()
+  })
+
+  it('switches to the checkpoints tab', async () => {
+    const user = userEvent.setup()
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <Inspector />
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Checkpoints' }))
+
+    expect(screen.getByRole('tab', { name: 'Checkpoints' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByText(/Select an agent to snapshot its work/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Diff' })).not.toBeInTheDocument()
   })
 
   it('switches to the preview tab and back', async () => {

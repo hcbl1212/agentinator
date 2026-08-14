@@ -155,6 +155,15 @@ export interface AgentinatorBridge {
     /** Launch a queued task as an agent; resolves to the new session id. */
     dispatch(taskId: string, prompt: string): Promise<string>
   }
+  /** Snapshot and rewind an isolated agent's worktree. */
+  checkpoints: {
+    /** Snapshot the session's worktree; resolves to the new checkpoint id, or
+     * null when the session isn't isolated or the snapshot fails. */
+    create(sessionId: string, label: string): Promise<string | null>
+    /** Rewind the session's worktree to a checkpoint; resolves to whether it
+     * succeeded. */
+    restore(sessionId: string, checkpointId: string, sha: string): Promise<boolean>
+  }
   /** On-demand cleanup of finished agents' git worktrees. */
   worktrees: {
     /** How many finished worktrees are still on disk, and their total size. */

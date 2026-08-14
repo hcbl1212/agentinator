@@ -23,6 +23,8 @@ import type { GitRunner } from './git'
 import { runGit, runGitSync } from './git'
 import { worktreeDepsChanged } from './workspaceDiff'
 import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
+import { NodeCheckpoints } from './checkpoints'
+import type { Checkpoints } from './checkpoints'
 import { NodeWorktrees } from './worktrees'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
@@ -109,6 +111,24 @@ export function registerWorktreeServerIpc(
   })
   handle('preview:worktree-server-count', () => count())
   handle('preview:worktree-deps-changed', (_event, sessionId) => depsChanged(sessionId as string))
+}
+
+/** Snapshot/rewind an isolated agent's worktree — the checkpoint lifecycle,
+ * recorded in the log so the renderer lists checkpoints and survives a restart.
+ * The create/restore closures (built in bootstrap) do the git + emit. */
+export function registerCheckpointIpc(
+  create: (sessionId: string, label: string) => string | null,
+  restore: (sessionId: string, checkpointId: string, sha: string) => boolean,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('checkpoints:create', (_event, sessionId, label) =>
+    create(sessionId as string, label as string),
+  )
+  handle('checkpoints:restore', (_event, sessionId, checkpointId, sha) =>
+    restore(sessionId as string, checkpointId as string, sha as string),
+  )
 }
 
 export function registerAgentIpc(
@@ -455,6 +475,50 @@ export async function resolveWorktreePreview(
   }
 }
 
+/** Snapshot a session's worktree and log it; returns the new checkpoint id, or
+ * null when the session isn't isolated or the snapshot fails. */
+export function createCheckpoint(
+  sessionId: string,
+  label: string,
+  store: EventStore,
+  checkpoints: Checkpoints,
+  emit: EmitStored,
+): string | null {
+  const path = resolveWorktreePath(sessionId, store)
+  const sha = path === null ? null : checkpoints.create(path, label)
+  if (sha === null) {
+    return null
+  }
+  const checkpointId = createEntityId('checkpoint')
+  emit('checkpoint.created', { sessionId, checkpointId, label, sha })
+  return checkpointId
+}
+
+/** Rewind a session's worktree to a checkpoint and log it; returns success. */
+export function restoreCheckpoint(
+  sessionId: string,
+  checkpointId: string,
+  sha: string,
+  store: EventStore,
+  checkpoints: Checkpoints,
+  emit: EmitStored,
+): boolean {
+  const path = resolveWorktreePath(sessionId, store)
+  const restored = path !== null && checkpoints.restore(path, sha)
+  if (restored) {
+    emit('checkpoint.restored', { sessionId, checkpointId })
+  }
+  return restored
+}
+
+/** A session's isolated worktree path (from its session.started event), or null
+ * when the session isn't isolated. */
+export function resolveWorktreePath(sessionId: string, store: EventStore): string | null {
+  const started = store.listBySession(sessionId).find((event) => event.type === 'session.started')
+    ?.payload as EventPayloads['session.started'] | undefined
+  return started?.worktree?.path ?? null
+}
+
 /** Whether the agent changed dependency manifests in a session's worktree (so
  * the linked node_modules is stale). False when the session isn't isolated. */
 export async function resolveWorktreeDepsChanged(
@@ -577,6 +641,13 @@ export async function bootstrap(
 
   registerAgentIpc(manager)
   registerQueueIpc(manager, makeEmitStored(store, sink))
+  const checkpoints = new NodeCheckpoints(runGitSync)
+  const emitCheckpoint = makeEmitStored(store, sink)
+  registerCheckpointIpc(
+    (sessionId, label) => createCheckpoint(sessionId, label, store, checkpoints, emitCheckpoint),
+    (sessionId, checkpointId, sha) =>
+      restoreCheckpoint(sessionId, checkpointId, sha, store, checkpoints, emitCheckpoint),
+  )
   registerWorktreeIpc(
     new WorktreeJanitor({
       endedWorktrees: () => store.endedWorktrees(),

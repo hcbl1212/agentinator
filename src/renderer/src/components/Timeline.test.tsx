@@ -103,6 +103,10 @@ function stubBridge(
         remove: vi.fn(() => Promise.resolve()),
         dispatch: vi.fn(() => Promise.resolve('session_new')),
       },
+      checkpoints: {
+        create: vi.fn(() => Promise.resolve('checkpoint_1')),
+        restore: vi.fn(() => Promise.resolve(true)),
+      },
       credentials: {
         set: vi.fn(() => Promise.resolve()),
         has: vi.fn(() => Promise.resolve(false)),

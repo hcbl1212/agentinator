@@ -101,9 +101,13 @@ import {
   registerCredentialsIpc,
   registerDialogIpc,
   registerEventIpc,
+  createCheckpoint,
   mainEventSink,
   nativeAttentionNotifier,
+  registerCheckpointIpc,
   registerPreviewIpc,
+  resolveWorktreePath,
+  restoreCheckpoint,
   registerQueueIpc,
   registerSettingsIpc,
   registerWorktreeIpc,
@@ -736,6 +740,75 @@ describe('registerQueueIpc', () => {
   })
 })
 
+describe('checkpoints', () => {
+  const storeWith = (worktree?: { repoRoot: string; path: string; branch: string }): EventStore =>
+    ({
+      listBySession: vi.fn(() => [
+        { type: 'session.started', payload: { sessionId: 's1', worktree } },
+      ]),
+    }) as unknown as EventStore
+  const wt = { repoRoot: '/r', path: '/wt', branch: 'b' }
+
+  it('resolveWorktreePath returns the path for an isolated session, else null', () => {
+    expect(resolveWorktreePath('s1', storeWith(wt))).toBe('/wt')
+    expect(resolveWorktreePath('s1', storeWith(undefined))).toBeNull()
+  })
+
+  it('createCheckpoint snapshots the worktree and logs it', () => {
+    const emit = vi.fn()
+    const checkpoints = { create: vi.fn(() => 'sha_abc'), restore: vi.fn() }
+    const id = createCheckpoint('s1', 'before', storeWith(wt), checkpoints, emit)
+
+    expect(checkpoints.create).toHaveBeenCalledWith('/wt', 'before')
+    expect(id).toMatch(/^checkpoint_/)
+    expect(emit).toHaveBeenCalledWith('checkpoint.created', {
+      sessionId: 's1',
+      checkpointId: id,
+      label: 'before',
+      sha: 'sha_abc',
+    })
+  })
+
+  it('createCheckpoint returns null (no emit) when unisolated or the snapshot fails', () => {
+    const emit = vi.fn()
+    const notIsolated = { create: vi.fn(), restore: vi.fn() }
+    expect(createCheckpoint('s1', 'x', storeWith(undefined), notIsolated, emit)).toBeNull()
+    expect(notIsolated.create).not.toHaveBeenCalled()
+
+    const fails = { create: vi.fn(() => null), restore: vi.fn() }
+    expect(createCheckpoint('s1', 'x', storeWith(wt), fails, emit)).toBeNull()
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('restoreCheckpoint rewinds and logs on success, false + no log otherwise', () => {
+    const emit = vi.fn()
+    const ok = { create: vi.fn(), restore: vi.fn(() => true) }
+    expect(restoreCheckpoint('s1', 'c1', 'sha', storeWith(wt), ok, emit)).toBe(true)
+    expect(ok.restore).toHaveBeenCalledWith('/wt', 'sha')
+    expect(emit).toHaveBeenCalledWith('checkpoint.restored', {
+      sessionId: 's1',
+      checkpointId: 'c1',
+    })
+
+    emit.mockClear()
+    expect(restoreCheckpoint('s1', 'c1', 'sha', storeWith(undefined), ok, emit)).toBe(false)
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('registerCheckpointIpc routes create and restore to the closures', () => {
+    const create = vi.fn(() => 'checkpoint_1')
+    const restore = vi.fn(() => true)
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerCheckpointIpc(create, restore, (channel, listener) => handlers.set(channel, listener))
+
+    expect(handlers.get('checkpoints:create')?.(undefined, 's1', 'lbl')).toBe('checkpoint_1')
+    expect(create).toHaveBeenCalledWith('s1', 'lbl')
+    expect(handlers.get('checkpoints:restore')?.(undefined, 's1', 'c1', 'sha')).toBe(true)
+    expect(restore).toHaveBeenCalledWith('s1', 'c1', 'sha')
+  })
+})
+
 describe('resolveWorktreeDepsChanged', () => {
   const storeWith = (worktree?: { repoRoot: string; path: string; branch: string }): EventStore =>
     ({
@@ -1146,6 +1219,9 @@ describe('bootstrap', () => {
     call('preview:stop-worktree-servers')(undefined)
     expect(call('preview:worktree-server-count')(undefined)).toBe(0)
     expect(await call('preview:worktree-deps-changed')(undefined, 'session_1')).toBe(false)
+    // Checkpoint IPC is wired: an unisolated session snapshots/rewinds to nothing.
+    expect(call('checkpoints:create')(undefined, 'session_1', 'x')).toBeNull()
+    expect(call('checkpoints:restore')(undefined, 'session_1', 'c1', 'sha')).toBe(false)
     store.close()
   })
 

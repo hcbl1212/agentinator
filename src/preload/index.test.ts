@@ -220,6 +220,23 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:dispatch', 'task_1', 'a task')
   })
 
+  it('routes checkpoints over IPC', async () => {
+    await bridge.checkpoints.create('session_1', 'before change')
+    await bridge.checkpoints.restore('session_1', 'checkpoint_1', 'sha_abc')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'checkpoints:create',
+      'session_1',
+      'before change',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'checkpoints:restore',
+      'session_1',
+      'checkpoint_1',
+      'sha_abc',
+    )
+  })
+
   it('routes approvals over IPC', async () => {
     await bridge.approvals.pending()
     await bridge.approvals.resolve('approval_1', true)

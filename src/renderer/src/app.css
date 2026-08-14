@@ -559,6 +559,94 @@ textarea.preview-props-input {
   font-weight: 600;
 }
 
+/* Worktree checkpoints — snapshot/rewind an isolated agent's work. */
+.checkpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.checkpoint-new {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.checkpoint-label-input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  font-size: 0.8rem;
+  min-width: 0;
+  padding: 0.3rem 0.55rem;
+}
+
+.checkpoint-take {
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #06251e;
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+}
+
+.checkpoint-take:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.checkpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.checkpoint-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.checkpoint-name {
+  color: var(--ink);
+  flex: 1;
+  font-size: 0.8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkpoint-rewind {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--soft);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.checkpoint-rewind:hover,
+.checkpoint-rewind:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
 /* Semantic status colors — status is never encoded by color alone. */
 :root {
   --ok: #47b881;

@@ -7,7 +7,15 @@
 
 import type { AccountLimit, AccountUsage } from './usage'
 
-export const ENTITY_KINDS = ['workspace', 'repo', 'session', 'agent', 'task', 'approval'] as const
+export const ENTITY_KINDS = [
+  'workspace',
+  'repo',
+  'session',
+  'agent',
+  'task',
+  'approval',
+  'checkpoint',
+] as const
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
 
@@ -90,6 +98,11 @@ export interface EventPayloads {
   'task.dispatched': { taskId: string; sessionId: string }
   /** A queued task was discarded without ever running. */
   'task.removed': { taskId: string }
+  /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
+   * can be rewound to this point later. */
+  'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }
+  /** An agent's worktree was rewound to a checkpoint. */
+  'checkpoint.restored': { sessionId: string; checkpointId: string }
   /** The agent is asking the user to choose — answered via a follow-up. */
   'agent.question': {
     sessionId: string

@@ -115,6 +115,12 @@ export const bridge: AgentinatorBridge = {
     dispatch: (taskId, prompt) =>
       ipcRenderer.invoke('queue:dispatch', taskId, prompt) as Promise<string>,
   },
+  checkpoints: {
+    create: (sessionId, label) =>
+      ipcRenderer.invoke('checkpoints:create', sessionId, label) as Promise<string | null>,
+    restore: (sessionId, checkpointId, sha) =>
+      ipcRenderer.invoke('checkpoints:restore', sessionId, checkpointId, sha) as Promise<boolean>,
+  },
 }
 
 contextBridge.exposeInMainWorld('agentinator', bridge)
