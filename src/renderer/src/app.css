@@ -1437,6 +1437,40 @@ textarea.preview-props-input {
   min-height: 0;
 }
 
+/* Roster groups: a small coloured header per status, most-urgent first. */
+.rail-group {
+  margin-bottom: 0.6rem;
+}
+
+.rail-group-label {
+  align-items: center;
+  color: var(--faint);
+  display: flex;
+  font-size: 0.62rem;
+  font-weight: 700;
+  gap: 0.35rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.rail-group-label.is-needs-you {
+  color: var(--warn);
+}
+
+.rail-group-label.is-running {
+  color: var(--working);
+}
+
+.rail-group-label.is-failed {
+  color: var(--err);
+}
+
+.rail-group-count {
+  color: var(--faint);
+  font-weight: 400;
+}
+
 .pane.queue {
   border-bottom: 1px solid var(--line);
   flex: 0 0 auto;

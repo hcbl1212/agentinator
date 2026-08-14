@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { InboxProvider } from '../state/inbox'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
-import { AgentRail } from './AgentRail'
+import type { SessionInfo } from '../state/sessions'
+import { AgentRail, groupFor } from './AgentRail'
 
 /** Selects an arbitrary id — stands in for the composer selecting a
  * just-launched session before its session.started has arrived. */
@@ -51,6 +53,7 @@ function stubBridge(): {
         }),
       },
       agent: { dismiss, switchToApiKey, switchToSubscription },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -93,11 +96,26 @@ function modelEvent(sessionId: string, model: string): StoredEvent {
   return { seq: 1, ts: 't', type: 'session.model', payload: { sessionId, model } }
 }
 
+function idle(sessionId: string): StoredEvent {
+  return { seq: 1, ts: 't', type: 'session.idle', payload: { sessionId } }
+}
+
+function approvalReq(sessionId: string, requestId: string): StoredEvent {
+  return {
+    seq: 1,
+    ts: 't',
+    type: 'approval.requested',
+    payload: { sessionId, requestId, tool: 'Bash', input: {} },
+  }
+}
+
 function renderRail(): void {
   render(
     <SelectionProvider>
       <SessionsProvider>
-        <AgentRail />
+        <InboxProvider>
+          <AgentRail />
+        </InboxProvider>
       </SessionsProvider>
     </SelectionProvider>,
   )
@@ -199,8 +217,10 @@ describe('AgentRail', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <Selector id="session_new" />
-          <AgentRail />
+          <InboxProvider>
+            <Selector id="session_new" />
+            <AgentRail />
+          </InboxProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )
@@ -335,5 +355,51 @@ describe('AgentRail', () => {
     const row = screen.getByRole('button', { name: /^Count files/ })
     expect(row).toBeInTheDocument()
     expect(row.querySelector('.status-dot.error')).not.toBeNull()
+  })
+
+  it('groups agents by status, with what needs you first', () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderRail()
+    act(() => {
+      stub.emit(started('run1', 'Working'))
+      stub.emit(started('idle1', 'Waiting'))
+      stub.emit(idle('idle1'))
+      stub.emit(started('fail1', 'Broke'))
+      stub.emit(ended('fail1', 'failed'))
+      // A running agent blocked on an approval belongs under Needs you.
+      stub.emit(started('need1', 'Blocked'))
+      stub.emit(approvalReq('need1', 'r1'))
+    })
+
+    const labels = screen
+      .getAllByText(/^(Needs you|Running|Idle|Failed)$/)
+      .map((node) => node.textContent)
+    expect(labels).toEqual(['Needs you', 'Running', 'Idle', 'Failed']) // order + presence
+
+    // The blocked agent sits under Needs you, not Running.
+    const needsYou = screen.getByText('Needs you').closest('.rail-group') as HTMLElement
+    expect(needsYou.querySelector('button[title="Blocked"]')).not.toBeNull()
+    const running = screen.getByText('Running').closest('.rail-group') as HTMLElement
+    expect(running.querySelector('button[title="Blocked"]')).toBeNull()
+    expect(running.querySelector('button[title="Working"]')).not.toBeNull()
+  })
+})
+
+describe('groupFor', () => {
+  const session = (status: SessionInfo['status']): SessionInfo => ({
+    id: 's',
+    title: 't',
+    status,
+    costUsd: 0,
+  })
+
+  it('maps status to a group, with needs-you overriding everything', () => {
+    expect(groupFor(session('running'), false)).toBe('running')
+    expect(groupFor(session('idle'), false)).toBe('idle')
+    expect(groupFor(session('error'), false)).toBe('failed')
+    // Blocked-on-you wins even for a running agent.
+    expect(groupFor(session('running'), true)).toBe('needs-you')
   })
 })
