@@ -75,11 +75,37 @@ export function InboxProvider({ children }: { children: React.ReactNode }): Reac
       return
     }
     let cancelled = false
-    void bridge.events.tail(500).then((page) => {
-      if (!cancelled) {
-        setItems((previous) => page.reduce(reduceInbox, previous))
-      }
-    })
+    // Backfill on launch: questions come from the log (they persist across a
+    // restart until you reply), but approvals come from the broker's live
+    // pending list — a logged-but-unresolved approval from a previous run is
+    // stale (its decision died with the process), so the log alone would show
+    // phantoms.
+    void Promise.all([bridge.events.tail(500), bridge.approvals.pending()]).then(
+      ([page, pending]) => {
+        if (cancelled) {
+          return
+        }
+        const questions = page
+          .reduce(reduceInbox, [] as InboxItem[])
+          .filter((item) => item.kind === 'question')
+        const approvals: InboxItem[] = pending.map((approval) => ({
+          id: `a:${approval.requestId}`,
+          sessionId: approval.sessionId,
+          kind: 'approval',
+          detail: approval.tool,
+        }))
+        setItems((previous) => {
+          // Fold the backfill onto any live events that already arrived.
+          const byId = new Map(previous.map((item) => [item.id, item]))
+          for (const item of [...approvals, ...questions]) {
+            if (!byId.has(item.id)) {
+              byId.set(item.id, item)
+            }
+          }
+          return [...byId.values()]
+        })
+      },
+    )
     const unsubscribe = bridge.events.onAppended((event) => {
       setItems((previous) => reduceInbox(previous, event))
     })

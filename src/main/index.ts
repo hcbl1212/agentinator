@@ -509,6 +509,9 @@ export async function bootstrap(
   // fresh worktree), so link the main checkout's before starting.
   const devServers = new DevServers({ spawn: spawnDevServer, linkModules: linkNodeModules })
   const attention = new AttentionTracker(nativeAttentionNotifier())
+  // Seed the dock badge from the log's still-open questions so it's accurate at
+  // launch (not stuck at zero until the next live event).
+  attention.reconcile(store.list())
   // Every emitted event flows through this: broadcast, reap dev servers on end,
   // and drive the attention inbox's notifications + dock badge.
   const sink = mainEventSink(devServers, attention)

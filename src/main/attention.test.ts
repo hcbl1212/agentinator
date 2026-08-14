@@ -27,6 +27,27 @@ function setup(): {
 }
 
 describe('AttentionTracker', () => {
+  it('reconciles the badge from open questions on launch, silently', () => {
+    const { tracker, notify, setBadge } = setup()
+
+    tracker.reconcile([
+      question('s1', 'q1', 'Still open'),
+      question('s2', 'q2', 'Answered'),
+      event('user.message', { sessionId: 's2', text: 'reply' }), // answers q2
+      question('s3', 'q3', 'Ended'),
+      event('session.ended', { sessionId: 's3', outcome: 'completed' }), // ends s3
+      approval('s4', 'r1'), // ignored — approvals are broker state, not the log
+    ])
+
+    // Only s1's question is still open; no notifications for historical events.
+    expect(setBadge).toHaveBeenCalledExactlyOnceWith(1)
+    expect(notify).not.toHaveBeenCalled()
+
+    // A live approval afterwards still counts on top of the reconciled question.
+    tracker.observe(approval('s4', 'r1'))
+    expect(setBadge).toHaveBeenLastCalledWith(2)
+  })
+
   it('notifies and badges when an approval is requested, deduping repeats', () => {
     const { tracker, notify, setBadge } = setup()
 

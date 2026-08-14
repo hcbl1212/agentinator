@@ -9,7 +9,10 @@ import { SelectionProvider, useSelection } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { InboxPanel } from './InboxPanel'
 
-function stub(backfill: StoredEvent[] = []): {
+function stub(
+  backfill: StoredEvent[] = [],
+  pending: { requestId: string; sessionId: string; tool: string; input: unknown }[] = [],
+): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
 } {
@@ -24,6 +27,7 @@ function stub(backfill: StoredEvent[] = []): {
           return () => undefined
         }),
       },
+      approvals: { pending: vi.fn(() => Promise.resolve(pending)) },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -45,8 +49,12 @@ function Probe(): null {
   return null
 }
 
-function renderPanel(backfill: StoredEvent[], onClose = vi.fn()): ReturnType<typeof stub> {
-  const s = stub(backfill)
+function renderPanel(
+  backfill: StoredEvent[],
+  pending: { requestId: string; sessionId: string; tool: string; input: unknown }[] = [],
+  onClose = vi.fn(),
+): ReturnType<typeof stub> {
+  const s = stub(backfill, pending)
   window.agentinator = s.bridge
   render(
     <SelectionProvider>
@@ -72,12 +80,11 @@ describe('InboxPanel', () => {
     expect(screen.getByText(/Nothing needs you/)).toBeInTheDocument()
   })
 
-  it('lists pending approvals and questions with the agent title', async () => {
-    renderPanel([
-      started('s1', 'Fix the header'),
-      approval('s1', 'r1', 'Bash'),
-      question('s1', 'r2', 'Which colour?'),
-    ])
+  it('lists pending approvals (from the broker) and questions (from the log)', async () => {
+    renderPanel(
+      [started('s1', 'Fix the header'), question('s1', 'r2', 'Which colour?')],
+      [{ requestId: 'r1', sessionId: 's1', tool: 'Bash', input: {} }],
+    )
 
     expect(await screen.findByText('wants to run Bash')).toBeInTheDocument()
     expect(screen.getByText('Which colour?')).toBeInTheDocument()
@@ -85,7 +92,7 @@ describe('InboxPanel', () => {
   })
 
   it('falls back to a generic name for an unknown agent', async () => {
-    renderPanel([approval('ghost', 'r1', 'Write')])
+    renderPanel([], [{ requestId: 'r1', sessionId: 'ghost', tool: 'Write', input: {} }])
     expect(await screen.findByText('An agent')).toBeInTheDocument()
   })
 
@@ -137,9 +144,62 @@ describe('InboxPanel', () => {
     expect(screen.queryByText('wants to run Edit')).not.toBeInTheDocument()
   })
 
+  it('does not duplicate a backfill item that already arrived live', async () => {
+    let resolveTail: (events: StoredEvent[]) => void = () => undefined
+    // One shared deferred promise so resolving it settles every caller's tail
+    // (both the Sessions and Inbox providers back-fill from it).
+    const tailPromise = new Promise<StoredEvent[]>((resolve) => {
+      resolveTail = resolve
+    })
+    const listeners: ((e: StoredEvent) => void)[] = []
+    window.agentinator = {
+      events: {
+        tail: vi.fn(() => tailPromise),
+        onAppended: vi.fn((listener: (e: StoredEvent) => void) => {
+          listeners.push(listener)
+          return () => undefined
+        }),
+      },
+      approvals: {
+        pending: vi.fn(() =>
+          Promise.resolve([
+            { requestId: 'r1', sessionId: 's1', tool: 'Bash', input: {} }, // same as the live one
+            { requestId: 'r2', sessionId: 's1', tool: 'Edit', input: {} }, // new — proves merge ran
+          ]),
+        ),
+      },
+    } as unknown as AgentinatorBridge
+    render(
+      <SelectionProvider>
+        <SessionsProvider>
+          <InboxProvider>
+            <InboxPanel onClose={vi.fn()} />
+          </InboxProvider>
+        </SessionsProvider>
+      </SelectionProvider>,
+    )
+
+    // The r1 approval arrives live before the backfill (tail) resolves.
+    act(() => {
+      listeners.forEach((listener) => listener(approval('s1', 'r1', 'Bash')))
+    })
+    act(() => {
+      resolveTail([])
+    })
+
+    // The backfill merges in the new r2, and doesn't double-list the r1 it
+    // already had live.
+    expect(await screen.findByText('wants to run Edit')).toBeInTheDocument()
+    expect(screen.getAllByText('wants to run Bash')).toHaveLength(1)
+  })
+
   it('jumps to the agent and closes when an item is clicked', async () => {
     const onClose = vi.fn()
-    renderPanel([started('s1', 'Fix the header'), approval('s1', 'r1', 'Bash')], onClose)
+    renderPanel(
+      [started('s1', 'Fix the header')],
+      [{ requestId: 'r1', sessionId: 's1', tool: 'Bash', input: {} }],
+      onClose,
+    )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Go to Fix the header' }))
 

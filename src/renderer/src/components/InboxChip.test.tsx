@@ -21,6 +21,7 @@ function stub(): { bridge: AgentinatorBridge; emit: (event: StoredEvent) => void
           return () => undefined
         }),
       },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
     } as unknown as AgentinatorBridge,
   }
 }
