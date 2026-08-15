@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { AgentRail } from './AgentRail'
 import { Inspector } from './Inspector'
 import { PaneGutter } from './PaneGutter'
+import { Pipelines } from './Pipelines'
 import { Stream } from './Stream'
 import { TaskQueue } from './TaskQueue'
 
@@ -60,6 +61,7 @@ export function Panes(): React.JSX.Element {
     >
       <div className="rail-col">
         <TaskQueue />
+        <Pipelines />
         <AgentRail />
       </div>
       <PaneGutter label="Resize agent rail" onResize={resizeRail} />

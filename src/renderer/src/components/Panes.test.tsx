@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { InboxProvider } from '../state/inbox'
+import { PipelineProvider } from '../state/pipelines'
 import { QueueProvider } from '../state/queue'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
@@ -13,9 +14,11 @@ function renderPanes(): void {
     <SelectionProvider>
       <SessionsProvider>
         <QueueProvider>
-          <InboxProvider>
-            <Panes />
-          </InboxProvider>
+          <PipelineProvider>
+            <InboxProvider>
+              <Panes />
+            </InboxProvider>
+          </PipelineProvider>
         </QueueProvider>
       </SessionsProvider>
     </SelectionProvider>,

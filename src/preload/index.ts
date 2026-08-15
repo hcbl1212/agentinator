@@ -122,6 +122,9 @@ export const bridge: AgentinatorBridge = {
     dispatch: (taskId, prompt) =>
       ipcRenderer.invoke('queue:dispatch', taskId, prompt) as Promise<string>,
   },
+  pipelines: {
+    create: (prompt) => ipcRenderer.invoke('pipelines:create', prompt) as Promise<string>,
+  },
   checkpoints: {
     create: (sessionId, label) =>
       ipcRenderer.invoke('checkpoints:create', sessionId, label) as Promise<string | null>,

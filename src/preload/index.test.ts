@@ -227,6 +227,12 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:dispatch', 'task_1', 'a task')
   })
 
+  it('routes pipeline creation over IPC', async () => {
+    await bridge.pipelines.create('ship the feature')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('pipelines:create', 'ship the feature')
+  })
+
   it('routes checkpoints over IPC', async () => {
     await bridge.checkpoints.create('session_1', 'before change')
     await bridge.checkpoints.restore('session_1', 'checkpoint_1', 'sha_abc')

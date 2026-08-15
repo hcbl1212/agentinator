@@ -105,6 +105,7 @@ import {
   mainEventSink,
   nativeAttentionNotifier,
   registerCheckpointIpc,
+  registerPipelineIpc,
   registerPreviewIpc,
   resolveWorktreePath,
   restoreCheckpoint,
@@ -125,6 +126,7 @@ import type { ComponentWorkbench } from './componentWorkbench'
 import type { DevServers } from './devServers'
 import type { GitRunner } from './git'
 import type { WorktreeJanitor } from './worktreeGc'
+import type { PipelineOrchestrator } from './pipelines'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
 import type { SessionManager } from './sessions'
@@ -607,13 +609,15 @@ describe('registerWorktreeIpc', () => {
 })
 
 describe('mainEventSink', () => {
-  it('broadcasts, reaps the server on end, and feeds the attention tracker', () => {
+  it('broadcasts, reaps the server on end, feeds attention, and advances pipelines', () => {
     const stop = vi.fn()
     const broadcast = vi.fn()
     const observe = vi.fn()
+    const observePipeline = vi.fn()
     const sink = mainEventSink(
       { stop } as unknown as DevServers,
       { observe } as unknown as AttentionTracker,
+      observePipeline,
       broadcast,
     )
 
@@ -624,6 +628,7 @@ describe('mainEventSink', () => {
 
     expect(broadcast).toHaveBeenCalledTimes(2)
     expect(observe).toHaveBeenCalledTimes(2)
+    expect(observePipeline).toHaveBeenCalledTimes(2)
     expect(stop).toHaveBeenCalledExactlyOnceWith('s1')
   })
 })
@@ -737,6 +742,30 @@ describe('registerQueueIpc', () => {
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual(['queue:add', 'queue:remove', 'queue:dispatch'])
+  })
+})
+
+describe('registerPipelineIpc', () => {
+  it('creates a Plan → Implement → Review pipeline from a prompt', () => {
+    const create = vi.fn(() => 'pipeline_7')
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerPipelineIpc({ create } as unknown as PipelineOrchestrator, (channel, listener) =>
+      handlers.set(channel, listener),
+    )
+
+    const id = handlers.get('pipelines:create')?.(undefined, 'Add a logout button')
+    expect(id).toBe('pipeline_7')
+    const [title, stages] = create.mock.calls[0] as unknown as [string, { name: string }[]]
+    expect(title).toBe('Add a logout button')
+    expect(stages.map((stage) => stage.name)).toEqual(['Plan', 'Implement', 'Review'])
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerPipelineIpc({ create: vi.fn() } as unknown as PipelineOrchestrator)
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['pipelines:create'])
   })
 })
 
@@ -1236,6 +1265,42 @@ describe('bootstrap', () => {
     // Checkpoint IPC is wired: an unisolated session snapshots/rewinds to nothing.
     expect(call('checkpoints:create')(undefined, 'session_1', 'x')).toBeNull()
     expect(call('checkpoints:restore')(undefined, 'session_1', 'c1', 'sha')).toBe(false)
+    store.close()
+  })
+
+  it('creates and dispatches a pipeline through the orchestrator', async () => {
+    // The mock-tasks flag makes "Run" use the deterministic e2e agent, so a
+    // real stage launches with no network.
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const store = new EventStore(':memory:')
+
+    await bootstrap(
+      mockApp as never,
+      () => store,
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+    )
+
+    const call = (channel: string): ((...args: unknown[]) => unknown) =>
+      mockIpcMain.handle.mock.calls.find(([c]: string[]) => c === channel)?.[1] as (
+        ...args: unknown[]
+      ) => unknown
+    const pipelineId = call('pipelines:create')(undefined, 'Add a logout button')
+
+    // Stage 0 launched an agent (the startStage closure ran through the manager);
+    // its events flow back through the sink. Wait for the e2e turn to settle.
+    await vi.waitFor(() =>
+      expect(store.list().some((event) => event.type === 'session.idle')).toBe(true),
+    )
+
+    const types = store.list().map((event) => event.type)
+    expect(types).toContain('pipeline.created')
+    expect(types).toContain('session.started')
+    const started = store.list().find((event) => event.type === 'pipeline.stage.started')
+      ?.payload as { pipelineId: string; stageIndex: number }
+    expect(started).toMatchObject({ pipelineId, stageIndex: 0 })
     store.close()
   })
 

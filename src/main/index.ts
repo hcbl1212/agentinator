@@ -26,6 +26,7 @@ import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
 import { NodeCheckpoints } from './checkpoints'
 import type { Checkpoints } from './checkpoints'
 import { NodeWorktrees } from './worktrees'
+import { defaultPipelineStages, PipelineOrchestrator } from './pipelines'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
 import type { PreviewBrowser } from './previewBrowser'
@@ -186,6 +187,21 @@ export function registerQueueIpc(
     const sessionId = startAgentTask(manager, prompt as string)
     emit('task.dispatched', { taskId: taskId as string, sessionId })
     return sessionId
+  })
+}
+
+/** Launch multi-stage pipelines. A pipeline is created from a task prompt using
+ * the built-in Plan → Implement → Review template; the orchestrator dispatches
+ * stage 0 and advances the rest as each stage's agent finishes. */
+export function registerPipelineIpc(
+  pipelines: PipelineOrchestrator,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('pipelines:create', (_event, prompt) => {
+    const task = prompt as string
+    return pipelines.create(taskTitle(task), defaultPipelineStages(task))
   })
 }
 
@@ -412,6 +428,7 @@ export function makeEmitStored(store: EventStore, broadcast = broadcastEvent): E
 export function mainEventSink(
   devServers: DevServers,
   attention: AttentionTracker,
+  observePipeline: (event: StoredEvent) => void,
   broadcast = broadcastEvent,
 ): (event: StoredEvent) => void {
   return (event) => {
@@ -420,6 +437,8 @@ export function mainEventSink(
       devServers.stop((event.payload as { sessionId: string }).sessionId)
     }
     attention.observe(event)
+    // Advance any pipeline this event belongs to (a stage's agent ending).
+    observePipeline(event)
   }
 }
 
@@ -580,9 +599,20 @@ export async function bootstrap(
   // Seed the dock badge from the log's still-open questions so it's accurate at
   // launch (not stuck at zero until the next live event).
   attention.reconcile(store.list())
+  // The pipeline orchestrator is built before the sink so the sink can hand it
+  // every event (to advance a stage when its agent ends). It dispatches stages
+  // through the manager, which is assigned just below and captured by closure —
+  // a stage only ever starts at runtime, long after wiring. The orchestrator is
+  // built after the manager it dispatches through, so the sink reaches it via
+  // this observer list (empty until the orchestrator registers below). Its own
+  // pipeline.* events only need the renderer, so they broadcast directly rather
+  // than looping back through the sink.
+  const pipelineObservers: Array<(event: StoredEvent) => void> = []
   // Every emitted event flows through this: broadcast, reap dev servers on end,
-  // and drive the attention inbox's notifications + dock badge.
-  const sink = mainEventSink(devServers, attention)
+  // drive the attention inbox's notifications + dock badge, and advance pipelines.
+  const sink = mainEventSink(devServers, attention, (event) => {
+    pipelineObservers.forEach((observe) => observe(event))
+  })
 
   const broker = new PermissionBroker(makeEmitStored(store, sink))
   const decide = broker.decide.bind(broker)
@@ -643,8 +673,21 @@ export async function bootstrap(
     manager.register(createE2eProvider(decide))
   }
 
+  // The orchestrator dispatches stages through the manager (now built) and
+  // advances on each stage's session.ended, which reaches it via the sink's
+  // observer list. Rebuild any in-flight pipeline from the log so it keeps
+  // advancing across a restart.
+  const pipelines = new PipelineOrchestrator({
+    emit: makeEmitStored(store),
+    store,
+    startStage: (prompt) => startAgentTask(manager, prompt),
+  })
+  pipelineObservers.push(pipelines.observe.bind(pipelines))
+  pipelines.reconcile(store.list())
+
   registerAgentIpc(manager)
   registerQueueIpc(manager, makeEmitStored(store, sink))
+  registerPipelineIpc(pipelines)
   const checkpoints = new NodeCheckpoints(runGitSync)
   const emitCheckpoint = makeEmitStored(store, sink)
   registerCheckpointIpc(

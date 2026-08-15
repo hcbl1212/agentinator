@@ -15,7 +15,16 @@ export const ENTITY_KINDS = [
   'task',
   'approval',
   'checkpoint',
+  'pipeline',
 ] as const
+
+/** One stage of a pipeline: a human label and the prompt its agent runs with.
+ * The whole ordered list is recorded on `pipeline.created`, so the chain (and
+ * each stage's intent) replays from the log alone. */
+export interface PipelineStageSpec {
+  name: string
+  prompt: string
+}
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
 
@@ -98,6 +107,18 @@ export interface EventPayloads {
   'task.dispatched': { taskId: string; sessionId: string }
   /** A queued task was discarded without ever running. */
   'task.removed': { taskId: string }
+  /** A multi-stage pipeline was launched: its ordered stages are recorded here
+   * so the whole chain replays from the log. Stage 0 dispatches immediately. */
+  'pipeline.created': { pipelineId: string; title: string; stages: PipelineStageSpec[] }
+  /** A pipeline stage was dispatched as an agent — links the stage to its
+   * session so the UI and the orchestrator can follow it. */
+  'pipeline.stage.started': { pipelineId: string; stageIndex: number; sessionId: string }
+  /** A stage's agent finished successfully; the next stage (if any) advances. */
+  'pipeline.stage.completed': { pipelineId: string; stageIndex: number; sessionId: string }
+  /** Every stage completed — the pipeline is done. */
+  'pipeline.completed': { pipelineId: string }
+  /** A stage's agent failed or was cancelled; the pipeline halts at that stage. */
+  'pipeline.failed': { pipelineId: string; stageIndex: number; sessionId: string }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }

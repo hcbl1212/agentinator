@@ -143,6 +143,18 @@ export function ComposerDock(): React.JSX.Element {
     setImages([])
   }
 
+  // Launch a Plan → Implement → Review pipeline from the prompt instead of a
+  // single agent (fresh tasks only). The stages chain automatically.
+  const runPipeline = (activeBridge: AgentinatorBridge): void => {
+    const trimmed = prompt.trim()
+    if (trimmed === '') {
+      return
+    }
+    void activeBridge.pipelines.create(trimmed)
+    setPrompt('')
+    setImages([])
+  }
+
   const addImageFiles = (files: File[]): void => {
     for (const file of files) {
       const reader = new FileReader()
@@ -269,15 +281,26 @@ export function ComposerDock(): React.JSX.Element {
               onPaste={onPaste}
             />
             {!replying && (
-              <button
-                type="button"
-                className="console-queue"
-                aria-label="Queue task"
-                title="Park this task in the backlog"
-                onClick={() => queueTask(bridge)}
-              >
-                Queue
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="console-queue"
+                  aria-label="Run pipeline"
+                  title="Chain plan → implement → review"
+                  onClick={() => runPipeline(bridge)}
+                >
+                  Pipeline
+                </button>
+                <button
+                  type="button"
+                  className="console-queue"
+                  aria-label="Queue task"
+                  title="Park this task in the backlog"
+                  onClick={() => queueTask(bridge)}
+                >
+                  Queue
+                </button>
+              </>
             )}
           </div>
         </>

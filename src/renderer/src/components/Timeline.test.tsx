@@ -103,6 +103,9 @@ function stubBridge(
         remove: vi.fn(() => Promise.resolve()),
         dispatch: vi.fn(() => Promise.resolve('session_new')),
       },
+      pipelines: {
+        create: vi.fn(() => Promise.resolve('pipeline_1')),
+      },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),
         restore: vi.fn(() => Promise.resolve(true)),

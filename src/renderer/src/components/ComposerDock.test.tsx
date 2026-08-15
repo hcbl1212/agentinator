@@ -26,6 +26,7 @@ interface BridgeStub {
   send: ReturnType<typeof vi.fn>
   resolve: ReturnType<typeof vi.fn>
   queueAdd: ReturnType<typeof vi.fn>
+  pipelinesCreate: ReturnType<typeof vi.fn>
 }
 
 function stubBridge(pending: PendingApproval[] = []): BridgeStub {
@@ -34,11 +35,13 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
   const send = vi.fn(() => Promise.resolve())
   const resolve = vi.fn(() => Promise.resolve())
   const queueAdd = vi.fn(() => Promise.resolve('task_x'))
+  const pipelinesCreate = vi.fn(() => Promise.resolve('pipeline_1'))
   return {
     startTask,
     send,
     resolve,
     queueAdd,
+    pipelinesCreate,
     emit: (event) => listeners.forEach((listener) => listener(event)),
     bridge: {
       events: {
@@ -106,6 +109,9 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         add: queueAdd,
         remove: vi.fn(() => Promise.resolve()),
         dispatch: vi.fn(() => Promise.resolve('session_new')),
+      },
+      pipelines: {
+        create: pipelinesCreate,
       },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),
@@ -241,6 +247,30 @@ describe('ComposerDock', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Queue task' }))
 
     expect(stub.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it('launches a pipeline via Pipeline instead of a single agent', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    const input = screen.getByRole('textbox', { name: 'Task for the agent' })
+    await userEvent.type(input, 'ship the feature')
+    await userEvent.click(screen.getByRole('button', { name: 'Run pipeline' }))
+
+    expect(stub.pipelinesCreate).toHaveBeenCalledWith('ship the feature')
+    expect(stub.startTask).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('does nothing when Pipeline is pressed with an empty prompt', async () => {
+    const stub = stubBridge()
+    window.agentinator = stub.bridge
+
+    renderDock()
+    await userEvent.click(screen.getByRole('button', { name: 'Run pipeline' }))
+
+    expect(stub.pipelinesCreate).not.toHaveBeenCalled()
   })
 
   it('sends on Enter and treats Shift+Enter as a newline, not a send', async () => {

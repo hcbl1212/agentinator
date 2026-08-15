@@ -159,6 +159,13 @@ export interface AgentinatorBridge {
     /** Launch a queued task as an agent; resolves to the new session id. */
     dispatch(taskId: string, prompt: string): Promise<string>
   }
+  /** Multi-stage pipelines: chain agents (plan → implement → review) with each
+   * stage's output handed to the next. */
+  pipelines: {
+    /** Launch a Plan → Implement → Review pipeline from a task prompt; resolves
+     * to the new pipeline id. Stage 0 dispatches immediately. */
+    create(prompt: string): Promise<string>
+  }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {
     /** Snapshot the session's worktree; resolves to the new checkpoint id, or
