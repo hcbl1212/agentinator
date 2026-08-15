@@ -80,12 +80,18 @@ export class PipelineOrchestrator {
     }
   }
 
-  /** Advance the owning pipeline when one of its stages' agents ends. */
+  /**
+   * Advance the owning pipeline when one of its stages' agents finishes. A stage
+   * completes when its agent goes idle (a finished turn — agents stay alive
+   * awaiting follow-ups, so a normal completion is `session.idle`, not
+   * `session.ended`). A session that *ends* other than "completed" (cancelled or
+   * failed) halts the pipeline.
+   */
   observe(event: StoredEvent): void {
-    if (event.type !== 'session.ended') {
+    if (event.type !== 'session.idle' && event.type !== 'session.ended') {
       return
     }
-    const { sessionId, outcome } = event.payload as EventPayloads['session.ended']
+    const sessionId = (event.payload as { sessionId: string }).sessionId
     const events = this.#store.listBySession(sessionId)
     const started = events.find((e) => e.type === 'pipeline.stage.started')?.payload as
       EventPayloads['pipeline.stage.started'] | undefined
@@ -102,7 +108,10 @@ export class PipelineOrchestrator {
     if (stages === undefined) {
       return // unknown pipeline — nothing to advance
     }
-    if (outcome !== 'completed') {
+    if (
+      event.type === 'session.ended' &&
+      (event.payload as EventPayloads['session.ended']).outcome !== 'completed'
+    ) {
       this.#emit('pipeline.failed', { pipelineId, stageIndex, sessionId })
       return
     }

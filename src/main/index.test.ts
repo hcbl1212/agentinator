@@ -1302,18 +1302,18 @@ describe('bootstrap', () => {
       ) => unknown
     const pipelineId = call('pipelines:create')(undefined, 'Add a logout button')
 
-    // Stage 0 launched an agent (the startStage closure ran through the manager);
-    // its events flow back through the sink. Wait for the e2e turn to settle.
+    // Each stage's e2e agent goes idle when its turn finishes, which advances
+    // the pipeline; the three stages cascade to completion through the sink.
     await vi.waitFor(() =>
-      expect(store.list().some((event) => event.type === 'session.idle')).toBe(true),
+      expect(store.list().some((event) => event.type === 'pipeline.completed')).toBe(true),
     )
 
-    const types = store.list().map((event) => event.type)
-    expect(types).toContain('pipeline.created')
-    expect(types).toContain('session.started')
-    const started = store.list().find((event) => event.type === 'pipeline.stage.started')
-      ?.payload as { pipelineId: string; stageIndex: number }
-    expect(started).toMatchObject({ pipelineId, stageIndex: 0 })
+    const list = store.list()
+    const started = list.filter((event) => event.type === 'pipeline.stage.started')
+    expect(started).toHaveLength(3) // Plan → Implement → Review
+    expect(started[0].payload).toMatchObject({ pipelineId, stageIndex: 0 })
+    expect(list.filter((event) => event.type === 'pipeline.stage.completed')).toHaveLength(3)
+    expect(list.some((event) => event.type === 'session.started')).toBe(true)
     store.close()
   })
 

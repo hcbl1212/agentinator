@@ -44,6 +44,10 @@ function harness() {
         ...(worktree === undefined ? {} : { worktree }),
       })
     },
+    // A finished turn — how a stage normally completes (the agent stays alive).
+    idled: (sessionId: string): void => {
+      orchestrator.observe({ seq: ++seq, ts: 't', type: 'session.idle', payload: { sessionId } })
+    },
     ended: (sessionId: string, outcome: 'completed' | 'cancelled' | 'failed'): void => {
       orchestrator.observe({
         seq: ++seq,
@@ -85,7 +89,7 @@ describe('PipelineOrchestrator', () => {
     h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedText('sess0', 'THE PLAN')
 
-    h.ended('sess0', 'completed')
+    h.idled('sess0')
 
     expect(h.types()).toEqual([
       'pipeline.created',
@@ -112,7 +116,7 @@ describe('PipelineOrchestrator', () => {
     // Stage 0 ran in an isolated worktree (recorded on its session.started).
     h.seedStarted('sess0', worktree)
 
-    h.ended('sess0', 'completed')
+    h.idled('sess0')
 
     // The next stage launches in the same checkout, so it sees stage 0's edits.
     expect(h.startStage.mock.calls[1][1]).toEqual(worktree)
@@ -123,7 +127,7 @@ describe('PipelineOrchestrator', () => {
     h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedStarted('sess0') // started with no worktree
 
-    h.ended('sess0', 'completed')
+    h.idled('sess0')
 
     expect(h.startStage.mock.calls[1][1]).toBeUndefined()
   })
@@ -132,10 +136,10 @@ describe('PipelineOrchestrator', () => {
     const h = harness()
     h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedText('sess0', 'plan')
-    h.ended('sess0', 'completed') // → Implement (sess1)
+    h.idled('sess0') // → Implement (sess1)
     h.seedText('sess1', 'implemented')
-    h.ended('sess1', 'completed') // → Review (sess2)
-    h.ended('sess2', 'completed') // last stage → done
+    h.idled('sess1') // → Review (sess2)
+    h.idled('sess2') // last stage → done
 
     expect(h.startStage).toHaveBeenCalledTimes(3)
     expect(h.types()).toContain('pipeline.completed')
@@ -147,7 +151,7 @@ describe('PipelineOrchestrator', () => {
     const stages = defaultPipelineStages('do it')
     h.orchestrator.create('T', stages)
 
-    h.ended('sess0', 'completed') // no agent.text seeded for sess0
+    h.idled('sess0') // no agent.text seeded for sess0
 
     const implementPrompt = h.startStage.mock.calls[1][0]
     expect(implementPrompt).toBe(stages[1].prompt)
@@ -193,9 +197,9 @@ describe('PipelineOrchestrator', () => {
   it('does not advance a stage twice', () => {
     const h = harness()
     h.orchestrator.create('T', defaultPipelineStages('do it'))
-    h.ended('sess0', 'completed') // advances to sess1
+    h.idled('sess0') // advances to sess1
 
-    h.ended('sess0', 'completed') // a duplicate end must be ignored
+    h.idled('sess0') // a duplicate end must be ignored
 
     expect(h.startStage).toHaveBeenCalledTimes(2)
   })
