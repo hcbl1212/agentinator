@@ -5,9 +5,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
-import { SelectionProvider } from '../state/selection'
+import { SelectionProvider, useSelection } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { ComposerDock } from './ComposerDock'
+
+/** Selects a session id — the composer scopes approvals/questions to it. */
+function Selector({ id }: { id: string }): React.JSX.Element {
+  const { select } = useSelection()
+  return (
+    <button type="button" onClick={() => select({ kind: 'session', id })}>
+      select {id}
+    </button>
+  )
+}
 
 interface BridgeStub {
   bridge: AgentinatorBridge
@@ -152,6 +162,19 @@ function renderDock(): void {
       </SessionsProvider>
     </SelectionProvider>,
   )
+}
+
+/** Render with a session pre-selected, so its approvals show in the composer. */
+async function renderSelected(sessionId: string): Promise<void> {
+  render(
+    <SelectionProvider>
+      <SessionsProvider>
+        <Selector id={sessionId} />
+        <ComposerDock />
+      </SessionsProvider>
+    </SelectionProvider>,
+  )
+  await userEvent.click(screen.getByRole('button', { name: `select ${sessionId}` }))
 }
 
 /** Launch a task and make its session live + selected → reply mode. */
@@ -346,7 +369,7 @@ describe('ComposerDock', () => {
     ])
     window.agentinator = stub.bridge
 
-    renderDock()
+    await renderSelected('s')
     await waitFor(() => {
       expect(screen.getByText('write a.ts')).toBeInTheDocument()
     })
@@ -355,11 +378,25 @@ describe('ComposerDock', () => {
     expect(stub.resolve).toHaveBeenCalledWith('approval_1', true)
   })
 
+  it('only shows the selected agent’s approvals, not other agents’', async () => {
+    const stub = stubBridge([
+      { requestId: 'mine', sessionId: 's', tool: 'write', input: { path: 'a.ts' } },
+      { requestId: 'theirs', sessionId: 'other', tool: 'write', input: { path: 'b.ts' } },
+    ])
+    window.agentinator = stub.bridge
+
+    await renderSelected('s')
+
+    // The selected agent's approval shows; another agent's stays with it.
+    expect(await screen.findByText('write a.ts')).toBeInTheDocument()
+    expect(screen.queryByText('write b.ts')).not.toBeInTheDocument()
+  })
+
   it('adds live approval requests (deduped) and removes them when resolved', async () => {
     const stub = stubBridge()
     window.agentinator = stub.bridge
 
-    renderDock()
+    await renderSelected('s')
     await waitFor(() => {
       expect(stub.bridge.approvals.pending).toHaveBeenCalled()
     })
@@ -389,7 +426,7 @@ describe('ComposerDock', () => {
     ])
     window.agentinator = stub.bridge
 
-    renderDock()
+    await renderSelected('s')
     await waitFor(() => {
       expect(screen.getByText('write b.ts')).toBeInTheDocument()
     })

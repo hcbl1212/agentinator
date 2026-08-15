@@ -37,6 +37,10 @@ export function ComposerDock(): React.JSX.Element {
   const selected = sessions.find((session) => session.id === selectedId)
   const replying = selected !== undefined
   const question = selectedId === null ? undefined : questions[selectedId]
+  // Only the selected agent's approvals show here — the composer follows the
+  // selection. The inbox surfaces which other agents need you; clicking one
+  // selects it, and its approval appears.
+  const pendingForSelected = approvals.filter((approval) => approval.sessionId === selectedId)
 
   // Focus the prompt whenever it's ready for a new task (on load and when the
   // rail's "New agent" deselects) so you can just start typing.
@@ -218,9 +222,9 @@ export function ComposerDock(): React.JSX.Element {
               onAnswer={(text) => sendMessage(selected.id, text, [])}
             />
           )}
-          {approvals.length > 0 && (
+          {pendingForSelected.length > 0 && (
             <div className="approvals" aria-label="Pending approvals">
-              {approvals.map((approval) => (
+              {pendingForSelected.map((approval) => (
                 <ApprovalCard
                   key={approval.requestId}
                   approval={approval}
