@@ -543,12 +543,16 @@ describe('registerSettingsIpc', () => {
     expect(handlers.get('settings:get-preview-settle-ms')?.(undefined)).toBe(700)
     handlers.get('settings:set-preview-settle-ms')?.(undefined, 900)
     expect(settings.setPreviewSettleMs).toHaveBeenCalledWith(900)
-    expect(handlers.get('settings:get-worktree-preview')?.(undefined)).toBe(true)
-    handlers.get('settings:set-worktree-preview')?.(undefined, true)
-    expect(settings.setWorktreePreview).toHaveBeenCalledWith(true)
-    expect(handlers.get('settings:get-preview-server-command')?.(undefined)).toBe('npm run dev')
-    handlers.get('settings:set-preview-server-command')?.(undefined, 'pnpm dev')
-    expect(settings.setPreviewServerCommand).toHaveBeenCalledWith('pnpm dev')
+    expect(handlers.get('settings:get-worktree-preview')?.(undefined, 's1')).toBe(true)
+    expect(settings.worktreePreview).toHaveBeenCalledWith('s1')
+    handlers.get('settings:set-worktree-preview')?.(undefined, 's1', true)
+    expect(settings.setWorktreePreview).toHaveBeenCalledWith('s1', true)
+    expect(handlers.get('settings:get-preview-server-command')?.(undefined, 's1')).toBe(
+      'npm run dev',
+    )
+    expect(settings.previewServerCommand).toHaveBeenCalledWith('s1')
+    handlers.get('settings:set-preview-server-command')?.(undefined, 's1', 'pnpm dev')
+    expect(settings.setPreviewServerCommand).toHaveBeenCalledWith('s1', 'pnpm dev')
   })
 
   it('returns null for an unset preview target', () => {

@@ -166,22 +166,25 @@ describe('SettingsStore', () => {
     store.close()
   })
 
-  it('toggles worktree preview and persists the dev-server command', () => {
+  it('toggles worktree preview and persists the dev-server command per session', () => {
     const store = new SettingsStore()
 
-    expect(store.worktreePreview()).toBe(false)
-    store.setWorktreePreview(true)
-    expect(store.worktreePreview()).toBe(true)
-    store.setWorktreePreview(false)
-    expect(store.worktreePreview()).toBe(false)
+    expect(store.worktreePreview('s1')).toBe(false)
+    store.setWorktreePreview('s1', true)
+    expect(store.worktreePreview('s1')).toBe(true)
+    // Each agent keeps its own toggle — turning s1 on doesn't affect s2.
+    expect(store.worktreePreview('s2')).toBe(false)
+    store.setWorktreePreview('s1', false)
+    expect(store.worktreePreview('s1')).toBe(false)
 
     // Defaults to Vite's dev script; trims; blank clears back to default.
-    expect(store.previewServerCommand()).toBe('npm run dev')
-    store.setPreviewServerCommand('  pnpm dev  ')
-    expect(store.previewServerCommand()).toBe('pnpm dev')
-    store.setPreviewServerCommand('vite')
-    store.setPreviewServerCommand(null) // null clears too
-    expect(store.previewServerCommand()).toBe('npm run dev')
+    expect(store.previewServerCommand('s1')).toBe('npm run dev')
+    store.setPreviewServerCommand('s1', '  pnpm dev  ')
+    expect(store.previewServerCommand('s1')).toBe('pnpm dev')
+    expect(store.previewServerCommand('s2')).toBe('npm run dev') // s2 unaffected
+    store.setPreviewServerCommand('s1', 'vite')
+    store.setPreviewServerCommand('s1', null) // null clears too
+    expect(store.previewServerCommand('s1')).toBe('npm run dev')
     store.close()
   })
 

@@ -259,13 +259,17 @@ export function registerSettingsIpc(
   handle('settings:set-preview-settle-ms', (_event, ms) => {
     settings.setPreviewSettleMs(ms as number | null)
   })
-  handle('settings:get-worktree-preview', () => settings.worktreePreview())
-  handle('settings:set-worktree-preview', (_event, on) => {
-    settings.setWorktreePreview(on === true)
+  handle('settings:get-worktree-preview', (_event, sessionId) =>
+    settings.worktreePreview(sessionId as string),
+  )
+  handle('settings:set-worktree-preview', (_event, sessionId, on) => {
+    settings.setWorktreePreview(sessionId as string, on === true)
   })
-  handle('settings:get-preview-server-command', () => settings.previewServerCommand())
-  handle('settings:set-preview-server-command', (_event, command) => {
-    settings.setPreviewServerCommand(command as string | null)
+  handle('settings:get-preview-server-command', (_event, sessionId) =>
+    settings.previewServerCommand(sessionId as string),
+  )
+  handle('settings:set-preview-server-command', (_event, sessionId, command) => {
+    settings.setPreviewServerCommand(sessionId as string, command as string | null)
   })
 }
 
@@ -467,7 +471,7 @@ export async function resolveWorktreePreview(
   settings: SettingsStore,
   devServers: DevServers,
 ): Promise<{ url: string; root: string; file: string; wrapper?: string; props?: string } | null> {
-  if (!settings.worktreePreview()) {
+  if (!settings.worktreePreview(sessionId)) {
     return null
   }
   const component = settings.component(sessionId)
@@ -487,7 +491,7 @@ export async function resolveWorktreePreview(
     sessionId,
     serverCwd,
     component.root,
-    settings.previewServerCommand(),
+    settings.previewServerCommand(sessionId),
   )
   return {
     url,

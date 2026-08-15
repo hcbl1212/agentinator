@@ -65,8 +65,9 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const [serverCount, setServerCount] = useState(0)
   const [depsStale, setDepsStale] = useState(false)
 
-  // Load the configured preview target (a real dev-server URL, or blank for the
-  // bundled sample) and any pinned component once.
+  // Load the workspace-wide preview settings once: the target URL (a real
+  // dev-server URL, or blank for the bundled sample), the settle delay, and the
+  // running-server count. The per-agent settings load in the sessionId effect.
   useEffect(() => {
     const bridge = window.agentinator
     if (bridge === undefined) {
@@ -81,16 +82,6 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     void bridge.settings.getPreviewSettleMs().then((ms) => {
       if (!cancelled) {
         setSettleMs(String(ms))
-      }
-    })
-    void bridge.settings.getWorktreePreview().then((on) => {
-      if (!cancelled) {
-        setWorktreePreview(on)
-      }
-    })
-    void bridge.settings.getPreviewServerCommand().then((command) => {
-      if (!cancelled) {
-        setServerCommand(command)
       }
     })
     void bridge.preview.worktreeServerCount().then((n) => {
@@ -122,18 +113,30 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     setComponentFile('')
     setComponentWrapper('')
     setComponentProps('')
+    setWorktreePreview(false)
     const bridge = window.agentinator
     if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return
     }
     let cancelled = false
-    // Load this agent's pinned component (if any); other agents keep their own.
+    // Load this agent's own preview settings (pinned component, whether to
+    // preview its worktree, and its dev-server command); other agents keep theirs.
     void bridge.preview.getComponent(sessionId).then((pinned) => {
       if (!cancelled && pinned !== null) {
         setComponentRoot(pinned.root)
         setComponentFile(pinned.file)
         setComponentWrapper(pinned.wrapper ?? '')
         setComponentProps(pinned.props ?? '')
+      }
+    })
+    void bridge.settings.getWorktreePreview(sessionId).then((on) => {
+      if (!cancelled) {
+        setWorktreePreview(on)
+      }
+    })
+    void bridge.settings.getPreviewServerCommand(sessionId).then((command) => {
+      if (!cancelled) {
+        setServerCommand(command)
       }
     })
     const show = (event: StoredEvent): void => {
@@ -218,18 +221,18 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   const toggleWorktreePreview = (on: boolean): void => {
     setWorktreePreview(on)
     setDepsStale(false)
-    const preview = window.agentinator?.preview
-    void window.agentinator?.settings.setWorktreePreview(on)
-    if (!on) {
-      setServerState('idle')
-      void preview?.stopWorktreeServers().then(refreshServerCount)
+    const bridge = window.agentinator
+    if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return
     }
-    if (preview === undefined || sessionId === null || sessionId === undefined) {
+    void bridge.settings.setWorktreePreview(sessionId, on)
+    if (!on) {
+      setServerState('idle')
+      void bridge.preview.stopWorktreeServers().then(refreshServerCount)
       return
     }
     setServerState('starting')
-    void preview
+    void bridge.preview
       .startWorktreeServer(sessionId)
       .then((result) => {
         if (result === null) {
@@ -238,7 +241,7 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
           setServerState('ready')
           setServerUrl(result.url)
           // Warn if the agent changed deps — the linked node_modules is stale.
-          void preview.worktreeDepsChanged(sessionId).then(setDepsStale)
+          void bridge.preview.worktreeDepsChanged(sessionId).then(setDepsStale)
         }
       })
       .catch((reason: unknown) => {
@@ -254,8 +257,12 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   }
 
   const saveServerCommand = (): void => {
+    const bridge = window.agentinator
+    if (bridge === undefined || sessionId === null || sessionId === undefined) {
+      return
+    }
     const trimmed = serverCommand.trim()
-    void window.agentinator?.settings.setPreviewServerCommand(trimmed === '' ? null : trimmed)
+    void bridge.settings.setPreviewServerCommand(sessionId, trimmed === '' ? null : trimmed)
   }
 
   // Pin a component to render in isolation (through the dev server above), or

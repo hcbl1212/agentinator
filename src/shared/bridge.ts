@@ -83,14 +83,14 @@ export interface AgentinatorBridge {
     /** How long a capture waits for the page to settle after load, in ms. */
     getPreviewSettleMs(): Promise<number>
     setPreviewSettleMs(ms: number | null): Promise<void>
-    /** Whether captures render the selected agent's isolated worktree (its
-     * branch) via a harness-run dev server, rather than the main checkout. */
-    getWorktreePreview(): Promise<boolean>
-    setWorktreePreview(on: boolean): Promise<void>
-    /** The command the harness runs to start the app's dev server in a
-     * worktree (e.g. `npm run dev`). */
-    getPreviewServerCommand(): Promise<string>
-    setPreviewServerCommand(command: string | null): Promise<void>
+    /** Whether captures of this agent render its isolated worktree (its branch)
+     * via a harness-run dev server, rather than the main checkout. Per-agent. */
+    getWorktreePreview(sessionId: string): Promise<boolean>
+    setWorktreePreview(sessionId: string, on: boolean): Promise<void>
+    /** The command the harness runs to start this agent's dev server in its
+     * worktree (e.g. `npm run dev`). Per-agent. */
+    getPreviewServerCommand(sessionId: string): Promise<string>
+    setPreviewServerCommand(sessionId: string, command: string | null): Promise<void>
   }
   /** The visual feedback loop: capture the target app and read screenshots
    * back. Bytes stay in the main process; the renderer holds only refs. */

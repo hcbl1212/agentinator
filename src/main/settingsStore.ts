@@ -121,36 +121,41 @@ export class SettingsStore {
     this.#set.run('previewSettleMs', String(clampSettleMs(ms)))
   }
 
-  /** Whether a capture should render the selected agent's isolated worktree
-   * (its branch) via a harness-run dev server, instead of the main checkout.
-   * Off by default. */
-  worktreePreview(): boolean {
-    return (this.#get.get('worktreePreview') as { value: string } | undefined)?.value === '1'
-  }
-
-  setWorktreePreview(on: boolean): void {
-    if (on) {
-      this.#set.run('worktreePreview', '1')
-    } else {
-      this.#delete.run('worktreePreview')
-    }
-  }
-
-  /** The command the harness runs to start the app's dev server inside a
-   * worktree (e.g. `npm run dev`). */
-  previewServerCommand(): string {
+  /** Whether a capture of this agent should render its isolated worktree (its
+   * branch) via a harness-run dev server, instead of the main checkout.
+   * Per-session so each agent keeps its own choice. Off by default. */
+  worktreePreview(sessionId: string): boolean {
     return (
-      (this.#get.get('previewServerCommand') as { value: string } | undefined)?.value ??
-      DEFAULT_SERVER_COMMAND
+      (this.#get.get(`worktreePreview:${sessionId}`) as { value: string } | undefined)?.value ===
+      '1'
     )
   }
 
-  setPreviewServerCommand(command: string | null): void {
+  setWorktreePreview(sessionId: string, on: boolean): void {
+    const key = `worktreePreview:${sessionId}`
+    if (on) {
+      this.#set.run(key, '1')
+    } else {
+      this.#delete.run(key)
+    }
+  }
+
+  /** The command the harness runs to start this agent's dev server inside its
+   * worktree (e.g. `npm run dev`). Per-session, defaulting when unset. */
+  previewServerCommand(sessionId: string): string {
+    return (
+      (this.#get.get(`previewServerCommand:${sessionId}`) as { value: string } | undefined)
+        ?.value ?? DEFAULT_SERVER_COMMAND
+    )
+  }
+
+  setPreviewServerCommand(sessionId: string, command: string | null): void {
+    const key = `previewServerCommand:${sessionId}`
     const trimmed = command?.trim() ?? ''
     if (trimmed === '') {
-      this.#delete.run('previewServerCommand')
+      this.#delete.run(key)
     } else {
-      this.#set.run('previewServerCommand', trimmed)
+      this.#set.run(key, trimmed)
     }
   }
 

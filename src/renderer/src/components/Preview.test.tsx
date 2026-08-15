@@ -530,17 +530,17 @@ describe('Preview', () => {
     expect(screen.queryByRole('textbox', { name: 'Worktree dev-server command' })).toBeNull()
 
     fireEvent.click(toggle)
-    expect(stubbed.setWorktreePreview).toHaveBeenCalledWith(true)
+    expect(stubbed.setWorktreePreview).toHaveBeenCalledWith('s', true)
 
     const command = screen.getByRole('textbox', { name: 'Worktree dev-server command' })
     fireEvent.change(command, { target: { value: 'pnpm dev' } })
     fireEvent.blur(command)
-    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith('pnpm dev')
+    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith('s', 'pnpm dev')
 
     // Blanking the command clears it back to the default.
     fireEvent.change(command, { target: { value: '  ' } })
     fireEvent.blur(command)
-    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith(null)
+    expect(stubbed.setPreviewServerCommand).toHaveBeenCalledWith('s', null)
   })
 
   it('loads worktree preview already enabled, showing the command', async () => {
