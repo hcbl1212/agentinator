@@ -98,14 +98,6 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
         setServerCount(n)
       }
     })
-    void bridge.preview.getComponent().then((pinned) => {
-      if (!cancelled && pinned !== null) {
-        setComponentRoot(pinned.root)
-        setComponentFile(pinned.file)
-        setComponentWrapper(pinned.wrapper ?? '')
-        setComponentProps(pinned.props ?? '')
-      }
-    })
     return () => {
       cancelled = true
     }
@@ -115,7 +107,8 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   // each shot's PNG by ref as it becomes current.
   useEffect(() => {
     // Reset everything tied to the previous agent so its screenshot, capture
-    // error, and worktree-server status don't linger on the newly selected one.
+    // error, worktree-server status, and pinned component don't linger on the
+    // newly selected one — a fresh agent starts blank.
     setShot(null)
     setSrc(null)
     setMark(null)
@@ -125,11 +118,24 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     setServerUrl('')
     setServerError('')
     setDepsStale(false)
+    setComponentRoot('')
+    setComponentFile('')
+    setComponentWrapper('')
+    setComponentProps('')
     const bridge = window.agentinator
     if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return
     }
     let cancelled = false
+    // Load this agent's pinned component (if any); other agents keep their own.
+    void bridge.preview.getComponent(sessionId).then((pinned) => {
+      if (!cancelled && pinned !== null) {
+        setComponentRoot(pinned.root)
+        setComponentFile(pinned.file)
+        setComponentWrapper(pinned.wrapper ?? '')
+        setComponentProps(pinned.props ?? '')
+      }
+    })
     const show = (event: StoredEvent): void => {
       setShot(toShot(event))
       // A new screenshot invalidates any pending annotation on the old one.
@@ -256,13 +262,14 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   // clear the pin to go back to the whole app.
   const saveComponent = (): void => {
     const bridge = window.agentinator
-    if (bridge === undefined) {
+    if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return
     }
     const file = componentFile.trim()
     const wrapper = componentWrapper.trim()
     const props = componentProps.trim()
     void bridge.preview.setComponent(
+      sessionId,
       componentRoot.trim(),
       file === '' ? null : file,
       wrapper === '' ? null : wrapper,
@@ -275,7 +282,11 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
     setComponentFile('')
     setComponentWrapper('')
     setComponentProps('')
-    void window.agentinator?.preview.setComponent('', null)
+    const bridge = window.agentinator
+    if (bridge === undefined || sessionId === null || sessionId === undefined) {
+      return
+    }
+    void bridge.preview.setComponent(sessionId, '', null)
   }
 
   // Ask the agent to set the component up for isolated preview — generate its

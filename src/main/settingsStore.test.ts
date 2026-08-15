@@ -164,33 +164,39 @@ describe('SettingsStore', () => {
     store.close()
   })
 
-  it('persists the component-workbench target incl. an optional wrapper', () => {
+  it('persists a per-session component-workbench target incl. an optional wrapper', () => {
     const store = new SettingsStore()
 
-    expect(store.component()).toBeUndefined()
-    store.setComponent('  /app  ', '  src/Cart.tsx  ')
-    expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
+    expect(store.component('s1')).toBeUndefined()
+    store.setComponent('s1', '  /app  ', '  src/Cart.tsx  ')
+    expect(store.component('s1')).toEqual({ root: '/app', file: 'src/Cart.tsx' })
 
     // A wrapper and props are stored alongside and returned.
-    store.setComponent('/app', 'src/Cart.tsx', '  src/PreviewProviders.tsx  ', '  { a: 1 }  ')
-    expect(store.component()).toEqual({
+    store.setComponent('s1', '/app', 'src/Cart.tsx', '  src/PreviewProviders.tsx  ', '  { a: 1 }  ')
+    expect(store.component('s1')).toEqual({
       root: '/app',
       file: 'src/Cart.tsx',
       wrapper: 'src/PreviewProviders.tsx',
       props: '{ a: 1 }',
     })
     // Re-pinning without a wrapper or props drops them.
-    store.setComponent('/app', 'src/Cart.tsx', '  ')
-    expect(store.component()).toEqual({ root: '/app', file: 'src/Cart.tsx' })
+    store.setComponent('s1', '/app', 'src/Cart.tsx', '  ')
+    expect(store.component('s1')).toEqual({ root: '/app', file: 'src/Cart.tsx' })
+
+    // Each session's pin is independent — another agent starts blank.
+    expect(store.component('s2')).toBeUndefined()
+    store.setComponent('s2', '/other', 'src/Other.tsx')
+    expect(store.component('s2')).toEqual({ root: '/other', file: 'src/Other.tsx' })
+    expect(store.component('s1')).toEqual({ root: '/app', file: 'src/Cart.tsx' })
 
     // Clearing the file clears the whole target (wrapper included).
-    store.setComponent('/app', 'src/Cart.tsx', 'src/PreviewProviders.tsx')
-    store.setComponent('/app', null)
-    expect(store.component()).toBeUndefined()
+    store.setComponent('s1', '/app', 'src/Cart.tsx', 'src/PreviewProviders.tsx')
+    store.setComponent('s1', '/app', null)
+    expect(store.component('s1')).toBeUndefined()
     // A blank root also clears it.
-    store.setComponent('/app', 'src/Cart.tsx')
-    store.setComponent('   ', 'src/Cart.tsx')
-    expect(store.component()).toBeUndefined()
+    store.setComponent('s1', '/app', 'src/Cart.tsx')
+    store.setComponent('s1', '   ', 'src/Cart.tsx')
+    expect(store.component('s1')).toBeUndefined()
     store.close()
   })
 

@@ -160,8 +160,14 @@ describe('preload bridge', () => {
     await bridge.preview.capture('session_9')
     await bridge.preview.capture('session_9', 'http://localhost:5173/')
     await bridge.preview.image('shot_1')
-    await bridge.preview.getComponent()
-    await bridge.preview.setComponent('/app', 'src/Cart.tsx', 'src/Providers.tsx', '{ n: 1 }')
+    await bridge.preview.getComponent('session_9')
+    await bridge.preview.setComponent(
+      'session_9',
+      '/app',
+      'src/Cart.tsx',
+      'src/Providers.tsx',
+      '{ n: 1 }',
+    )
     await bridge.preview.inferProps('/app', 'src/Cart.tsx')
     await bridge.preview.inferWrapper('/app', 'src/Cart.tsx')
     await bridge.preview.chooseFolder()
@@ -178,9 +184,10 @@ describe('preload bridge', () => {
       'http://localhost:5173/',
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:image', 'shot_1')
-    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:get-component')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('preview:get-component', 'session_9')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
       'preview:set-component',
+      'session_9',
       '/app',
       'src/Cart.tsx',
       'src/Providers.tsx',

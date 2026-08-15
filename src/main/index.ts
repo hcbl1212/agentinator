@@ -317,17 +317,21 @@ export function registerPreviewIpc(
     preview.capture(sessionId as string, url as string | undefined),
   )
   handle('preview:image', (_event, ref) => preview.image(ref as string))
-  handle('preview:get-component', () => settings.component() ?? null)
-  handle('preview:set-component', (_event, root, file, wrapper, props) => {
+  handle(
+    'preview:get-component',
+    (_event, sessionId) => settings.component(sessionId as string) ?? null,
+  )
+  handle('preview:set-component', (_event, sessionId, root, file, wrapper, props) => {
     const trimmed = typeof file === 'string' ? file.trim() : ''
     // Clearing the pin removes the entry we wrote into the app root.
     if (trimmed === '') {
-      const current = settings.component()
+      const current = settings.component(sessionId as string)
       if (current !== undefined) {
         workbench.clear(current.root)
       }
     }
     settings.setComponent(
+      sessionId as string,
       root as string,
       file as string | null,
       wrapper as string | null | undefined,
@@ -447,7 +451,7 @@ export async function resolveWorktreePreview(
   if (!settings.worktreePreview()) {
     return null
   }
-  const component = settings.component()
+  const component = settings.component(sessionId)
   if (component === undefined) {
     return null
   }

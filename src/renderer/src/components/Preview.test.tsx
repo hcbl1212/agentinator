@@ -291,6 +291,7 @@ describe('Preview', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
     expect(stubbed.setComponent).toHaveBeenCalledWith(
+      's',
       '/app',
       'src/Button.tsx',
       'src/NewProviders.tsx',
@@ -300,7 +301,7 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('')
     expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('')
-    expect(stubbed.setComponent).toHaveBeenLastCalledWith('', null)
+    expect(stubbed.setComponent).toHaveBeenLastCalledWith('s', '', null)
   })
 
   it('infers props via the agent and fills the props field, then pins them', async () => {
@@ -325,6 +326,7 @@ describe('Preview', () => {
     fireEvent.change(props, { target: { value: '{ completedValue: 5, totalValue: 10 }' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
     expect(stubbed.setComponent).toHaveBeenCalledWith(
+      's',
       '/app',
       'src/Cart.tsx',
       null,
@@ -395,6 +397,29 @@ describe('Preview', () => {
     expect(screen.getByRole('textbox', { name: 'Wrapper file' })).toHaveValue('')
   })
 
+  it('blanks the component fields for a different agent and loads its own pin', async () => {
+    const stubbed = stub()
+    // Agent "s" mounts first with a pin; the fresh agent "s2" mounts with none.
+    stubbed.getComponent
+      .mockResolvedValueOnce({ root: '/app', file: 'src/Cart.tsx' })
+      .mockResolvedValueOnce(null)
+    window.agentinator = stubbed.bridge
+
+    const { rerender } = render(<Preview sessionId="s" />)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue('src/Cart.tsx'),
+    )
+
+    // Switching to a new agent clears the previous agent's pin — its fields
+    // must not linger on the one that never pinned anything.
+    rerender(<Preview sessionId="s2" />)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Component file' })).toHaveValue(''),
+    )
+    expect(screen.getByRole('textbox', { name: 'Component app root' })).toHaveValue('')
+    expect(stubbed.getComponent).toHaveBeenCalledWith('s2')
+  })
+
   it('pins nothing when the component file is left blank', async () => {
     const stubbed = stub()
     window.agentinator = stubbed.bridge
@@ -406,7 +431,9 @@ describe('Preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
 
     // A blank file unpins (null), it doesn't pin an empty component.
-    await waitFor(() => expect(stubbed.setComponent).toHaveBeenCalledWith('/app', null, null, null))
+    await waitFor(() =>
+      expect(stubbed.setComponent).toHaveBeenCalledWith('s', '/app', null, null, null),
+    )
   })
 
   it('surfaces a failed capture instead of failing silently', async () => {

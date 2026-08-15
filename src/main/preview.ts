@@ -11,7 +11,9 @@ export interface PreviewTargeting {
   previewTarget: () => string | undefined
   /** A pinned component (app root + root-relative file, optional wrapper and
    * props literal), or undefined. */
-  component: () => { root: string; file: string; wrapper?: string; props?: string } | undefined
+  component: (
+    sessionId: string,
+  ) => { root: string; file: string; wrapper?: string; props?: string } | undefined
   /** Writes the component entry and returns its dev-server path. */
   workbench: ComponentWorkbench
   /** The bundled sample, used when nothing else is configured. */
@@ -60,10 +62,10 @@ export class PreviewController {
   /** What to capture, resolved per shot: a pinned component (rendered in
    * isolation through the dev server) wins; else the configured dev-server URL;
    * else the bundled sample. */
-  #resolveTarget(): string {
+  #resolveTarget(sessionId: string): string {
     const { previewTarget, component, workbench, sample } = this.#targeting
     const base = previewTarget()
-    const pinned = component()
+    const pinned = component(sessionId)
     if (pinned !== undefined && base !== undefined) {
       const entry = workbench.prepare(pinned.root, pinned.file, pinned.wrapper, pinned.props)
       return `${base.replace(/\/$/, '')}${entry}`
@@ -122,7 +124,7 @@ export class PreviewController {
     console: ConsoleEntry[]
     network: NetworkEntry[]
   }> {
-    const target = url ?? (await this.#worktreeTarget(sessionId)) ?? this.#resolveTarget()
+    const target = url ?? (await this.#worktreeTarget(sessionId)) ?? this.#resolveTarget(sessionId)
     const shot = await this.#browser.capture(target, this.#targeting.settleMs())
     const ref = this.#artifacts.put(shot.png)
     this.#emit('preview.captured', {

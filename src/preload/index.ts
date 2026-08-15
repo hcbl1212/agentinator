@@ -72,15 +72,22 @@ export const bridge: AgentinatorBridge = {
     capture: (sessionId, url) =>
       ipcRenderer.invoke('preview:capture', sessionId, url) as Promise<string>,
     image: (ref) => ipcRenderer.invoke('preview:image', ref) as Promise<string | null>,
-    getComponent: () =>
-      ipcRenderer.invoke('preview:get-component') as Promise<{
+    getComponent: (sessionId) =>
+      ipcRenderer.invoke('preview:get-component', sessionId) as Promise<{
         root: string
         file: string
         wrapper?: string
         props?: string
       } | null>,
-    setComponent: (root, file, wrapper, props) =>
-      ipcRenderer.invoke('preview:set-component', root, file, wrapper, props) as Promise<void>,
+    setComponent: (sessionId, root, file, wrapper, props) =>
+      ipcRenderer.invoke(
+        'preview:set-component',
+        sessionId,
+        root,
+        file,
+        wrapper,
+        props,
+      ) as Promise<void>,
     inferProps: (root, file) =>
       ipcRenderer.invoke('preview:infer-props', root, file) as Promise<string>,
     inferWrapper: (root, file) =>

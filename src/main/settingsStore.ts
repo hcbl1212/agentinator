@@ -154,54 +154,48 @@ export class SettingsStore {
     }
   }
 
-  /** The component-workbench target: the app root (to write the entry into), the
-   * component file (root-relative), and an optional wrapper file that provides
-   * app context. Undefined when no component is pinned — the preview then shows
-   * the whole app / sample. */
-  component(): { root: string; file: string; wrapper?: string; props?: string } | undefined {
-    const root = (this.#get.get('componentRoot') as { value: string } | undefined)?.value
-    const file = (this.#get.get('componentFile') as { value: string } | undefined)?.value
-    if (root === undefined || file === undefined) {
+  /** The component-workbench target for one agent: the app root (to write the
+   * entry into), the component file (root-relative), and an optional wrapper
+   * file that provides app context. Per-session so a new agent starts blank
+   * rather than inheriting whatever the last agent pinned. Undefined when this
+   * session has nothing pinned — the preview then shows the whole app / sample. */
+  component(
+    sessionId: string,
+  ): { root: string; file: string; wrapper?: string; props?: string } | undefined {
+    const row = this.#get.get(`component:${sessionId}`) as { value: string } | undefined
+    if (row === undefined) {
       return undefined
     }
-    const wrapper = (this.#get.get('componentWrapper') as { value: string } | undefined)?.value
-    const props = (this.#get.get('componentProps') as { value: string } | undefined)?.value
-    return {
-      root,
-      file,
-      ...(wrapper === undefined ? {} : { wrapper }),
-      ...(props === undefined ? {} : { props }),
-    }
+    return JSON.parse(row.value) as { root: string; file: string; wrapper?: string; props?: string }
   }
 
   setComponent(
+    sessionId: string,
     root: string,
     file: string | null,
     wrapper?: string | null,
     props?: string | null,
   ): void {
+    const key = `component:${sessionId}`
     const trimmedFile = file?.trim() ?? ''
     const trimmedRoot = root.trim()
     if (trimmedFile === '' || trimmedRoot === '') {
-      this.#delete.run('componentRoot')
-      this.#delete.run('componentFile')
-      this.#delete.run('componentWrapper')
-      this.#delete.run('componentProps')
+      this.#delete.run(key)
       return
     }
-    this.#set.run('componentRoot', trimmedRoot)
-    this.#set.run('componentFile', trimmedFile)
-    this.#setOrClear('componentWrapper', wrapper)
-    this.#setOrClear('componentProps', props)
-  }
-
-  #setOrClear(key: string, value: string | null | undefined): void {
-    const trimmed = value?.trim() ?? ''
-    if (trimmed === '') {
-      this.#delete.run(key)
-    } else {
-      this.#set.run(key, trimmed)
+    const value: { root: string; file: string; wrapper?: string; props?: string } = {
+      root: trimmedRoot,
+      file: trimmedFile,
     }
+    const trimmedWrapper = wrapper?.trim() ?? ''
+    if (trimmedWrapper !== '') {
+      value.wrapper = trimmedWrapper
+    }
+    const trimmedProps = props?.trim() ?? ''
+    if (trimmedProps !== '') {
+      value.props = trimmedProps
+    }
+    this.#set.run(key, JSON.stringify(value))
   }
 
   /** Set (positive number) or clear (null) the cap for one scope. */

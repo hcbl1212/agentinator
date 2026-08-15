@@ -100,17 +100,21 @@ export interface AgentinatorBridge {
     capture(sessionId: string, url?: string): Promise<string>
     /** A captured screenshot's PNG as base64, or null if it's gone. */
     image(ref: string): Promise<string | null>
-    /** The pinned component workbench target (app root + root-relative file, an
-     * optional wrapper, and an optional props literal), or null when none. */
-    getComponent(): Promise<{
+    /** The component workbench target pinned for one agent (app root +
+     * root-relative file, an optional wrapper, and an optional props literal),
+     * or null when this agent has nothing pinned. Per-session: a new agent
+     * starts blank. */
+    getComponent(sessionId: string): Promise<{
       root: string
       file: string
       wrapper?: string
       props?: string
     } | null>
-    /** Pin a component to render in isolation, optionally wrapped in a context
-     * provider and rendered with a props literal; a null/blank file unpins it. */
+    /** Pin a component (for this agent) to render in isolation, optionally
+     * wrapped in a context provider and rendered with a props literal; a
+     * null/blank file unpins it. */
     setComponent(
+      sessionId: string,
       root: string,
       file: string | null,
       wrapper?: string | null,

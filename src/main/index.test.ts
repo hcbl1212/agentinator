@@ -994,16 +994,30 @@ describe('registerPreviewIpc', () => {
     const workbench = { clear: vi.fn() }
     const handlers = register({ capture: vi.fn(), image: vi.fn() }, settings, workbench)
 
-    expect(handlers.get('preview:get-component')?.(undefined)).toEqual({
+    expect(handlers.get('preview:get-component')?.(undefined, 's1')).toEqual({
       root: '/app',
       file: 'src/Cart.tsx',
     })
-    handlers.get('preview:set-component')?.(undefined, '/app', 'src/Cart.tsx', 'src/Wrap.tsx', '{}')
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', 'src/Cart.tsx', 'src/Wrap.tsx', '{}')
+    expect(settings.component).toHaveBeenCalledWith('s1')
+    handlers.get('preview:set-component')?.(
+      undefined,
+      's1',
+      '/app',
+      'src/Cart.tsx',
+      'src/Wrap.tsx',
+      '{}',
+    )
+    expect(settings.setComponent).toHaveBeenCalledWith(
+      's1',
+      '/app',
+      'src/Cart.tsx',
+      'src/Wrap.tsx',
+      '{}',
+    )
     // Clearing (blank file) removes the entry from the pinned root first.
-    handlers.get('preview:set-component')?.(undefined, '/app', '  ')
+    handlers.get('preview:set-component')?.(undefined, 's1', '/app', '  ')
     expect(workbench.clear).toHaveBeenCalledWith('/app')
-    expect(settings.setComponent).toHaveBeenLastCalledWith('/app', '  ', undefined, undefined)
+    expect(settings.setComponent).toHaveBeenLastCalledWith('s1', '/app', '  ', undefined, undefined)
   })
 
   it('infers props by delegating to the agent inferrer', async () => {
@@ -1047,10 +1061,10 @@ describe('registerPreviewIpc', () => {
     const workbench = { clear: vi.fn() }
     const handlers = register({ capture: vi.fn(), image: vi.fn() }, settings, workbench)
 
-    expect(handlers.get('preview:get-component')?.(undefined)).toBeNull()
-    handlers.get('preview:set-component')?.(undefined, '/app', null)
+    expect(handlers.get('preview:get-component')?.(undefined, 's1')).toBeNull()
+    handlers.get('preview:set-component')?.(undefined, 's1', '/app', null)
     expect(workbench.clear).not.toHaveBeenCalled()
-    expect(settings.setComponent).toHaveBeenCalledWith('/app', null, undefined, undefined)
+    expect(settings.setComponent).toHaveBeenCalledWith('s1', '/app', null, undefined, undefined)
   })
 
   it('registers on ipcMain by default', () => {
