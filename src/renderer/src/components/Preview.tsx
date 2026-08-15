@@ -114,10 +114,17 @@ export function Preview({ sessionId }: { sessionId?: string | null }): React.JSX
   // Seed the latest capture from the log, keep it live off broadcasts, and load
   // each shot's PNG by ref as it becomes current.
   useEffect(() => {
+    // Reset everything tied to the previous agent so its screenshot, capture
+    // error, and worktree-server status don't linger on the newly selected one.
     setShot(null)
     setSrc(null)
     setMark(null)
     setNote('')
+    setError(null)
+    setServerState('idle')
+    setServerUrl('')
+    setServerError('')
+    setDepsStale(false)
     const bridge = window.agentinator
     if (bridge === undefined || sessionId === null || sessionId === undefined) {
       return

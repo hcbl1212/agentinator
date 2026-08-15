@@ -426,6 +426,20 @@ describe('Preview', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('boom'))
   })
 
+  it("clears the previous agent's capture error when switching agents", async () => {
+    const stubbed = stub()
+    stubbed.capture.mockRejectedValueOnce(new Error('boom'))
+    window.agentinator = stubbed.bridge
+
+    const { rerender } = render(<Preview sessionId="a" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Capture' }))
+    await screen.findByRole('alert')
+
+    // Selecting another agent must not carry the first one's error over.
+    rerender(<Preview sessionId="b" />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('loads the configured preview target into the input', async () => {
     const stubbed = stub({ target: 'http://localhost:3001/' })
     window.agentinator = stubbed.bridge
