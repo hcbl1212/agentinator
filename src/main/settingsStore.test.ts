@@ -104,6 +104,27 @@ describe('SettingsStore', () => {
     expect(open(dbPath).budgets().month).toBe(150)
   })
 
+  it('keeps each agent’s pinned component across a reopen (restart)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentinator-settings-'))
+    tmpDirs.push(dir)
+    const dbPath = join(dir, 'settings.db')
+
+    const first = new SettingsStore(dbPath)
+    first.setComponent('session_abc', '/app', 'src/Cart.tsx', 'src/Wrap.tsx', '{ n: 1 }')
+    first.close()
+
+    // A fresh store over the same file (a restart) still has that agent's pin,
+    // and only that agent's — a different session stays blank.
+    const reopened = open(dbPath)
+    expect(reopened.component('session_abc')).toEqual({
+      root: '/app',
+      file: 'src/Cart.tsx',
+      wrapper: 'src/Wrap.tsx',
+      props: '{ n: 1 }',
+    })
+    expect(reopened.component('session_other')).toBeUndefined()
+  })
+
   it('persists the run-on-API-key toggle, defaulting off', () => {
     const store = new SettingsStore()
 
