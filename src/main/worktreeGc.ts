@@ -54,10 +54,19 @@ export class WorktreeJanitor {
   }
 
   #reclaimable(): WorktreeInfo[] {
+    // A pipeline's stages share one worktree, so several ended sessions can
+    // report the same path — dedupe by path so it's counted and freed once.
+    const seen = new Set<string>()
     return this.#deps
       .endedWorktrees()
       .map((ended) => ended.worktree)
-      .filter((info) => this.#deps.exists(info.path))
+      .filter((info) => {
+        if (seen.has(info.path) || !this.#deps.exists(info.path)) {
+          return false
+        }
+        seen.add(info.path)
+        return true
+      })
   }
 
   /** How many finished worktrees are still on disk, and their total size. */

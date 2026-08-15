@@ -710,8 +710,17 @@ describe('taskProviderId and startAgentTask', () => {
         providerId: 'claude',
         title: 'Add a hello util',
         prompt: 'Add a hello util',
+        worktree: undefined,
       }),
     )
+  })
+
+  it('passes a supplied worktree through so a pipeline stage reuses it', () => {
+    const start = vi.fn(() => 'session_9')
+    const worktree = { repoRoot: '/repo', path: '/wt/first', branch: 'agentinator/first' }
+    startAgentTask({ start } as unknown as SessionManager, 'Review it', undefined, worktree)
+
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ worktree }))
   })
 })
 

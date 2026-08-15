@@ -26,6 +26,7 @@ import { dirSizeBytes, WorktreeJanitor } from './worktreeGc'
 import { NodeCheckpoints } from './checkpoints'
 import type { Checkpoints } from './checkpoints'
 import { NodeWorktrees } from './worktrees'
+import type { WorktreeInfo } from './worktrees'
 import { defaultPipelineStages, PipelineOrchestrator } from './pipelines'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
@@ -213,17 +214,20 @@ export function taskProviderId(): string {
 }
 
 /** Start an agent from a task prompt (a fresh launch, or a dispatched queue
- * item), returning the new session id. */
+ * item), returning the new session id. A pipeline stage passes the worktree its
+ * predecessor ran in, so the stages share one checkout. */
 export function startAgentTask(
   manager: SessionManager,
   prompt: string,
   images?: ImageAttachment[],
+  worktree?: WorktreeInfo,
 ): string {
   return manager.start({
     providerId: taskProviderId(),
     title: taskTitle(prompt),
     prompt,
     images,
+    worktree,
     // The workspace repo — for now the process cwd (the repo when run via
     // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
     cwd: process.cwd(),
@@ -684,7 +688,7 @@ export async function bootstrap(
   const pipelines = new PipelineOrchestrator({
     emit: makeEmitStored(store),
     store,
-    startStage: (prompt) => startAgentTask(manager, prompt),
+    startStage: (prompt, worktree) => startAgentTask(manager, prompt, undefined, worktree),
   })
   pipelineObservers.push(pipelines.observe.bind(pipelines))
   pipelines.reconcile(store.list())

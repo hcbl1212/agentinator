@@ -72,6 +72,27 @@ describe('WorktreeJanitor', () => {
     expect(remove).toHaveBeenCalledWith(b)
   })
 
+  it('dedupes a shared worktree so a pipeline’s stages count and free once', () => {
+    // Every stage of a pipeline ran in one worktree, so several ended sessions
+    // report the same path — it must be counted and removed a single time.
+    const shared = info('first', '/wt/first')
+    const remove = vi.fn()
+    const janitor = new WorktreeJanitor({
+      endedWorktrees: () => [
+        { sessionId: 'plan', worktree: shared },
+        { sessionId: 'implement', worktree: shared },
+        { sessionId: 'review', worktree: shared },
+      ],
+      exists: () => true,
+      sizeOf: () => 200,
+      worktrees: { remove },
+    })
+
+    expect(janitor.summary()).toEqual({ count: 1, bytes: 200 })
+    expect(janitor.cleanup()).toEqual({ count: 1, bytes: 200 })
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
   it('cleans up nothing when there are no finished worktrees on disk', () => {
     const remove = vi.fn()
     const janitor = new WorktreeJanitor({

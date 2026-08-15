@@ -306,6 +306,33 @@ describe('SessionManager', () => {
     store.close()
   })
 
+  it('reuses a supplied worktree instead of creating one (a pipeline stage)', () => {
+    const store = new EventStore()
+    const shared: WorktreeInfo = {
+      repoRoot: '/repo',
+      path: '/wt/first',
+      branch: 'agentinator/first',
+    }
+    const worktrees = fakeWorktrees({ repoRoot: '/repo', path: '/wt/new', branch: 'b' })
+    const recording = recordingProvider('claude', true)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(recording.provider)
+
+    const id = manager.start({
+      providerId: 'claude',
+      title: 'T',
+      prompt: 'P',
+      cwd: '/repo',
+      worktree: shared,
+    })
+
+    // No fresh worktree — the stage runs in (and records) the shared one.
+    expect(worktrees.create).not.toHaveBeenCalled()
+    expect(recording.context()?.cwd).toBe('/wt/first')
+    expect(startedWorktree(store, id)).toEqual(shared)
+    store.close()
+  })
+
   it('runs in the repo directly when the cwd is not an isolable git repo', () => {
     const store = new EventStore()
     const worktrees = fakeWorktrees(null) // create declines

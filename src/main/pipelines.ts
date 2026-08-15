@@ -1,6 +1,7 @@
 import { createEntityId } from '../shared/events'
 import type { EventPayloads, PipelineStageSpec, StoredEvent } from '../shared/events'
 import type { EmitStored } from './approvals'
+import type { WorktreeInfo } from './worktrees'
 
 /** Prefixes the prior stage's output when it's handed to the next stage, so the
  * agent can tell the earlier work apart from its own instructions. */
@@ -46,13 +47,13 @@ type PipelineReader = { listBySession(sessionId: string): StoredEvent[] }
 export class PipelineOrchestrator {
   readonly #emit: EmitStored
   readonly #store: PipelineReader
-  readonly #startStage: (prompt: string) => string
+  readonly #startStage: (prompt: string, worktree?: WorktreeInfo) => string
   readonly #stagesByPipeline = new Map<string, PipelineStageSpec[]>()
 
   constructor(options: {
     emit: EmitStored
     store: PipelineReader
-    startStage: (prompt: string) => string
+    startStage: (prompt: string, worktree?: WorktreeInfo) => string
   }) {
     this.#emit = options.emit
     this.#store = options.store
@@ -116,13 +117,24 @@ export class PipelineOrchestrator {
       handoff === ''
         ? stages[next].prompt
         : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
-    this.#dispatch(pipelineId, next, prompt)
+    // Reuse the finishing stage's worktree so the next stage sees its edits —
+    // implement builds on plan, review reads the actual diff.
+    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events))
   }
 
   /** Launch a stage's agent and link the resulting session to the stage. */
-  #dispatch(pipelineId: string, stageIndex: number, prompt: string): void {
-    const sessionId = this.#startStage(prompt)
+  #dispatch(pipelineId: string, stageIndex: number, prompt: string, worktree?: WorktreeInfo): void {
+    const sessionId = this.#startStage(prompt, worktree)
     this.#emit('pipeline.stage.started', { pipelineId, stageIndex, sessionId })
+  }
+
+  /** The worktree the finishing stage ran in (from its session.started), or
+   * undefined for a non-isolated provider — the next stage then runs the same
+   * way (directly in the cwd). */
+  #worktreeOf(events: StoredEvent[]): WorktreeInfo | undefined {
+    const started = events.find((e) => e.type === 'session.started')?.payload as
+      EventPayloads['session.started'] | undefined
+    return started?.worktree
   }
 
   /** The last thing a stage's agent said — its output, handed to the next stage. */

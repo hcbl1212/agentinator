@@ -18,6 +18,10 @@ export interface StartSession {
   agentId?: string
   /** Images attached to the opening message (pasted screenshots). */
   images?: ImageAttachment[]
+  /** Run in this existing worktree instead of creating a fresh one — used by a
+   * pipeline so its stages share one checkout and each builds on the last's
+   * edits. When set, no new worktree/branch is created. */
+  worktree?: WorktreeInfo
 }
 
 const NO_BUDGETS: Budgets = { session: null, hour: null, day: null, week: null, month: null }
@@ -171,10 +175,14 @@ export class SessionManager {
 
     // Isolate real file-editing agents in their own worktree + branch so
     // concurrent sessions never share a working tree; scripted providers and
-    // non-repo cwds fall back to running directly in the cwd.
-    const worktree = provider.capabilities.worktreeIsolation
-      ? this.#worktrees.create(sessionId, options.cwd)
-      : null
+    // non-repo cwds fall back to running directly in the cwd. A pipeline stage
+    // passes an existing worktree to reuse instead — the stages share one
+    // checkout so each builds on the previous stage's edits.
+    const worktree =
+      options.worktree ??
+      (provider.capabilities.worktreeIsolation
+        ? this.#worktrees.create(sessionId, options.cwd)
+        : null)
     if (worktree !== null) {
       this.#worktreeBySession.set(sessionId, worktree)
     }

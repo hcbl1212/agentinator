@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { EventPayloads, EventType, StoredEvent } from '../shared/events'
 import type { EmitStored } from './approvals'
 import { defaultPipelineStages, HANDOFF_HEADER, PipelineOrchestrator } from './pipelines'
+import type { WorktreeInfo } from './worktrees'
 
 /** A tiny in-memory log that models the real store closely enough for the
  * orchestrator: emitted events land in the log, `listBySession` serves the
@@ -22,7 +23,7 @@ function harness() {
       log.filter((event) => (event.payload as { sessionId?: string }).sessionId === id),
   }
   let n = 0
-  const startStage = vi.fn<(prompt: string) => string>(() => `sess${n++}`)
+  const startStage = vi.fn<(prompt: string, worktree?: WorktreeInfo) => string>(() => `sess${n++}`)
   const orchestrator = new PipelineOrchestrator({ emit, store, startStage })
 
   return {
@@ -33,6 +34,15 @@ function harness() {
     types: (): string[] => log.map((event) => event.type),
     seedText: (sessionId: string, text: string): void => {
       push('agent.text', { sessionId, text })
+    },
+    seedStarted: (sessionId: string, worktree?: WorktreeInfo): void => {
+      push('session.started', {
+        sessionId,
+        agentId: 'a',
+        workspaceId: 'w',
+        title: 't',
+        ...(worktree === undefined ? {} : { worktree }),
+      })
     },
     ended: (sessionId: string, outcome: 'completed' | 'cancelled' | 'failed'): void => {
       orchestrator.observe({
@@ -89,6 +99,33 @@ describe('PipelineOrchestrator', () => {
     expect(implementPrompt).toContain('Implement the following task')
     expect(implementPrompt).toContain(HANDOFF_HEADER)
     expect(implementPrompt).toContain('THE PLAN')
+  })
+
+  it('reuses the finishing stage’s worktree for the next stage', () => {
+    const h = harness()
+    const worktree: WorktreeInfo = {
+      repoRoot: '/repo',
+      path: '/wt/sess0',
+      branch: 'agentinator/sess0',
+    }
+    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    // Stage 0 ran in an isolated worktree (recorded on its session.started).
+    h.seedStarted('sess0', worktree)
+
+    h.ended('sess0', 'completed')
+
+    // The next stage launches in the same checkout, so it sees stage 0's edits.
+    expect(h.startStage.mock.calls[1][1]).toEqual(worktree)
+  })
+
+  it('passes no worktree onward for a non-isolated provider', () => {
+    const h = harness()
+    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.seedStarted('sess0') // started with no worktree
+
+    h.ended('sess0', 'completed')
+
+    expect(h.startStage.mock.calls[1][1]).toBeUndefined()
   })
 
   it('completes the pipeline after the last stage', () => {
