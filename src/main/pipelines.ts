@@ -15,19 +15,23 @@ export function defaultPipelineStages(task: string): PipelineStageSpec[] {
     {
       name: 'Plan',
       prompt:
-        'Plan the following task. Produce a concise, ordered implementation plan — ' +
-        'the files to change and the approach. Do not write code yet.\n\n' +
+        'You are the PLANNING stage of a pipeline. Do not edit, create, or run ' +
+        'anything — a later stage implements your plan. Output only a written, ' +
+        'ordered implementation plan: the files to change and the approach.\n\n' +
         `Task: ${task}`,
     },
     {
       name: 'Implement',
-      prompt: `Implement the following task in full, with tests.\n\nTask: ${task}`,
+      prompt:
+        'You are the IMPLEMENTATION stage. The plan is below. Implement the task ' +
+        `in full, with tests.\n\nTask: ${task}`,
     },
     {
       name: 'Review',
       prompt:
-        'Review the implementation for correctness, test coverage, and style. ' +
-        'List any problems you find and fix them.',
+        'You are the REVIEW stage. The implementation is already in this working ' +
+        'tree — run `git diff` to see every change. Review it for correctness, ' +
+        'test coverage, and style, and fix any problems you find.',
     },
   ]
 }
@@ -48,16 +52,21 @@ export class PipelineOrchestrator {
   readonly #emit: EmitStored
   readonly #store: PipelineReader
   readonly #startStage: (prompt: string, worktree?: WorktreeInfo) => string
+  readonly #retireStage: (sessionId: string) => void
   readonly #stagesByPipeline = new Map<string, PipelineStageSpec[]>()
 
   constructor(options: {
     emit: EmitStored
     store: PipelineReader
     startStage: (prompt: string, worktree?: WorktreeInfo) => string
+    /** End a completed stage's agent so it leaves the rail (the pipeline chip
+     * still shows its status). The worktree is left for the next stage. */
+    retireStage: (sessionId: string) => void
   }) {
     this.#emit = options.emit
     this.#store = options.store
     this.#startStage = options.startStage
+    this.#retireStage = options.retireStage
   }
 
   /** Launch a pipeline: record it, then dispatch its first stage. */
@@ -116,6 +125,9 @@ export class PipelineOrchestrator {
       return
     }
     this.#emit('pipeline.stage.completed', { pipelineId, stageIndex, sessionId })
+    // The stage is done — retire its agent so the rail isn't left with an idle
+    // agent per finished stage (its transcript stays reachable via the chip).
+    this.#retireStage(sessionId)
     const next = stageIndex + 1
     if (next >= stages.length) {
       this.#emit('pipeline.completed', { pipelineId })

@@ -44,6 +44,9 @@ export class SessionManager {
   /** Sessions mid credential-switch: their old handle's session.ended is
    * suppressed so the agent keeps its place while it reconnects under a key. */
   #switching = new Set<string>()
+  /** Sessions being retired (a finished pipeline stage): the provider's own
+   * session.ended is suppressed so retire can record a clean "completed". */
+  #retiring = new Set<string>()
   readonly #store: EventStore
   readonly #onEvent: (event: StoredEvent) => void
   readonly #getBudgets: () => Budgets
@@ -229,9 +232,13 @@ export class SessionManager {
    * enforces the session/window budget on cost. Shared by start and resume. */
   #sessionEmitter(sessionId: string, providerId: string): EmitEvent {
     return (type, payload) => {
-      if (type === 'session.ended' && this.#switching.has(sessionId)) {
-        // A credential switch stops the old stream; the session lives on under a
-        // new key, so drop the end — don't record it or remove it from the rail.
+      if (
+        type === 'session.ended' &&
+        (this.#switching.has(sessionId) || this.#retiring.has(sessionId))
+      ) {
+        // A credential switch stops the old stream (the session lives on under a
+        // new key) and a retire ends the handle to record its own "completed" —
+        // in both cases drop the provider's end rather than recording it here.
         this.#handles.delete(sessionId)
         this.#sessionSpentUsd.delete(sessionId)
         return
@@ -397,6 +404,24 @@ export class SessionManager {
       this.#worktrees.remove(worktree)
       this.#worktreeBySession.delete(sessionId)
     }
+  }
+
+  /**
+   * Retire a finished session (a completed pipeline stage): stop its live
+   * handle and record a clean `session.ended` "completed" so it drops off the
+   * rail. Unlike dismiss, the worktree is left intact — a later stage of the
+   * same pipeline may still be using the shared checkout. A no-op if the session
+   * already has no live handle (it ended on its own).
+   */
+  async retire(sessionId: string): Promise<void> {
+    const handle = this.#handles.get(sessionId)
+    if (handle === undefined) {
+      return
+    }
+    this.#retiring.add(sessionId)
+    await handle.cancel()
+    this.#retiring.delete(sessionId)
+    this.#emit(this.#store.append('session.ended', { sessionId, outcome: 'completed' }))
   }
 
   /** A session's persisted worktree, read from its session.started event. */

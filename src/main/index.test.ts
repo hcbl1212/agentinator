@@ -1303,17 +1303,27 @@ describe('bootstrap', () => {
     const pipelineId = call('pipelines:create')(undefined, 'Add a logout button')
 
     // Each stage's e2e agent goes idle when its turn finishes, which advances
-    // the pipeline; the three stages cascade to completion through the sink.
+    // the pipeline and retires the finished stage; the three stages cascade to
+    // completion. Waiting for all three retires (session.ended) means every
+    // stage settled before the store closes.
     await vi.waitFor(() =>
-      expect(store.list().some((event) => event.type === 'pipeline.completed')).toBe(true),
+      expect(store.list().filter((event) => event.type === 'session.ended')).toHaveLength(3),
     )
 
     const list = store.list()
+    expect(list.some((event) => event.type === 'pipeline.completed')).toBe(true)
     const started = list.filter((event) => event.type === 'pipeline.stage.started')
     expect(started).toHaveLength(3) // Plan → Implement → Review
     expect(started[0].payload).toMatchObject({ pipelineId, stageIndex: 0 })
     expect(list.filter((event) => event.type === 'pipeline.stage.completed')).toHaveLength(3)
-    expect(list.some((event) => event.type === 'session.started')).toBe(true)
+    // Each finished stage was retired with a clean "completed" so it leaves the rail.
+    expect(
+      list.filter(
+        (event) =>
+          event.type === 'session.ended' &&
+          (event.payload as { outcome: string }).outcome === 'completed',
+      ),
+    ).toHaveLength(3)
     store.close()
   })
 

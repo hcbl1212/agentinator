@@ -442,6 +442,36 @@ describe('SessionManager', () => {
     store.close()
   })
 
+  it('retires a finished stage as completed, suppressing the provider end and keeping the worktree', async () => {
+    const store = new EventStore()
+    const info: WorktreeInfo = { repoRoot: '/repo', path: '/wt/s', branch: 'agentinator/s' }
+    const worktrees = fakeWorktrees(info)
+    const manager = new SessionManager(store, () => undefined, { worktrees })
+    manager.register(instantProvider('claude', true)) // its cancel emits session.ended
+    const id = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/repo' })
+    expect(manager.activeCount()).toBe(1)
+
+    await manager.retire(id)
+
+    // The provider's own "cancelled" end is dropped; one clean "completed" is
+    // recorded, the handle is released, and the shared worktree is left intact.
+    const ended = store.listBySession(id).filter((e) => e.type === 'session.ended')
+    expect(ended).toHaveLength(1)
+    expect(ended[0].payload).toMatchObject({ outcome: 'completed' })
+    expect(worktrees.remove).not.toHaveBeenCalled()
+    expect(manager.activeCount()).toBe(0)
+    store.close()
+  })
+
+  it('retiring a session with no live handle is a no-op', async () => {
+    const store = new EventStore()
+    const manager = new SessionManager(store)
+
+    await manager.retire('session_gone')
+
+    expect(store.listBySession('session_gone')).toHaveLength(0)
+  })
+
   function recordingProvider(
     id: string,
     isolates = false,

@@ -689,6 +689,7 @@ export async function bootstrap(
     emit: makeEmitStored(store),
     store,
     startStage: (prompt, worktree) => startAgentTask(manager, prompt, undefined, worktree),
+    retireStage: (sessionId) => void manager.retire(sessionId),
   })
   pipelineObservers.push(pipelines.observe.bind(pipelines))
   pipelines.reconcile(store.list())

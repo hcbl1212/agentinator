@@ -24,13 +24,15 @@ function harness() {
   }
   let n = 0
   const startStage = vi.fn<(prompt: string, worktree?: WorktreeInfo) => string>(() => `sess${n++}`)
-  const orchestrator = new PipelineOrchestrator({ emit, store, startStage })
+  const retireStage = vi.fn<(sessionId: string) => void>()
+  const orchestrator = new PipelineOrchestrator({ emit, store, startStage, retireStage })
 
   return {
     orchestrator,
     log,
     emit,
     startStage,
+    retireStage,
     types: (): string[] => log.map((event) => event.type),
     seedText: (sessionId: string, text: string): void => {
       push('agent.text', { sessionId, text })
@@ -65,9 +67,11 @@ describe('defaultPipelineStages', () => {
 
     expect(stages.map((stage) => stage.name)).toEqual(['Plan', 'Implement', 'Review'])
     expect(stages[0].prompt).toContain('add a logout button')
+    // The plan stage must not touch files — a later stage implements it.
+    expect(stages[0].prompt).toContain('Do not edit')
     expect(stages[1].prompt).toContain('add a logout button')
-    // Review works off the handoff, not the raw task, so it needn't echo it.
-    expect(stages[2].prompt).toContain('Review the implementation')
+    // Review reads the shared worktree's diff, not the raw task.
+    expect(stages[2].prompt).toContain('git diff')
   })
 })
 
@@ -80,7 +84,7 @@ describe('PipelineOrchestrator', () => {
     expect(id).toMatch(/^pipeline_/)
     expect(h.types()).toEqual(['pipeline.created', 'pipeline.stage.started'])
     expect(h.startStage).toHaveBeenCalledTimes(1)
-    expect(h.startStage.mock.calls[0][0]).toContain('Plan the following task')
+    expect(h.startStage.mock.calls[0][0]).toContain('PLANNING stage')
     expect(h.log[1].payload).toMatchObject({ pipelineId: id, stageIndex: 0, sessionId: 'sess0' })
   })
 
@@ -100,9 +104,11 @@ describe('PipelineOrchestrator', () => {
     ])
     expect(h.startStage).toHaveBeenCalledTimes(2)
     const implementPrompt = h.startStage.mock.calls[1][0]
-    expect(implementPrompt).toContain('Implement the following task')
+    expect(implementPrompt).toContain('IMPLEMENTATION stage')
     expect(implementPrompt).toContain(HANDOFF_HEADER)
     expect(implementPrompt).toContain('THE PLAN')
+    // The finished plan stage's agent is retired so it leaves the rail.
+    expect(h.retireStage).toHaveBeenCalledWith('sess0')
   })
 
   it('reuses the finishing stage’s worktree for the next stage', () => {
@@ -234,6 +240,7 @@ describe('PipelineOrchestrator', () => {
           first.log.filter((e) => (e.payload as { sessionId?: string }).sessionId === sid),
       },
       startStage,
+      retireStage: vi.fn(),
     })
     revived.reconcile(first.log)
     revived.observe({
