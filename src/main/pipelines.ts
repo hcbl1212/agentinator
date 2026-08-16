@@ -78,13 +78,26 @@ export class PipelineOrchestrator {
     return pipelineId
   }
 
+  /** Clear a pipeline from the list. It stops advancing (a still-running stage
+   * that later finishes finds no definition and is left alone) and drops out of
+   * the UI. */
+  remove(pipelineId: string): void {
+    this.#stagesByPipeline.delete(pipelineId)
+    this.#emit('pipeline.removed', { pipelineId })
+  }
+
   /** Rebuild in-memory pipeline definitions from the log (called at boot) so a
-   * pipeline created before a restart still advances when its live stage ends. */
+   * pipeline created before a restart still advances when its live stage ends.
+   * A removed pipeline is forgotten so it neither advances nor reappears. */
   reconcile(events: StoredEvent[]): void {
     for (const event of events) {
       if (event.type === 'pipeline.created') {
         const payload = event.payload as EventPayloads['pipeline.created']
         this.#stagesByPipeline.set(payload.pipelineId, payload.stages)
+      } else if (event.type === 'pipeline.removed') {
+        this.#stagesByPipeline.delete(
+          (event.payload as EventPayloads['pipeline.removed']).pipelineId,
+        )
       }
     }
   }

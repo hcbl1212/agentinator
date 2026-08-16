@@ -112,6 +112,7 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
       },
       pipelines: {
         create: pipelinesCreate,
+        remove: vi.fn(() => Promise.resolve()),
       },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),

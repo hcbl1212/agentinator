@@ -34,9 +34,20 @@ export function Pipelines(): React.JSX.Element {
         <ul className="pipeline-list">
           {pipelines.map((pipeline) => (
             <li key={pipeline.id} className="pipeline-row">
-              <span className="pipeline-title" title={pipeline.title}>
-                {pipeline.title}
-              </span>
+              <div className="pipeline-head">
+                <span className="pipeline-title" title={pipeline.title}>
+                  {pipeline.title}
+                </span>
+                <button
+                  type="button"
+                  className="queue-action"
+                  aria-label={`Clear pipeline ${pipeline.title}`}
+                  title="Clear this pipeline"
+                  onClick={() => void window.agentinator?.pipelines.remove(pipeline.id)}
+                >
+                  ✕
+                </button>
+              </div>
               <ol className="pipeline-stages">
                 {pipeline.stages.map((stage, index) => {
                   const label = `${stage.name} — ${stage.status}`

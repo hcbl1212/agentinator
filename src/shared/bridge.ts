@@ -165,6 +165,9 @@ export interface AgentinatorBridge {
     /** Launch a Plan → Implement → Review pipeline from a task prompt; resolves
      * to the new pipeline id. Stage 0 dispatches immediately. */
     create(prompt: string): Promise<string>
+    /** Clear a pipeline from the list (finished or abandoned); it stops
+     * advancing and drops out of the UI. */
+    remove(pipelineId: string): Promise<void>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

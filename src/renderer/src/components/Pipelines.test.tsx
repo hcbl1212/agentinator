@@ -16,10 +16,13 @@ import { Pipelines } from './Pipelines'
 function stub(backfill: StoredEvent[] = []): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
+  remove: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
+  const remove = vi.fn(() => Promise.resolve())
   return {
     emit: (event) => appended(event),
+    remove,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -28,6 +31,7 @@ function stub(backfill: StoredEvent[] = []): {
           return () => undefined
         }),
       },
+      pipelines: { create: vi.fn(() => Promise.resolve('pl_new')), remove },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -80,6 +84,28 @@ describe('Pipelines', () => {
     expect(
       screen.queryByRole('button', { name: 'Plan — pending — select its agent' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('clears a pipeline via its remove button, and folds out a removed one', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    act(() => {
+      s.emit(created('pl1', 'First'))
+      s.emit(created('pl2', 'Second'))
+    })
+    expect(screen.getByText('First')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear pipeline First' }))
+    expect(s.remove).toHaveBeenCalledWith('pl1')
+
+    // The removed event folds it out of the list; the other stays.
+    act(() => {
+      s.emit(event('pipeline.removed', { pipelineId: 'pl1' }))
+    })
+    expect(screen.queryByText('First')).not.toBeInTheDocument()
+    expect(screen.getByText('Second')).toBeInTheDocument()
   })
 
   it('advances stage chips through running, done, and failed as events arrive', () => {

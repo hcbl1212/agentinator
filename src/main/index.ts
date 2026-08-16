@@ -204,6 +204,9 @@ export function registerPipelineIpc(
     const task = prompt as string
     return pipelines.create(taskTitle(task), defaultPipelineStages(task))
   })
+  handle('pipelines:remove', (_event, pipelineId) => {
+    pipelines.remove(pipelineId as string)
+  })
 }
 
 /** The provider a "Run task" (and a dispatched queue item) uses. Swapping this

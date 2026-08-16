@@ -761,10 +761,12 @@ describe('registerQueueIpc', () => {
 describe('registerPipelineIpc', () => {
   it('creates a Plan → Implement → Review pipeline from a prompt', () => {
     const create = vi.fn(() => 'pipeline_7')
+    const remove = vi.fn()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerPipelineIpc({ create } as unknown as PipelineOrchestrator, (channel, listener) =>
-      handlers.set(channel, listener),
+    registerPipelineIpc(
+      { create, remove } as unknown as PipelineOrchestrator,
+      (channel, listener) => handlers.set(channel, listener),
     )
 
     const id = handlers.get('pipelines:create')?.(undefined, 'Add a logout button')
@@ -772,13 +774,16 @@ describe('registerPipelineIpc', () => {
     const [title, stages] = create.mock.calls[0] as unknown as [string, { name: string }[]]
     expect(title).toBe('Add a logout button')
     expect(stages.map((stage) => stage.name)).toEqual(['Plan', 'Implement', 'Review'])
+
+    handlers.get('pipelines:remove')?.(undefined, 'pipeline_7')
+    expect(remove).toHaveBeenCalledWith('pipeline_7')
   })
 
   it('registers on ipcMain by default', () => {
     registerPipelineIpc({ create: vi.fn() } as unknown as PipelineOrchestrator)
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
-    expect(channels).toEqual(['pipelines:create'])
+    expect(channels).toEqual(['pipelines:create', 'pipelines:remove'])
   })
 })
 

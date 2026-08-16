@@ -262,4 +262,43 @@ describe('PipelineOrchestrator', () => {
       sessionId: 'sess-resumed',
     })
   })
+
+  it('removes a pipeline so it stops advancing', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+
+    h.orchestrator.remove(id)
+
+    expect(
+      h.log.some(
+        (e) =>
+          e.type === 'pipeline.removed' && (e.payload as { pipelineId: string }).pipelineId === id,
+      ),
+    ).toBe(true)
+    // A stage that finishes after removal finds no definition → no next stage.
+    h.idled('sess0')
+    expect(h.startStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets a removed pipeline on reconcile so it never resumes advancing', () => {
+    const first = harness()
+    const id = first.orchestrator.create('T', defaultPipelineStages('do it'))
+    first.orchestrator.remove(id) // log: created, stage.started, removed
+
+    const startStage = vi.fn(() => 'sess-x')
+    const revived = new PipelineOrchestrator({
+      emit: first.emit,
+      store: {
+        listBySession: (sid) =>
+          first.log.filter((e) => (e.payload as { sessionId?: string }).sessionId === sid),
+      },
+      startStage,
+      retireStage: vi.fn(),
+    })
+    revived.reconcile(first.log) // sees created then removed → forgotten
+
+    revived.observe({ seq: 900, ts: 't', type: 'session.idle', payload: { sessionId: 'sess0' } })
+
+    expect(startStage).not.toHaveBeenCalled()
+  })
 })

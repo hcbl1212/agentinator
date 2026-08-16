@@ -1647,9 +1647,17 @@ textarea.preview-props-input {
   gap: 0.3rem;
 }
 
+.pipeline-head {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
 .pipeline-title {
   color: var(--ink);
+  flex: 1;
   font-size: 0.8rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

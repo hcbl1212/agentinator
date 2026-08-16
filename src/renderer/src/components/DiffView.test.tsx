@@ -94,6 +94,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
       },
       pipelines: {
         create: vi.fn(() => Promise.resolve('pipeline_1')),
+        remove: vi.fn(() => Promise.resolve()),
       },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),

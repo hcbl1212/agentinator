@@ -117,6 +117,9 @@ export interface EventPayloads {
   'pipeline.stage.completed': { pipelineId: string; stageIndex: number; sessionId: string }
   /** Every stage completed — the pipeline is done. */
   'pipeline.completed': { pipelineId: string }
+  /** The user cleared a pipeline from the list (finished or abandoned); it stops
+   * advancing and drops out of the UI. */
+  'pipeline.removed': { pipelineId: string }
   /** A stage's agent failed or was cancelled; the pipeline halts at that stage. */
   'pipeline.failed': { pipelineId: string; stageIndex: number; sessionId: string }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it

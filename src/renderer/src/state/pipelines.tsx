@@ -75,6 +75,10 @@ export function reducePipelines(pipelines: Pipeline[], event: StoredEvent): Pipe
         pipeline.id === pipelineId ? { ...pipeline, done: true } : pipeline,
       )
     }
+    case 'pipeline.removed': {
+      const { pipelineId } = event.payload as EventPayloads['pipeline.removed']
+      return pipelines.filter((pipeline) => pipeline.id !== pipelineId)
+    }
     default:
       return pipelines
   }
