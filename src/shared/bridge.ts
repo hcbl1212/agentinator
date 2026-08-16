@@ -169,8 +169,11 @@ export interface AgentinatorBridge {
      * `fromSessionId` (the just-finished stage), carrying its output forward. */
     continue(pipelineId: string, fromSessionId: string): Promise<void>
     /** Re-run the paused stage (`fromSessionId`) with revision feedback — e.g.
-     * reshape the plan before continuing. */
+     * reshape the plan before continuing, or request changes on a finished
+     * pipeline (re-runs its final stage). */
     revise(pipelineId: string, fromSessionId: string, feedback: string): Promise<void>
+    /** Sign off on a finished pipeline (the review-workbench approve). */
+    approve(pipelineId: string): Promise<void>
     /** Clear a pipeline from the list (finished or abandoned); it stops
      * advancing and drops out of the UI. */
     remove(pipelineId: string): Promise<void>

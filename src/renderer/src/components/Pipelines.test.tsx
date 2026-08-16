@@ -19,16 +19,19 @@ function stub(backfill: StoredEvent[] = []): {
   remove: ReturnType<typeof vi.fn>
   continueStage: ReturnType<typeof vi.fn>
   revise: ReturnType<typeof vi.fn>
+  approve: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const remove = vi.fn(() => Promise.resolve())
   const continueStage = vi.fn(() => Promise.resolve())
   const revise = vi.fn(() => Promise.resolve())
+  const approve = vi.fn(() => Promise.resolve())
   return {
     emit: (event) => appended(event),
     remove,
     continueStage,
     revise,
+    approve,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -41,6 +44,7 @@ function stub(backfill: StoredEvent[] = []): {
         create: vi.fn(() => Promise.resolve('pl_new')),
         continue: continueStage,
         revise,
+        approve,
         remove,
       },
     } as unknown as AgentinatorBridge,
@@ -200,6 +204,43 @@ describe('Pipelines', () => {
 
     expect(s.revise).toHaveBeenCalledWith('pl1', 's0', 'break out a helper')
     expect(input).toHaveValue('') // cleared after sending
+  })
+
+  it('offers approve and request-changes once every stage is done, then shows approved', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    const finish = (index: number, sessionId: string): void => {
+      s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: index, sessionId }))
+      s.emit(event('pipeline.stage.completed', { pipelineId: 'pl1', stageIndex: index, sessionId }))
+    }
+    act(() => {
+      s.emit(created('pl1'))
+      s.emit(created('pl2', 'Other')) // a second pipeline the approval must skip
+      finish(0, 's0')
+      finish(1, 's1')
+      finish(2, 's2')
+      s.emit(event('pipeline.completed', { pipelineId: 'pl1' }))
+    })
+
+    // All stages done → the review gate: request changes (re-runs the final
+    // stage) or approve. No Continue (nothing left to advance to).
+    expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument()
+    const input = screen.getByRole('textbox', { name: 'Request changes on this pipeline' })
+    fireEvent.change(input, { target: { value: 'tighten the error copy' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Request changes' }))
+    expect(s.revise).toHaveBeenCalledWith('pl1', 's2', 'tighten the error copy')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve ✓' }))
+    expect(s.approve).toHaveBeenCalledWith('pl1')
+
+    // Once approved, the review actions give way to a badge.
+    act(() => {
+      s.emit(event('pipeline.approved', { pipelineId: 'pl1' }))
+    })
+    expect(screen.queryByRole('button', { name: 'Approve ✓' })).not.toBeInTheDocument()
+    expect(screen.getByText('✓ Approved')).toBeInTheDocument()
   })
 
   it('offers no Continue button once the pipeline has failed or completed', () => {

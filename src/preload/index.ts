@@ -132,6 +132,7 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('pipelines:continue', pipelineId, fromSessionId) as Promise<void>,
     revise: (pipelineId, fromSessionId, feedback) =>
       ipcRenderer.invoke('pipelines:revise', pipelineId, fromSessionId, feedback) as Promise<void>,
+    approve: (pipelineId) => ipcRenderer.invoke('pipelines:approve', pipelineId) as Promise<void>,
     remove: (pipelineId) => ipcRenderer.invoke('pipelines:remove', pipelineId) as Promise<void>,
   },
   checkpoints: {

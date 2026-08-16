@@ -10,12 +10,14 @@ export interface PipelineStageView {
   sessionId?: string
 }
 
-/** A pipeline reduced from the log: its stages in order and whether it finished. */
+/** A pipeline reduced from the log: its stages in order, whether it finished,
+ * and whether the user has signed off on the review. */
 export interface Pipeline {
   id: string
   title: string
   stages: PipelineStageView[]
   done: boolean
+  approved: boolean
 }
 
 /** Replace one pipeline's stage at `index` via `patch`, leaving the rest alone. */
@@ -53,6 +55,7 @@ export function reducePipelines(pipelines: Pipeline[], event: StoredEvent): Pipe
               title: payload.title,
               stages: payload.stages.map((stage) => ({ name: stage.name, status: 'pending' })),
               done: false,
+              approved: false,
             },
           ]
     }
@@ -73,6 +76,12 @@ export function reducePipelines(pipelines: Pipeline[], event: StoredEvent): Pipe
       const { pipelineId } = event.payload as EventPayloads['pipeline.completed']
       return pipelines.map((pipeline) =>
         pipeline.id === pipelineId ? { ...pipeline, done: true } : pipeline,
+      )
+    }
+    case 'pipeline.approved': {
+      const { pipelineId } = event.payload as EventPayloads['pipeline.approved']
+      return pipelines.map((pipeline) =>
+        pipeline.id === pipelineId ? { ...pipeline, approved: true } : pipeline,
       )
     }
     case 'pipeline.removed': {

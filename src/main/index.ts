@@ -210,6 +210,9 @@ export function registerPipelineIpc(
   handle('pipelines:revise', (_event, pipelineId, fromSessionId, feedback) => {
     pipelines.reviseStage(pipelineId as string, fromSessionId as string, feedback as string)
   })
+  handle('pipelines:approve', (_event, pipelineId) => {
+    pipelines.approve(pipelineId as string)
+  })
   handle('pipelines:remove', (_event, pipelineId) => {
     pipelines.remove(pipelineId as string)
   })

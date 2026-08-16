@@ -92,6 +92,13 @@ export class PipelineOrchestrator {
     return pipelineId
   }
 
+  /** Sign off on a finished pipeline (the review-workbench approve). Recorded in
+   * the log; requesting changes instead is a {@link reviseStage} of the last
+   * stage, so no separate path is needed. */
+  approve(pipelineId: string): void {
+    this.#emit('pipeline.approved', { pipelineId })
+  }
+
   /** Clear a pipeline from the list. It stops advancing (a still-running stage
    * that later finishes finds no definition and is left alone) and drops out of
    * the UI. */

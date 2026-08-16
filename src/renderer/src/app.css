@@ -1799,6 +1799,13 @@ button.pipeline-stage:focus-visible {
   outline: none;
 }
 
+.pipeline-approved {
+  align-self: start;
+  color: var(--ok);
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+}
+
 .rail-new {
   background: transparent;
   border: 1px solid var(--line);

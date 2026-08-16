@@ -120,6 +120,9 @@ export interface EventPayloads {
   'pipeline.stage.completed': { pipelineId: string; stageIndex: number; sessionId: string }
   /** Every stage completed — the pipeline is done. */
   'pipeline.completed': { pipelineId: string }
+  /** The user reviewed a finished pipeline and approved it (the review-workbench
+   * sign-off). Requesting changes instead re-runs the final stage (revise). */
+  'pipeline.approved': { pipelineId: string }
   /** The user cleared a pipeline from the list (finished or abandoned); it stops
    * advancing and drops out of the UI. */
   'pipeline.removed': { pipelineId: string }

@@ -408,6 +408,20 @@ describe('PipelineOrchestrator', () => {
     })
   })
 
+  it('records approval of a finished pipeline', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+
+    h.orchestrator.approve(id)
+
+    expect(
+      h.log.some(
+        (e) =>
+          e.type === 'pipeline.approved' && (e.payload as { pipelineId: string }).pipelineId === id,
+      ),
+    ).toBe(true)
+  })
+
   it('removes a pipeline so it stops advancing', () => {
     const h = harness()
     const id = h.orchestrator.create('T', defaultPipelineStages('do it'))

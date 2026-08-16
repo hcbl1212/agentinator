@@ -47,15 +47,16 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
   const { select } = useSelection()
   const [feedback, setFeedback] = useState('')
 
-  // The pipeline is paused at a boundary (the human-in-the-loop gate) when a
-  // stage has finished, none is running, and it hasn't failed or completed — the
-  // user reviews that output, then Continues or Revises it. `gate` collects the
-  // finished stage those actions target and the next stage's name.
+  // Two boundaries the user acts on, both carrying the just-finished stage:
+  //  · gate — a stage finished with more to come: Continue or Revise it.
+  //  · review — every stage finished and it isn't signed off yet: Approve, or
+  //    Request changes (re-run the final stage). These are mutually exclusive.
   const running = pipeline.stages.some((stage) => stage.status === 'running')
   const failed = pipeline.stages.some((stage) => stage.status === 'failed')
   const doneStages = pipeline.stages.filter((stage) => stage.status === 'done')
   const lastDone = doneStages[doneStages.length - 1]
   const nextStage = pipeline.stages.find((stage) => stage.status === 'pending')
+  const allDone = pipeline.stages.every((stage) => stage.status === 'done')
   const gate =
     !pipeline.done &&
     !running &&
@@ -64,13 +65,17 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
     nextStage !== undefined
       ? { from: lastDone.sessionId, stageName: lastDone.name, nextName: nextStage.name }
       : undefined
+  const review =
+    lastDone?.sessionId !== undefined && allDone && !pipeline.approved
+      ? { from: lastDone.sessionId, stageName: lastDone.name }
+      : undefined
 
-  const revise = (): void => {
+  const revise = (from: string): void => {
     const trimmed = feedback.trim()
-    if (gate === undefined || trimmed === '') {
+    if (trimmed === '') {
       return
     }
-    void window.agentinator?.pipelines.revise(pipeline.id, gate.from, trimmed)
+    void window.agentinator?.pipelines.revise(pipeline.id, from, trimmed)
     setFeedback('')
   }
 
@@ -127,7 +132,7 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
             className="pipeline-revise"
             onSubmit={(event) => {
               event.preventDefault()
-              revise()
+              revise(gate.from)
             }}
           >
             <input
@@ -149,6 +154,40 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
             Continue → {gate.nextName}
           </button>
         </div>
+      )}
+      {review !== undefined && (
+        <div className="pipeline-gate">
+          <form
+            className="pipeline-revise"
+            onSubmit={(event) => {
+              event.preventDefault()
+              revise(review.from)
+            }}
+          >
+            <input
+              className="pipeline-revise-input"
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              placeholder="Request changes…"
+              aria-label="Request changes on this pipeline"
+            />
+            <button type="submit" className="pipeline-revise-send">
+              Request changes
+            </button>
+          </form>
+          <button
+            type="button"
+            className="pipeline-continue"
+            onClick={() => void window.agentinator?.pipelines.approve(pipeline.id)}
+          >
+            Approve ✓
+          </button>
+        </div>
+      )}
+      {pipeline.approved && (
+        <span className="pipeline-approved" role="status">
+          ✓ Approved
+        </span>
       )}
     </li>
   )
