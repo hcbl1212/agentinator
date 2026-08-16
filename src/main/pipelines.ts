@@ -42,11 +42,13 @@ export function defaultPipelineStages(task: string): PipelineStageSpec[] {
 type PipelineReader = { listBySession(sessionId: string): StoredEvent[] }
 
 /**
- * Runs multi-stage pipelines: dispatch stage 0 on create, then advance on each
- * stage's `session.ended` — the next stage's agent launches with the previous
- * stage's output appended as context, or the pipeline completes/halts. State
- * (each pipeline's stage list) lives in memory and is rebuilt from the log via
- * {@link reconcile} so a pipeline keeps advancing across a restart.
+ * Runs multi-stage pipelines: dispatch stage 0 on create, then pause at each
+ * stage boundary (a human-in-the-loop gate) — when a stage's agent finishes, it
+ * records the completion and waits. {@link continueStage} launches the next
+ * stage, handing the finished stage's output and shared worktree forward. A
+ * failed/cancelled stage halts the pipeline. State lives in memory and is
+ * rebuilt from the log via {@link reconcile} so a paused pipeline survives a
+ * restart.
  */
 export class PipelineOrchestrator {
   readonly #emit: EmitStored
@@ -54,6 +56,9 @@ export class PipelineOrchestrator {
   readonly #startStage: (prompt: string, worktree?: WorktreeInfo) => string
   readonly #retireStage: (sessionId: string) => void
   readonly #stagesByPipeline = new Map<string, PipelineStageSpec[]>()
+  /** `${pipelineId}:${stageIndex}` for every stage already dispatched, so a
+   * double Continue can't launch the same stage twice. */
+  readonly #startedStages = new Set<string>()
 
   constructor(options: {
     emit: EmitStored
@@ -86,9 +91,37 @@ export class PipelineOrchestrator {
     this.#emit('pipeline.removed', { pipelineId })
   }
 
-  /** Rebuild in-memory pipeline definitions from the log (called at boot) so a
-   * pipeline created before a restart still advances when its live stage ends.
-   * A removed pipeline is forgotten so it neither advances nor reappears. */
+  /** Continue a paused pipeline: dispatch the stage after the one whose agent
+   * finished (`fromSessionId`), handing its output and shared worktree forward.
+   * The renderer supplies the finished stage, so no gate state has to be
+   * reconstructed here. A no-op if the pipeline was removed, the stage was the
+   * last, or the next stage already started (a double Continue). */
+  continueStage(pipelineId: string, fromSessionId: string): void {
+    const stages = this.#stagesByPipeline.get(pipelineId)
+    if (stages === undefined) {
+      return
+    }
+    const events = this.#store.listBySession(fromSessionId)
+    const started = events.find((e) => e.type === 'pipeline.stage.started')?.payload as
+      EventPayloads['pipeline.stage.started'] | undefined
+    if (started === undefined) {
+      return
+    }
+    const next = started.stageIndex + 1
+    if (next >= stages.length || this.#startedStages.has(`${pipelineId}:${next}`)) {
+      return
+    }
+    const handoff = this.#finalText(events)
+    const prompt =
+      handoff === ''
+        ? stages[next].prompt
+        : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
+    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events))
+  }
+
+  /** Rebuild in-memory pipeline state from the log (called at boot) so a
+   * pipeline paused before a restart can still be continued. A removed pipeline
+   * is forgotten so it neither advances nor reappears. */
   reconcile(events: StoredEvent[]): void {
     for (const event of events) {
       if (event.type === 'pipeline.created') {
@@ -98,16 +131,20 @@ export class PipelineOrchestrator {
         this.#stagesByPipeline.delete(
           (event.payload as EventPayloads['pipeline.removed']).pipelineId,
         )
+      } else if (event.type === 'pipeline.stage.started') {
+        const { pipelineId, stageIndex } = event.payload as EventPayloads['pipeline.stage.started']
+        this.#startedStages.add(`${pipelineId}:${stageIndex}`)
       }
     }
   }
 
   /**
-   * Advance the owning pipeline when one of its stages' agents finishes. A stage
-   * completes when its agent goes idle (a finished turn — agents stay alive
-   * awaiting follow-ups, so a normal completion is `session.idle`, not
-   * `session.ended`). A session that *ends* other than "completed" (cancelled or
-   * failed) halts the pipeline.
+   * React to a stage's agent finishing. A stage completes when its agent goes
+   * idle (a finished turn — agents stay alive awaiting follow-ups, so a normal
+   * completion is `session.idle`, not `session.ended`): the stage is recorded
+   * completed and retired, then the pipeline pauses at the gate (or completes if
+   * it was the last stage) — {@link continueStage} launches the next one. A
+   * session that *ends* other than "completed" (cancelled or failed) halts it.
    */
   observe(event: StoredEvent): void {
     if (event.type !== 'session.idle' && event.type !== 'session.ended') {
@@ -141,24 +178,18 @@ export class PipelineOrchestrator {
     // The stage is done — retire its agent so the rail isn't left with an idle
     // agent per finished stage (its transcript stays reachable via the chip).
     this.#retireStage(sessionId)
-    const next = stageIndex + 1
-    if (next >= stages.length) {
+    // Stop at the boundary: the last stage completes the pipeline, otherwise it
+    // pauses for the user to review this stage's output and press Continue (the
+    // human-in-the-loop gate) — the next stage does not auto-start.
+    if (stageIndex + 1 >= stages.length) {
       this.#emit('pipeline.completed', { pipelineId })
-      return
     }
-    const handoff = this.#finalText(events)
-    const prompt =
-      handoff === ''
-        ? stages[next].prompt
-        : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
-    // Reuse the finishing stage's worktree so the next stage sees its edits —
-    // implement builds on plan, review reads the actual diff.
-    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events))
   }
 
   /** Launch a stage's agent and link the resulting session to the stage. */
   #dispatch(pipelineId: string, stageIndex: number, prompt: string, worktree?: WorktreeInfo): void {
     const sessionId = this.#startStage(prompt, worktree)
+    this.#startedStages.add(`${pipelineId}:${stageIndex}`)
     this.#emit('pipeline.stage.started', { pipelineId, stageIndex, sessionId })
   }
 

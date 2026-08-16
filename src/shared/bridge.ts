@@ -165,6 +165,9 @@ export interface AgentinatorBridge {
     /** Launch a Plan → Implement → Review pipeline from a task prompt; resolves
      * to the new pipeline id. Stage 0 dispatches immediately. */
     create(prompt: string): Promise<string>
+    /** Advance a paused pipeline past a stage boundary: launch the stage after
+     * `fromSessionId` (the just-finished stage), carrying its output forward. */
+    continue(pipelineId: string, fromSessionId: string): Promise<void>
     /** Clear a pipeline from the list (finished or abandoned); it stops
      * advancing and drops out of the UI. */
     remove(pipelineId: string): Promise<void>

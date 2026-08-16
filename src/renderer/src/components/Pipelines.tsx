@@ -32,55 +32,86 @@ export function Pipelines(): React.JSX.Element {
         </p>
       ) : (
         <ul className="pipeline-list">
-          {pipelines.map((pipeline) => (
-            <li key={pipeline.id} className="pipeline-row">
-              <div className="pipeline-head">
-                <span className="pipeline-title" title={pipeline.title}>
-                  {pipeline.title}
-                </span>
-                <button
-                  type="button"
-                  className="queue-action"
-                  aria-label={`Clear pipeline ${pipeline.title}`}
-                  title="Clear this pipeline"
-                  onClick={() => void window.agentinator?.pipelines.remove(pipeline.id)}
-                >
-                  ✕
-                </button>
-              </div>
-              <ol className="pipeline-stages">
-                {pipeline.stages.map((stage, index) => {
-                  const label = `${stage.name} — ${stage.status}`
-                  const className = `pipeline-stage is-${stage.status}`
-                  return (
-                    <li key={index} className="pipeline-stage-item">
-                      {stage.sessionId === undefined ? (
-                        <span className={className} title={label} aria-label={label}>
-                          <span className="pipeline-stage-mark" aria-hidden="true">
-                            {STAGE_MARK[stage.status]}
+          {pipelines.map((pipeline) => {
+            // The pipeline is paused at a boundary (the human-in-the-loop gate)
+            // when a stage has finished, none is running, and it hasn't failed
+            // or completed — the user reviews that output, then presses Continue.
+            const running = pipeline.stages.some((stage) => stage.status === 'running')
+            const failed = pipeline.stages.some((stage) => stage.status === 'failed')
+            const doneStages = pipeline.stages.filter((stage) => stage.status === 'done')
+            const lastDone = doneStages[doneStages.length - 1]
+            const nextStage = pipeline.stages.find((stage) => stage.status === 'pending')
+            const paused =
+              !pipeline.done &&
+              !running &&
+              !failed &&
+              lastDone !== undefined &&
+              nextStage !== undefined
+            // The finished stage whose output to carry forward on Continue.
+            const continueFrom = paused ? lastDone?.sessionId : undefined
+            return (
+              <li key={pipeline.id} className="pipeline-row">
+                <div className="pipeline-head">
+                  <span className="pipeline-title" title={pipeline.title}>
+                    {pipeline.title}
+                  </span>
+                  <button
+                    type="button"
+                    className="queue-action"
+                    aria-label={`Clear pipeline ${pipeline.title}`}
+                    title="Clear this pipeline"
+                    onClick={() => void window.agentinator?.pipelines.remove(pipeline.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <ol className="pipeline-stages">
+                  {pipeline.stages.map((stage, index) => {
+                    const label = `${stage.name} — ${stage.status}`
+                    const className = `pipeline-stage is-${stage.status}`
+                    return (
+                      <li key={index} className="pipeline-stage-item">
+                        {stage.sessionId === undefined ? (
+                          <span className={className} title={label} aria-label={label}>
+                            <span className="pipeline-stage-mark" aria-hidden="true">
+                              {STAGE_MARK[stage.status]}
+                            </span>
+                            {stage.name}
                           </span>
-                          {stage.name}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className={className}
-                          title={`${label} — select its agent`}
-                          aria-label={`${label} — select its agent`}
-                          onClick={() => select({ kind: 'session', id: stage.sessionId as string })}
-                        >
-                          <span className="pipeline-stage-mark" aria-hidden="true">
-                            {STAGE_MARK[stage.status]}
-                          </span>
-                          {stage.name}
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
-            </li>
-          ))}
+                        ) : (
+                          <button
+                            type="button"
+                            className={className}
+                            title={`${label} — select its agent`}
+                            aria-label={`${label} — select its agent`}
+                            onClick={() =>
+                              select({ kind: 'session', id: stage.sessionId as string })
+                            }
+                          >
+                            <span className="pipeline-stage-mark" aria-hidden="true">
+                              {STAGE_MARK[stage.status]}
+                            </span>
+                            {stage.name}
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ol>
+                {continueFrom !== undefined && nextStage !== undefined && (
+                  <button
+                    type="button"
+                    className="pipeline-continue"
+                    onClick={() =>
+                      void window.agentinator?.pipelines.continue(pipeline.id, continueFrom)
+                    }
+                  >
+                    Continue → {nextStage.name}
+                  </button>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>

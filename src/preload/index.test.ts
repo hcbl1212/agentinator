@@ -238,11 +238,17 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('queue:dispatch', 'task_1', 'a task')
   })
 
-  it('routes pipeline create and remove over IPC', async () => {
+  it('routes pipeline create, continue, and remove over IPC', async () => {
     await bridge.pipelines.create('ship the feature')
+    await bridge.pipelines.continue('pipeline_1', 'session_plan')
     await bridge.pipelines.remove('pipeline_1')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('pipelines:create', 'ship the feature')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'pipelines:continue',
+      'pipeline_1',
+      'session_plan',
+    )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('pipelines:remove', 'pipeline_1')
   })
 

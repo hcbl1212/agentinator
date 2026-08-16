@@ -88,27 +88,44 @@ describe('PipelineOrchestrator', () => {
     expect(h.log[1].payload).toMatchObject({ pipelineId: id, stageIndex: 0, sessionId: 'sess0' })
   })
 
-  it('advances to the next stage with the prior output as handoff', () => {
+  it('pauses at the boundary when a stage finishes, then continues on request', () => {
     const h = harness()
-    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedText('sess0', 'THE PLAN')
 
     h.idled('sess0')
 
+    // The stage completes and its agent is retired, but the next stage does NOT
+    // auto-start — the pipeline waits for the user (the human-in-the-loop gate).
     expect(h.types()).toEqual([
       'pipeline.created',
       'pipeline.stage.started',
       'agent.text',
       'pipeline.stage.completed',
-      'pipeline.stage.started',
     ])
+    expect(h.retireStage).toHaveBeenCalledWith('sess0')
+    expect(h.startStage).toHaveBeenCalledTimes(1)
+
+    // Continue launches the next stage with the plan handed forward.
+    h.orchestrator.continueStage(id, 'sess0')
     expect(h.startStage).toHaveBeenCalledTimes(2)
     const implementPrompt = h.startStage.mock.calls[1][0]
     expect(implementPrompt).toContain('IMPLEMENTATION stage')
     expect(implementPrompt).toContain(HANDOFF_HEADER)
     expect(implementPrompt).toContain('THE PLAN')
-    // The finished plan stage's agent is retired so it leaves the rail.
+  })
+
+  it('completes a stage that ends with a completed outcome', () => {
+    const h = harness()
+    h.orchestrator.create('T', defaultPipelineStages('do it'))
+
+    // Some providers end on completion rather than going idle — still a stage
+    // completion (which then pauses at the gate).
+    h.ended('sess0', 'completed')
+
+    expect(h.types()).toContain('pipeline.stage.completed')
     expect(h.retireStage).toHaveBeenCalledWith('sess0')
+    expect(h.startStage).toHaveBeenCalledTimes(1)
   })
 
   it('reuses the finishing stage’s worktree for the next stage', () => {
@@ -118,11 +135,12 @@ describe('PipelineOrchestrator', () => {
       path: '/wt/sess0',
       branch: 'agentinator/sess0',
     }
-    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
     // Stage 0 ran in an isolated worktree (recorded on its session.started).
     h.seedStarted('sess0', worktree)
 
     h.idled('sess0')
+    h.orchestrator.continueStage(id, 'sess0')
 
     // The next stage launches in the same checkout, so it sees stage 0's edits.
     expect(h.startStage.mock.calls[1][1]).toEqual(worktree)
@@ -130,22 +148,25 @@ describe('PipelineOrchestrator', () => {
 
   it('passes no worktree onward for a non-isolated provider', () => {
     const h = harness()
-    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedStarted('sess0') // started with no worktree
 
     h.idled('sess0')
+    h.orchestrator.continueStage(id, 'sess0')
 
     expect(h.startStage.mock.calls[1][1]).toBeUndefined()
   })
 
-  it('completes the pipeline after the last stage', () => {
+  it('completes the pipeline after the last stage is continued', () => {
     const h = harness()
-    h.orchestrator.create('T', defaultPipelineStages('do it'))
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
     h.seedText('sess0', 'plan')
-    h.idled('sess0') // → Implement (sess1)
+    h.idled('sess0')
+    h.orchestrator.continueStage(id, 'sess0') // → Implement (sess1)
     h.seedText('sess1', 'implemented')
-    h.idled('sess1') // → Review (sess2)
-    h.idled('sess2') // last stage → done
+    h.idled('sess1')
+    h.orchestrator.continueStage(id, 'sess1') // → Review (sess2)
+    h.idled('sess2') // last stage → done, no gate
 
     expect(h.startStage).toHaveBeenCalledTimes(3)
     expect(h.types()).toContain('pipeline.completed')
@@ -155,9 +176,10 @@ describe('PipelineOrchestrator', () => {
   it('hands off nothing extra when a stage produced no output', () => {
     const h = harness()
     const stages = defaultPipelineStages('do it')
-    h.orchestrator.create('T', stages)
+    const id = h.orchestrator.create('T', stages)
 
     h.idled('sess0') // no agent.text seeded for sess0
+    h.orchestrator.continueStage(id, 'sess0')
 
     const implementPrompt = h.startStage.mock.calls[1][0]
     expect(implementPrompt).toBe(stages[1].prompt)
@@ -200,14 +222,63 @@ describe('PipelineOrchestrator', () => {
     expect(h.startStage).not.toHaveBeenCalled()
   })
 
-  it('does not advance a stage twice', () => {
+  it('resolves a stage only once even if its agent reports finished twice', () => {
     const h = harness()
     h.orchestrator.create('T', defaultPipelineStages('do it'))
-    h.idled('sess0') // advances to sess1
 
-    h.idled('sess0') // a duplicate end must be ignored
+    h.idled('sess0')
+    h.idled('sess0') // a duplicate finish must be ignored
+
+    expect(h.types().filter((type) => type === 'pipeline.stage.completed')).toHaveLength(1)
+    expect(h.retireStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not launch the next stage twice on a double Continue', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.idled('sess0')
+
+    h.orchestrator.continueStage(id, 'sess0') // dispatches Implement
+    h.orchestrator.continueStage(id, 'sess0') // double click — guarded
 
     expect(h.startStage).toHaveBeenCalledTimes(2)
+  })
+
+  it('continuing an unknown or removed pipeline is a no-op', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.idled('sess0')
+    h.orchestrator.remove(id)
+
+    h.orchestrator.continueStage(id, 'sess0')
+
+    expect(h.startStage).toHaveBeenCalledTimes(1) // only the initial dispatch
+  })
+
+  it('continuing from a session that never ran a stage is a no-op', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+
+    // 'stranger' has no pipeline.stage.started in the log.
+    h.orchestrator.continueStage(id, 'stranger')
+
+    expect(h.startStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('continuing past the last stage is a no-op', () => {
+    const h = harness()
+    const stages = defaultPipelineStages('do it')
+    const id = h.orchestrator.create('T', stages)
+    // Drive to the final stage running.
+    h.idled('sess0')
+    h.orchestrator.continueStage(id, 'sess0') // Implement (sess1)
+    h.idled('sess1')
+    h.orchestrator.continueStage(id, 'sess1') // Review (sess2) — the last stage
+    const before = h.startStage.mock.calls.length
+
+    h.orchestrator.continueStage(id, 'sess2') // nothing after Review
+
+    expect(h.startStage.mock.calls.length).toBe(before)
   })
 
   it('ignores a stage whose pipeline definition is unknown', () => {
@@ -225,10 +296,11 @@ describe('PipelineOrchestrator', () => {
     expect(h.log.length).toBe(before)
   })
 
-  it('rebuilds pipeline state from the log so it advances across a restart', () => {
+  it('rebuilds pipeline state from the log so a paused pipeline can be continued after a restart', () => {
     const first = harness()
     const id = first.orchestrator.create('T', defaultPipelineStages('do it'))
     first.seedText('sess0', 'plan')
+    first.idled('sess0') // stage 0 done → paused at the gate
 
     // A "restart": a fresh orchestrator over the same log, with no in-memory
     // state until it reconciles.
@@ -243,12 +315,7 @@ describe('PipelineOrchestrator', () => {
       retireStage: vi.fn(),
     })
     revived.reconcile(first.log)
-    revived.observe({
-      seq: 500,
-      ts: 't',
-      type: 'session.ended',
-      payload: { sessionId: 'sess0', outcome: 'completed' },
-    })
+    revived.continueStage(id, 'sess0')
 
     expect(startStage).toHaveBeenCalledTimes(1)
     const started = first.log.find(

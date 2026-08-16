@@ -761,11 +761,12 @@ describe('registerQueueIpc', () => {
 describe('registerPipelineIpc', () => {
   it('creates a Plan → Implement → Review pipeline from a prompt', () => {
     const create = vi.fn(() => 'pipeline_7')
+    const continueStage = vi.fn()
     const remove = vi.fn()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerPipelineIpc(
-      { create, remove } as unknown as PipelineOrchestrator,
+      { create, continueStage, remove } as unknown as PipelineOrchestrator,
       (channel, listener) => handlers.set(channel, listener),
     )
 
@@ -775,6 +776,9 @@ describe('registerPipelineIpc', () => {
     expect(title).toBe('Add a logout button')
     expect(stages.map((stage) => stage.name)).toEqual(['Plan', 'Implement', 'Review'])
 
+    handlers.get('pipelines:continue')?.(undefined, 'pipeline_7', 'session_plan')
+    expect(continueStage).toHaveBeenCalledWith('pipeline_7', 'session_plan')
+
     handlers.get('pipelines:remove')?.(undefined, 'pipeline_7')
     expect(remove).toHaveBeenCalledWith('pipeline_7')
   })
@@ -783,7 +787,7 @@ describe('registerPipelineIpc', () => {
     registerPipelineIpc({ create: vi.fn() } as unknown as PipelineOrchestrator)
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
-    expect(channels).toEqual(['pipelines:create', 'pipelines:remove'])
+    expect(channels).toEqual(['pipelines:create', 'pipelines:continue', 'pipelines:remove'])
   })
 })
 
@@ -1286,7 +1290,7 @@ describe('bootstrap', () => {
     store.close()
   })
 
-  it('creates and dispatches a pipeline through the orchestrator', async () => {
+  it('runs a pipeline stage, pauses at the gate, and continues on request', async () => {
     // The mock-tasks flag makes "Run" use the deterministic e2e agent, so a
     // real stage launches with no network.
     vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
@@ -1307,20 +1311,31 @@ describe('bootstrap', () => {
       ) => unknown
     const pipelineId = call('pipelines:create')(undefined, 'Add a logout button')
 
-    // Each stage's e2e agent goes idle when its turn finishes, which advances
-    // the pipeline and retires the finished stage; the three stages cascade to
-    // completion. Waiting for all three retires (session.ended) means every
-    // stage settled before the store closes.
+    // Stage 0's e2e agent goes idle → the stage completes and is retired, but
+    // the pipeline PAUSES at the gate (no stage 1 yet). Wait for that retire.
     await vi.waitFor(() =>
-      expect(store.list().filter((event) => event.type === 'session.ended')).toHaveLength(3),
+      expect(store.list().filter((event) => event.type === 'session.ended')).toHaveLength(1),
+    )
+    let list = store.list()
+    expect(list.filter((event) => event.type === 'pipeline.stage.started')).toHaveLength(1)
+    expect(list.some((event) => event.type === 'pipeline.completed')).toBe(false)
+    const planSession = (
+      list.find((event) => event.type === 'pipeline.stage.started')?.payload as {
+        sessionId: string
+      }
+    ).sessionId
+
+    // Continue launches stage 1 (Implement), which itself runs and pauses.
+    call('pipelines:continue')(undefined, pipelineId, planSession)
+    await vi.waitFor(() =>
+      expect(store.list().filter((event) => event.type === 'session.ended')).toHaveLength(2),
     )
 
-    const list = store.list()
-    expect(list.some((event) => event.type === 'pipeline.completed')).toBe(true)
+    list = store.list()
     const started = list.filter((event) => event.type === 'pipeline.stage.started')
-    expect(started).toHaveLength(3) // Plan → Implement → Review
-    expect(started[0].payload).toMatchObject({ pipelineId, stageIndex: 0 })
-    expect(list.filter((event) => event.type === 'pipeline.stage.completed')).toHaveLength(3)
+    expect(started).toHaveLength(2) // Plan, then Implement after Continue
+    expect(started[1].payload).toMatchObject({ pipelineId, stageIndex: 1 })
+    expect(list.filter((event) => event.type === 'pipeline.stage.completed')).toHaveLength(2)
     // Each finished stage was retired with a clean "completed" so it leaves the rail.
     expect(
       list.filter(
@@ -1328,7 +1343,7 @@ describe('bootstrap', () => {
           event.type === 'session.ended' &&
           (event.payload as { outcome: string }).outcome === 'completed',
       ),
-    ).toHaveLength(3)
+    ).toHaveLength(2)
     store.close()
   })
 

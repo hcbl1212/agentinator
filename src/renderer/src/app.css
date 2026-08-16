@@ -1733,6 +1733,26 @@ button.pipeline-stage:focus-visible {
   color: var(--err);
 }
 
+/* The human-in-the-loop gate: shown while a pipeline waits for sign-off. */
+.pipeline-continue {
+  align-self: start;
+  background: rgba(53, 194, 165, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.pipeline-continue:hover,
+.pipeline-continue:focus-visible {
+  background: rgba(53, 194, 165, 0.22);
+  outline: none;
+}
+
 .rail-new {
   background: transparent;
   border: 1px solid var(--line);

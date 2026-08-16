@@ -17,12 +17,15 @@ function stub(backfill: StoredEvent[] = []): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   remove: ReturnType<typeof vi.fn>
+  continueStage: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const remove = vi.fn(() => Promise.resolve())
+  const continueStage = vi.fn(() => Promise.resolve())
   return {
     emit: (event) => appended(event),
     remove,
+    continueStage,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -31,7 +34,11 @@ function stub(backfill: StoredEvent[] = []): {
           return () => undefined
         }),
       },
-      pipelines: { create: vi.fn(() => Promise.resolve('pl_new')), remove },
+      pipelines: {
+        create: vi.fn(() => Promise.resolve('pl_new')),
+        continue: continueStage,
+        remove,
+      },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -135,6 +142,49 @@ describe('Pipelines', () => {
       screen.getByRole('button', { name: 'Implement — failed — select its agent' }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Review — pending')).toBeInTheDocument()
+  })
+
+  it('shows a Continue button at the gate and advances on click', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    // No gate while a stage runs.
+    act(() => {
+      s.emit(created('pl1'))
+      s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }))
+    })
+    expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument()
+
+    // Stage 0 finishes → the pipeline pauses and offers Continue → Implement.
+    act(() => {
+      s.emit(
+        event('pipeline.stage.completed', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }),
+      )
+    })
+    const go = screen.getByRole('button', { name: 'Continue → Implement' })
+    fireEvent.click(go)
+    expect(s.continueStage).toHaveBeenCalledWith('pl1', 's0')
+
+    // Once the next stage starts, the gate is gone.
+    act(() => {
+      s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: 1, sessionId: 's1' }))
+    })
+    expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument()
+  })
+
+  it('offers no Continue button once the pipeline has failed or completed', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    act(() => {
+      s.emit(created('pl1'))
+      s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }))
+      s.emit(event('pipeline.failed', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }))
+    })
+
+    expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument()
   })
 
   it('leaves other pipelines untouched when one advances', () => {
