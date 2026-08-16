@@ -1,3 +1,4 @@
+import type { AgentType } from './agentTypes'
 import type { ImageAttachment, StoredEvent } from './events'
 
 /** Grace window for a DENY before it reaches the agent — a mis-clicked deny
@@ -46,9 +47,10 @@ export interface AgentinatorBridge {
     current(): Promise<AgentDescriptor>
     /** Launch the scripted mock session — writes real events into the log. */
     startDemo(): Promise<string>
-    /** Launch a real agent on the workspace repo with a task prompt and any
-     * attached images (pasted screenshots). */
-    startTask(prompt: string, images?: ImageAttachment[]): Promise<string>
+    /** Launch a real agent on the workspace repo with a task prompt, any
+     * attached images (pasted screenshots), and an optional agent-type preset
+     * to run under (its instructions/model/read-only posture). */
+    startTask(prompt: string, images?: ImageAttachment[], agentTypeId?: string): Promise<string>
     /** Send a follow-up message (with any attached images) into a session. */
     send(sessionId: string, text: string, images?: ImageAttachment[]): Promise<void>
     cancel(sessionId: string): Promise<void>
@@ -149,6 +151,15 @@ export interface AgentinatorBridge {
     resolve(requestId: string, approved: boolean): Promise<void>
     /** Abort a scheduled decision before the grace window closes. */
     undo(requestId: string): Promise<void>
+  }
+  /** Reusable agent presets (roles a task can launch under). */
+  agentTypes: {
+    /** Every saved agent type, in insertion order. */
+    list(): Promise<AgentType[]>
+    /** Create or update a type (upsert by id). */
+    save(type: AgentType): Promise<void>
+    /** Delete a type by id. */
+    remove(id: string): Promise<void>
   }
   /** The task backlog: park prompts, then dispatch them to agents on demand. */
   queue: {

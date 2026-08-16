@@ -451,9 +451,16 @@ export function createClaudeProvider(
         options: {
           cwd: context.cwd,
           model: context.model,
-          // Stable prefix only for now; the knowledge slice joins the stable
-          // sections and per-run context joins volatile once they exist.
-          systemPrompt: assembleSystemPrompt({ stable: [SYSTEM_BASE], volatile: [] }),
+          // An agent type's instructions layer onto the base as a second stable
+          // section (still cacheable); the knowledge slice and per-run context
+          // join later once they exist.
+          systemPrompt: assembleSystemPrompt({
+            stable:
+              context.instructions === undefined
+                ? [SYSTEM_BASE]
+                : [SYSTEM_BASE, context.instructions],
+            volatile: [],
+          }),
           canUseTool,
           resume: context.resume?.token,
           mcpServers,

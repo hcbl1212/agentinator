@@ -61,6 +61,10 @@ export interface SessionContext {
    * planning/read-only stage that must not touch the working tree. The adapter
    * blocks its mutating tools (Edit/Write/Bash and the like). */
   readOnly?: boolean
+  /** Extra system-prompt instructions for this session — an agent type's
+   * standing guidance. The adapter layers it onto the base prompt (as a stable,
+   * cacheable section). */
+  instructions?: string
 }
 
 export interface AgentSessionHandle {

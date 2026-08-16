@@ -139,6 +139,26 @@ describe('createClaudeProvider', () => {
     expect(decide).toHaveBeenCalledWith('session_c', 'read', { path: 'a.ts' })
   })
 
+  it('layers an agent type’s instructions onto the base system prompt', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    createClaudeProvider(query).startSession(
+      { ...context, instructions: 'Always be terse.' },
+      () => undefined,
+    )
+    await vi.waitFor(() => {
+      expect(queryArgs).toBeDefined()
+    })
+
+    const prompt = queryArgs?.options.systemPrompt as string
+    expect(prompt).toContain('Always be terse.')
+    // The base prompt still leads (the cacheable prefix).
+    expect(prompt.indexOf('Always be terse.')).toBeGreaterThan(0)
+  })
+
   it('blocks editing and command tools for a read-only planning stage', async () => {
     let queryArgs: Parameters<ClaudeQuery>[0] | undefined
     const query: ClaudeQuery = (args) => {

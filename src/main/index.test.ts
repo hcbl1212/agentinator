@@ -90,13 +90,16 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   createSdkMcpServer: vi.fn(),
 }))
 
+import type { AgentType } from '../shared/agentTypes'
 import type { StoredEvent } from '../shared/events'
 import {
+  agentTaskOptions,
   bootstrap,
   broadcastEvent,
   createWindow,
   makeEmitStored,
   registerAgentIpc,
+  registerAgentTypeIpc,
   registerApprovalIpc,
   registerCredentialsIpc,
   registerDialogIpc,
@@ -171,6 +174,9 @@ function fakeSettings(): SettingsStore {
     setPreviewServerCommand: vi.fn(),
     component: vi.fn(() => undefined),
     setComponent: vi.fn(),
+    agentTypes: vi.fn(() => []),
+    saveAgentType: vi.fn(),
+    removeAgentType: vi.fn(),
     secrets: vi.fn(() => []),
     saveSecret: vi.fn(),
     readSecret: vi.fn(),
@@ -283,9 +289,13 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
 
     expect(handlers.get('agent:current')?.(undefined)).toEqual({
       providerId: 'claude',
@@ -303,9 +313,13 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
 
     expect(handlers.get('agent:start-demo')?.(undefined)).toBe('session_new')
     expect(manager.start).toHaveBeenCalledWith({
@@ -320,9 +334,13 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
     handlers.get('agent:start-task')?.(undefined, 'Add a hello util')
 
     expect(manager.start).toHaveBeenCalledWith({
@@ -338,21 +356,46 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
     handlers.get('agent:start-task')?.(undefined, 'Add a hello util')
 
     expect(manager.start).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'e2e' }))
+  })
+
+  it('launches a task under the chosen agent type, applying its posture', () => {
+    const manager = fakeManager()
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+    const types = (): AgentType[] => [
+      { id: 'type_r', name: 'Reviewer', instructions: 'Review only.', readOnly: true },
+    ]
+
+    registerAgentIpc(manager as unknown as SessionManager, types, (channel, listener) => {
+      handlers.set(channel, listener)
+    })
+    handlers.get('agent:start-task')?.(undefined, 'Look it over', undefined, 'type_r')
+
+    expect(manager.start).toHaveBeenCalledWith(
+      expect.objectContaining({ instructions: 'Review only.', readOnly: true }),
+    )
   })
 
   it('routes a follow-up message to the session manager', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
     void handlers.get('agent:send')?.(undefined, 'session_7', 'keep going')
 
     expect(manager.send).toHaveBeenCalledWith('session_7', 'keep going', undefined)
@@ -362,16 +405,20 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
     void handlers.get('agent:cancel')?.(undefined, 'session_7')
 
     expect(manager.cancel).toHaveBeenCalledWith('session_7')
   })
 
   it('registers on ipcMain by default', () => {
-    registerAgentIpc(fakeManager() as unknown as SessionManager)
+    registerAgentIpc(fakeManager() as unknown as SessionManager, () => [])
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
@@ -388,9 +435,13 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
-    registerAgentIpc(manager as unknown as SessionManager, (channel, listener) => {
-      handlers.set(channel, listener)
-    })
+    registerAgentIpc(
+      manager as unknown as SessionManager,
+      () => [],
+      (channel, listener) => {
+        handlers.set(channel, listener)
+      },
+    )
     handlers.get('agent:dismiss')?.(undefined, 'session_x')
 
     expect(manager.dismiss).toHaveBeenCalledWith('session_x')
@@ -710,17 +761,78 @@ describe('taskProviderId and startAgentTask', () => {
         providerId: 'claude',
         title: 'Add a hello util',
         prompt: 'Add a hello util',
-        worktree: undefined,
       }),
     )
   })
 
-  it('passes a supplied worktree and read-only flag through for a pipeline stage', () => {
+  it('passes launch options (worktree, read-only, instructions, model) through', () => {
     const start = vi.fn(() => 'session_9')
     const worktree = { repoRoot: '/repo', path: '/wt/first', branch: 'agentinator/first' }
-    startAgentTask({ start } as unknown as SessionManager, 'Plan it', undefined, worktree, true)
+    startAgentTask({ start } as unknown as SessionManager, 'Review it', {
+      worktree,
+      readOnly: true,
+      instructions: 'Be terse.',
+      model: 'claude-haiku-4-5',
+    })
 
-    expect(start).toHaveBeenCalledWith(expect.objectContaining({ worktree, readOnly: true }))
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktree,
+        readOnly: true,
+        instructions: 'Be terse.',
+        model: 'claude-haiku-4-5',
+      }),
+    )
+  })
+})
+
+describe('agentTaskOptions', () => {
+  const types = (): AgentType[] => [
+    { id: 'type_r', name: 'Reviewer', instructions: 'Review only.', readOnly: true, model: 'm' },
+  ]
+
+  it('resolves an agent type into its launch posture', () => {
+    expect(agentTaskOptions('type_r', types)).toEqual({
+      instructions: 'Review only.',
+      readOnly: true,
+      model: 'm',
+    })
+  })
+
+  it('is empty for no type, a non-string id, or an unknown id', () => {
+    expect(agentTaskOptions(undefined, types)).toEqual({})
+    expect(agentTaskOptions('type_missing', types)).toEqual({})
+  })
+})
+
+describe('registerAgentTypeIpc', () => {
+  it('lists, saves, and removes agent types through the settings store', () => {
+    const settings = {
+      agentTypes: vi.fn(() => [{ id: 't1', name: 'Reviewer', instructions: 'x' }]),
+      saveAgentType: vi.fn(),
+      removeAgentType: vi.fn(),
+    }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerAgentTypeIpc(settings as unknown as SettingsStore, (channel, listener) =>
+      handlers.set(channel, listener),
+    )
+
+    expect(handlers.get('agent-types:list')?.(undefined)).toEqual([
+      { id: 't1', name: 'Reviewer', instructions: 'x' },
+    ])
+    const type = { id: 't2', name: 'Tester', instructions: 'write tests' }
+    handlers.get('agent-types:save')?.(undefined, type)
+    expect(settings.saveAgentType).toHaveBeenCalledWith(type)
+    handlers.get('agent-types:remove')?.(undefined, 't1')
+    expect(settings.removeAgentType).toHaveBeenCalledWith('t1')
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerAgentTypeIpc(fakeSettings())
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['agent-types:list', 'agent-types:save', 'agent-types:remove'])
   })
 })
 

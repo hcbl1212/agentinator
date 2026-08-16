@@ -224,6 +224,26 @@ describe('SettingsStore', () => {
     store.close()
   })
 
+  it('saves (upsert), lists, and removes agent-type presets', () => {
+    const store = new SettingsStore()
+
+    expect(store.agentTypes()).toEqual([])
+    store.saveAgentType({ id: 'a', name: 'Reviewer', instructions: 'review only', readOnly: true })
+    store.saveAgentType({ id: 'b', name: 'Tester', instructions: 'write tests', model: 'm' })
+    expect(store.agentTypes()).toEqual([
+      { id: 'a', name: 'Reviewer', instructions: 'review only', readOnly: true },
+      { id: 'b', name: 'Tester', instructions: 'write tests', model: 'm' },
+    ])
+
+    // Re-saving by id upserts and moves the type to the end.
+    store.saveAgentType({ id: 'a', name: 'Reviewer v2', instructions: 'r2' })
+    expect(store.agentTypes().map((type) => type.name)).toEqual(['Tester', 'Reviewer v2'])
+
+    store.removeAgentType('b')
+    expect(store.agentTypes().map((type) => type.id)).toEqual(['a'])
+    store.close()
+  })
+
   it('stores, reads, lists, and deletes credential ciphertext', () => {
     const store = new SettingsStore()
 

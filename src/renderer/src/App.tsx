@@ -1,6 +1,7 @@
 import { CapacityBanner } from './components/CapacityBanner'
 import { Panes } from './components/Panes'
 import { StatusBar } from './components/StatusBar'
+import { AgentTypesProvider } from './state/agentTypes'
 import { InboxProvider } from './state/inbox'
 import { PipelineProvider } from './state/pipelines'
 import { QueueProvider } from './state/queue'
@@ -13,9 +14,11 @@ export function App(): React.JSX.Element {
       <SessionsProvider>
         <QueueProvider>
           <PipelineProvider>
-            <InboxProvider>
-              <AppShell />
-            </InboxProvider>
+            <AgentTypesProvider>
+              <InboxProvider>
+                <AppShell />
+              </InboxProvider>
+            </AgentTypesProvider>
           </PipelineProvider>
         </QueueProvider>
       </SessionsProvider>

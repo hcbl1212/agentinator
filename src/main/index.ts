@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, shell } from 'electron'
 
+import type { AgentType } from '../shared/agentTypes'
 import type { BudgetScope } from '../shared/budget'
 import { createEntityId } from '../shared/events'
 import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
@@ -135,6 +136,7 @@ export function registerCheckpointIpc(
 
 export function registerAgentIpc(
   manager: SessionManager,
+  agentTypes: () => AgentType[],
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -156,14 +158,34 @@ export function registerAgentIpc(
       cwd: process.cwd(),
     }),
   )
-  handle('agent:start-task', (_event, prompt, images) =>
-    startAgentTask(manager, prompt as string, images as ImageAttachment[] | undefined),
+  handle('agent:start-task', (_event, prompt, images, agentTypeId) =>
+    startAgentTask(manager, prompt as string, {
+      images: images as ImageAttachment[] | undefined,
+      ...agentTaskOptions(agentTypeId, agentTypes),
+    }),
   )
   handle('agent:send', (_event, sessionId, text, images) =>
     manager.send(sessionId as string, text as string, images as ImageAttachment[] | undefined),
   )
   handle('agent:cancel', (_event, sessionId) => manager.cancel(sessionId as string))
   handle('agent:dismiss', (_event, sessionId) => manager.dismiss(sessionId as string))
+}
+
+/** Agent-type presets (reusable roles a task can launch under). Stored in the
+ * settings store; the renderer manages them and the composer picks one. */
+export function registerAgentTypeIpc(
+  settings: SettingsStore,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('agent-types:list', () => settings.agentTypes())
+  handle('agent-types:save', (_event, type) => {
+    settings.saveAgentType(type as AgentType)
+  })
+  handle('agent-types:remove', (_event, id) => {
+    settings.removeAgentType(id as string)
+  })
 }
 
 /** The task backlog: park prompts, then dispatch them to agents on demand.
@@ -225,27 +247,47 @@ export function taskProviderId(): string {
   return process.env['AGENTINATOR_MOCK_TASKS'] === '1' ? 'e2e' : 'claude'
 }
 
-/** Start an agent from a task prompt (a fresh launch, or a dispatched queue
- * item), returning the new session id. A pipeline stage passes the worktree its
- * predecessor ran in, so the stages share one checkout. */
+/** Per-launch overrides for {@link startAgentTask}: attached images, a worktree
+ * to reuse (a pipeline stage), and an agent type's posture (read-only,
+ * instructions, model). */
+export interface AgentTaskOptions {
+  images?: ImageAttachment[]
+  worktree?: WorktreeInfo
+  readOnly?: boolean
+  instructions?: string
+  model?: string
+}
+
+/** Start an agent from a task prompt (a fresh launch, a dispatched queue item,
+ * or a pipeline stage), returning the new session id. */
 export function startAgentTask(
   manager: SessionManager,
   prompt: string,
-  images?: ImageAttachment[],
-  worktree?: WorktreeInfo,
-  readOnly?: boolean,
+  options: AgentTaskOptions = {},
 ): string {
   return manager.start({
     providerId: taskProviderId(),
     title: taskTitle(prompt),
     prompt,
-    images,
-    worktree,
-    readOnly,
+    ...options,
     // The workspace repo — for now the process cwd (the repo when run via
     // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
     cwd: process.cwd(),
   })
+}
+
+/** An agent type's launch posture, or empty when none/unknown is chosen. */
+export function agentTaskOptions(
+  agentTypeId: unknown,
+  types: () => AgentType[],
+): Pick<AgentTaskOptions, 'instructions' | 'model' | 'readOnly'> {
+  if (typeof agentTypeId !== 'string') {
+    return {}
+  }
+  const type = types().find((candidate) => candidate.id === agentTypeId)
+  return type === undefined
+    ? {}
+    : { instructions: type.instructions, model: type.model, readOnly: type.readOnly }
 }
 
 /** A short one-line title from a task prompt for the roster and timeline. */
@@ -703,13 +745,14 @@ export async function bootstrap(
     emit: makeEmitStored(store),
     store,
     startStage: (prompt, worktree, readOnly) =>
-      startAgentTask(manager, prompt, undefined, worktree, readOnly),
+      startAgentTask(manager, prompt, { worktree, readOnly }),
     retireStage: (sessionId) => void manager.retire(sessionId),
   })
   pipelineObservers.push(pipelines.observe.bind(pipelines))
   pipelines.reconcile(store.list())
 
-  registerAgentIpc(manager)
+  registerAgentIpc(manager, settings.agentTypes.bind(settings))
+  registerAgentTypeIpc(settings)
   registerQueueIpc(manager, makeEmitStored(store, sink))
   registerPipelineIpc(pipelines)
   const checkpoints = new NodeCheckpoints(runGitSync)

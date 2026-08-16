@@ -27,8 +27,8 @@ export const bridge: AgentinatorBridge = {
     current: () =>
       ipcRenderer.invoke('agent:current') as Promise<import('../shared/bridge').AgentDescriptor>,
     startDemo: () => ipcRenderer.invoke('agent:start-demo') as Promise<string>,
-    startTask: (prompt, images) =>
-      ipcRenderer.invoke('agent:start-task', prompt, images) as Promise<string>,
+    startTask: (prompt, images, agentTypeId) =>
+      ipcRenderer.invoke('agent:start-task', prompt, images, agentTypeId) as Promise<string>,
     send: (sessionId, text, images) =>
       ipcRenderer.invoke('agent:send', sessionId, text, images) as Promise<void>,
     cancel: (sessionId) => ipcRenderer.invoke('agent:cancel', sessionId) as Promise<void>,
@@ -119,6 +119,12 @@ export const bridge: AgentinatorBridge = {
       ipcRenderer.invoke('worktrees:summary') as Promise<{ count: number; bytes: number }>,
     cleanup: () =>
       ipcRenderer.invoke('worktrees:cleanup') as Promise<{ count: number; bytes: number }>,
+  },
+  agentTypes: {
+    list: () =>
+      ipcRenderer.invoke('agent-types:list') as Promise<import('../shared/agentTypes').AgentType[]>,
+    save: (type) => ipcRenderer.invoke('agent-types:save', type) as Promise<void>,
+    remove: (id) => ipcRenderer.invoke('agent-types:remove', id) as Promise<void>,
   },
   queue: {
     add: (prompt) => ipcRenderer.invoke('queue:add', prompt) as Promise<string>,

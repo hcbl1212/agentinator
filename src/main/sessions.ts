@@ -25,6 +25,9 @@ export interface StartSession {
   /** Deny file-editing/command tools for this session (a read-only planning
    * stage). Passed to the provider, which blocks its mutating tools. */
   readOnly?: boolean
+  /** Extra system-prompt instructions (an agent type's guidance), passed to the
+   * provider to layer onto the base prompt. */
+  instructions?: string
 }
 
 const NO_BUDGETS: Budgets = { session: null, hour: null, day: null, week: null, month: null }
@@ -206,6 +209,7 @@ export class SessionManager {
         images: options.images,
         apiKey,
         readOnly: options.readOnly,
+        instructions: options.instructions,
       },
       this.#sessionEmitter(sessionId, options.providerId),
     )

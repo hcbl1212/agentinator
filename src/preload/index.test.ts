@@ -131,7 +131,7 @@ describe('preload bridge', () => {
   it('routes agent.current, startDemo, startTask, send, cancel, and dismiss over IPC', async () => {
     await bridge.agent.current()
     await bridge.agent.startDemo()
-    await bridge.agent.startTask('do the thing')
+    await bridge.agent.startTask('do the thing', undefined, 'type_r')
     await bridge.agent.send('session_9', 'keep going')
     await bridge.agent.cancel('session_9')
     await bridge.agent.dismiss('session_9')
@@ -142,6 +142,7 @@ describe('preload bridge', () => {
       'agent:start-task',
       'do the thing',
       undefined,
+      'type_r',
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
       'agent:send',
@@ -151,6 +152,17 @@ describe('preload bridge', () => {
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:cancel', 'session_9')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent:dismiss', 'session_9')
+  })
+
+  it('routes agent-type list/save/remove over IPC', async () => {
+    const type = { id: 't1', name: 'Reviewer', instructions: 'review only' }
+    await bridge.agentTypes.list()
+    await bridge.agentTypes.save(type)
+    await bridge.agentTypes.remove('t1')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent-types:list')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent-types:save', type)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent-types:remove', 't1')
   })
 
   it('routes credential set/has/clear and the API-key switch over IPC', async () => {

@@ -87,6 +87,11 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
         cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
       },
+      agentTypes: {
+        list: vi.fn(() => Promise.resolve([])),
+        save: vi.fn(() => Promise.resolve()),
+        remove: vi.fn(() => Promise.resolve()),
+      },
       queue: {
         add: vi.fn(() => Promise.resolve('task_x')),
         remove: vi.fn(() => Promise.resolve()),

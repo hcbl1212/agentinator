@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { AgentTypesProvider } from '../state/agentTypes'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
@@ -19,7 +20,9 @@ describe('Stream', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <Stream />
+          <AgentTypesProvider>
+            <Stream />
+          </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )
@@ -51,6 +54,7 @@ describe('Stream', () => {
       },
       agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
       approvals: { pending: vi.fn(() => Promise.resolve([])) },
+      agentTypes: { list: vi.fn(() => Promise.resolve([])) },
     } as unknown as AgentinatorBridge
 
     function Selector(): React.JSX.Element {
@@ -65,8 +69,10 @@ describe('Stream', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <Selector />
-          <Stream />
+          <AgentTypesProvider>
+            <Selector />
+            <Stream />
+          </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )

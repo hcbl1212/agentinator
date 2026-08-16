@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
+import { AgentTypesProvider } from '../state/agentTypes'
 import { SelectionProvider, useSelection } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { ComposerDock } from './ComposerDock'
@@ -105,6 +106,11 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         summary: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
         cleanup: vi.fn(() => Promise.resolve({ count: 0, bytes: 0 })),
       },
+      agentTypes: {
+        list: vi.fn(() => Promise.resolve([])),
+        save: vi.fn(() => Promise.resolve()),
+        remove: vi.fn(() => Promise.resolve()),
+      },
       queue: {
         add: queueAdd,
         remove: vi.fn(() => Promise.resolve()),
@@ -168,7 +174,9 @@ function renderDock(): void {
   render(
     <SelectionProvider>
       <SessionsProvider>
-        <ComposerDock />
+        <AgentTypesProvider>
+          <ComposerDock />
+        </AgentTypesProvider>
       </SessionsProvider>
     </SelectionProvider>,
   )
@@ -179,8 +187,10 @@ async function renderSelected(sessionId: string): Promise<void> {
   render(
     <SelectionProvider>
       <SessionsProvider>
-        <Selector id={sessionId} />
-        <ComposerDock />
+        <AgentTypesProvider>
+          <Selector id={sessionId} />
+          <ComposerDock />
+        </AgentTypesProvider>
       </SessionsProvider>
     </SelectionProvider>,
   )
@@ -225,7 +235,7 @@ describe('ComposerDock', () => {
     const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, 'Add a hello util{Enter}')
 
-    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [])
+    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [], undefined)
     expect(input).toHaveValue('')
   })
 
@@ -289,7 +299,7 @@ describe('ComposerDock', () => {
     expect(stub.startTask).not.toHaveBeenCalled()
 
     await userEvent.type(input, '{Enter}')
-    expect(stub.startTask).toHaveBeenCalledWith('first line', [])
+    expect(stub.startTask).toHaveBeenCalledWith('first line', [], undefined)
   })
 
   it('ignores an empty/whitespace submission', async () => {
@@ -485,7 +495,9 @@ describe('ComposerDock', () => {
     const { unmount } = render(
       <SelectionProvider>
         <SessionsProvider>
-          <ComposerDock />
+          <AgentTypesProvider>
+            <ComposerDock />
+          </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )
@@ -509,7 +521,11 @@ describe('ComposerDock', () => {
     await screen.findByAltText('pasted screenshot')
     await userEvent.type(input, '{Enter}')
 
-    expect(stub.startTask).toHaveBeenCalledWith('', [{ mediaType: 'image/png', data: 'AQID' }])
+    expect(stub.startTask).toHaveBeenCalledWith(
+      '',
+      [{ mediaType: 'image/png', data: 'AQID' }],
+      undefined,
+    )
     expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
   })
 

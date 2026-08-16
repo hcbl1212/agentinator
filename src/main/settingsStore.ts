@@ -1,5 +1,6 @@
 import { DatabaseSync, StatementSync } from 'node:sqlite'
 
+import type { AgentType } from '../shared/agentTypes'
 import { BUDGET_SCOPES, EMPTY_BUDGETS } from '../shared/budget'
 import type { BudgetScope, Budgets } from '../shared/budget'
 import { clampSettleMs, DEFAULT_SETTLE_MS } from '../shared/preview'
@@ -201,6 +202,26 @@ export class SettingsStore {
       value.props = trimmedProps
     }
     this.#set.run(key, JSON.stringify(value))
+  }
+
+  /** The saved agent-type presets, in insertion order. Empty until the user
+   * creates one. */
+  agentTypes(): AgentType[] {
+    const row = this.#get.get('agentTypes') as { value: string } | undefined
+    return row === undefined ? [] : (JSON.parse(row.value) as AgentType[])
+  }
+
+  /** Create or update an agent type (upsert by id); a re-saved type moves to
+   * the end of the list. */
+  saveAgentType(type: AgentType): void {
+    const list = this.agentTypes().filter((existing) => existing.id !== type.id)
+    list.push(type)
+    this.#set.run('agentTypes', JSON.stringify(list))
+  }
+
+  /** Delete an agent type by id (a no-op if it doesn't exist). */
+  removeAgentType(id: string): void {
+    this.#set.run('agentTypes', JSON.stringify(this.agentTypes().filter((type) => type.id !== id)))
   }
 
   /** Set (positive number) or clear (null) the cap for one scope. */

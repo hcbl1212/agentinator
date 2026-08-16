@@ -4,6 +4,7 @@ import type { AgentinatorBridge, PendingApproval } from '../../../shared/bridge'
 import type { EventPayloads, ImageAttachment } from '../../../shared/events'
 import { useSelection } from '../state/selection'
 import { useSessions } from '../state/sessions'
+import { AgentTypeBar } from './AgentTypeBar'
 import { ApprovalCard } from './ApprovalCard'
 import { QuestionCard } from './QuestionCard'
 
@@ -28,6 +29,7 @@ export function ComposerDock(): React.JSX.Element {
   const { sessions } = useSessions()
   const { selection, select, clear } = useSelection()
   const [prompt, setPrompt] = useState('')
+  const [agentTypeId, setAgentTypeId] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
   const [images, setImages] = useState<PastedImage[]>([])
@@ -122,7 +124,7 @@ export function ComposerDock(): React.JSX.Element {
     if (selected !== undefined) {
       sendMessage(selected.id, trimmed, attachments)
     } else {
-      void bridge.agent.startTask(trimmed, attachments).then((id) => {
+      void bridge.agent.startTask(trimmed, attachments, agentTypeId ?? undefined).then((id) => {
         select({ kind: 'session', id })
       })
     }
@@ -265,6 +267,7 @@ export function ComposerDock(): React.JSX.Element {
               ))}
             </div>
           )}
+          {!replying && <AgentTypeBar selectedId={agentTypeId} onSelect={setAgentTypeId} />}
           <div className="console">
             <span className="console-prompt" aria-hidden="true">
               &gt;
