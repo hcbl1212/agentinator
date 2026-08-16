@@ -57,6 +57,10 @@ export interface SessionContext {
    * after hitting a plan limit. Vendor-neutral; the adapter maps it to its own
    * auth mechanism. */
   apiKey?: string
+  /** Deny file-editing and command-running tools for this session — a
+   * planning/read-only stage that must not touch the working tree. The adapter
+   * blocks its mutating tools (Edit/Write/Bash and the like). */
+  readOnly?: boolean
 }
 
 export interface AgentSessionHandle {

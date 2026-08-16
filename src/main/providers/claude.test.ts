@@ -139,6 +139,35 @@ describe('createClaudeProvider', () => {
     expect(decide).toHaveBeenCalledWith('session_c', 'read', { path: 'a.ts' })
   })
 
+  it('blocks editing and command tools for a read-only planning stage', async () => {
+    let queryArgs: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      queryArgs = args
+      return streamOf([successResult])
+    }
+    // A decider that would allow everything — the read-only gate must still deny.
+    const decide = vi.fn(() => Promise.resolve(true))
+    const provider = createClaudeProvider(query, decide)
+
+    provider.startSession({ ...context, readOnly: true }, () => undefined)
+    await vi.waitFor(() => {
+      expect(queryArgs?.options.canUseTool).toBeDefined()
+    })
+    const canUseTool = queryArgs?.options.canUseTool
+
+    for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash', 'bash']) {
+      const result = await canUseTool?.(tool, {})
+      expect(result).toMatchObject({ behavior: 'deny' })
+      expect((result as { message: string }).message).toContain('read-only planning stage')
+    }
+    // Reading/searching still flows through the decider (allowed here), and the
+    // deny short-circuits before the decider is ever consulted for an edit.
+    await expect(canUseTool?.('Read', { path: 'a.ts' })).resolves.toMatchObject({
+      behavior: 'allow',
+    })
+    expect(decide).not.toHaveBeenCalledWith('session_c', 'Edit', {})
+  })
+
   it('surfaces AskUserQuestion as an answerable question event, not a permission ask', async () => {
     let queryArgs: Parameters<ClaudeQuery>[0] | undefined
     const query: ClaudeQuery = (args) => {

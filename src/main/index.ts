@@ -230,6 +230,7 @@ export function startAgentTask(
   prompt: string,
   images?: ImageAttachment[],
   worktree?: WorktreeInfo,
+  readOnly?: boolean,
 ): string {
   return manager.start({
     providerId: taskProviderId(),
@@ -237,6 +238,7 @@ export function startAgentTask(
     prompt,
     images,
     worktree,
+    readOnly,
     // The workspace repo — for now the process cwd (the repo when run via
     // `npm run dev`); explicit workspace/dir selection arrives in Phase 5.
     cwd: process.cwd(),
@@ -697,7 +699,8 @@ export async function bootstrap(
   const pipelines = new PipelineOrchestrator({
     emit: makeEmitStored(store),
     store,
-    startStage: (prompt, worktree) => startAgentTask(manager, prompt, undefined, worktree),
+    startStage: (prompt, worktree, readOnly) =>
+      startAgentTask(manager, prompt, undefined, worktree, readOnly),
     retireStage: (sessionId) => void manager.retire(sessionId),
   })
   pipelineObservers.push(pipelines.observe.bind(pipelines))

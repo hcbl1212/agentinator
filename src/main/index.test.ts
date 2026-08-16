@@ -715,12 +715,12 @@ describe('taskProviderId and startAgentTask', () => {
     )
   })
 
-  it('passes a supplied worktree through so a pipeline stage reuses it', () => {
+  it('passes a supplied worktree and read-only flag through for a pipeline stage', () => {
     const start = vi.fn(() => 'session_9')
     const worktree = { repoRoot: '/repo', path: '/wt/first', branch: 'agentinator/first' }
-    startAgentTask({ start } as unknown as SessionManager, 'Review it', undefined, worktree)
+    startAgentTask({ start } as unknown as SessionManager, 'Plan it', undefined, worktree, true)
 
-    expect(start).toHaveBeenCalledWith(expect.objectContaining({ worktree }))
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ worktree, readOnly: true }))
   })
 })
 

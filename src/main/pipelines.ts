@@ -20,6 +20,9 @@ export function defaultPipelineStages(task: string): PipelineStageSpec[] {
   return [
     {
       name: 'Plan',
+      // Read-only: the provider blocks its edit/command tools, so it can only
+      // read and plan even if the model tries to jump ahead.
+      readOnly: true,
       prompt:
         'You are the PLANNING stage of a pipeline. Do not edit, create, or run ' +
         'anything — a later stage implements your plan. Output only a written, ' +
@@ -59,7 +62,7 @@ type PipelineReader = { listBySession(sessionId: string): StoredEvent[] }
 export class PipelineOrchestrator {
   readonly #emit: EmitStored
   readonly #store: PipelineReader
-  readonly #startStage: (prompt: string, worktree?: WorktreeInfo) => string
+  readonly #startStage: (prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string
   readonly #retireStage: (sessionId: string) => void
   readonly #stagesByPipeline = new Map<string, PipelineStageSpec[]>()
   /** `${pipelineId}:${stageIndex}` for every stage already dispatched, so a
@@ -69,7 +72,7 @@ export class PipelineOrchestrator {
   constructor(options: {
     emit: EmitStored
     store: PipelineReader
-    startStage: (prompt: string, worktree?: WorktreeInfo) => string
+    startStage: (prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string
     /** End a completed stage's agent so it leaves the rail (the pipeline chip
      * still shows its status). The worktree is left for the next stage. */
     retireStage: (sessionId: string) => void
@@ -85,7 +88,7 @@ export class PipelineOrchestrator {
     const pipelineId = createEntityId('pipeline')
     this.#stagesByPipeline.set(pipelineId, stages)
     this.#emit('pipeline.created', { pipelineId, title, stages })
-    this.#dispatch(pipelineId, 0, stages[0].prompt)
+    this.#dispatch(pipelineId, 0, stages[0].prompt, undefined, stages[0].readOnly)
     return pipelineId
   }
 
@@ -122,7 +125,7 @@ export class PipelineOrchestrator {
       handoff === ''
         ? stages[next].prompt
         : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
-    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events))
+    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events), stages[next].readOnly)
   }
 
   /** Re-run a paused stage with the user's revision feedback (e.g. reshape the
@@ -150,7 +153,13 @@ export class PipelineOrchestrator {
       parts.push(`${PRIOR_ATTEMPT_HEADER}\n${previous}`)
     }
     parts.push(`${REVISION_HEADER}\n${feedback}`)
-    this.#dispatch(pipelineId, started.stageIndex, parts.join('\n\n'), this.#worktreeOf(events))
+    this.#dispatch(
+      pipelineId,
+      started.stageIndex,
+      parts.join('\n\n'),
+      this.#worktreeOf(events),
+      stages[started.stageIndex].readOnly,
+    )
   }
 
   /** Rebuild in-memory pipeline state from the log (called at boot) so a
@@ -220,9 +229,16 @@ export class PipelineOrchestrator {
     }
   }
 
-  /** Launch a stage's agent and link the resulting session to the stage. */
-  #dispatch(pipelineId: string, stageIndex: number, prompt: string, worktree?: WorktreeInfo): void {
-    const sessionId = this.#startStage(prompt, worktree)
+  /** Launch a stage's agent and link the resulting session to the stage. The
+   * stage's own read-only flag rides along, so a planning stage can't edit. */
+  #dispatch(
+    pipelineId: string,
+    stageIndex: number,
+    prompt: string,
+    worktree?: WorktreeInfo,
+    readOnly?: boolean,
+  ): void {
+    const sessionId = this.#startStage(prompt, worktree, readOnly === true)
     this.#startedStages.add(`${pipelineId}:${stageIndex}`)
     this.#emit('pipeline.stage.started', { pipelineId, stageIndex, sessionId })
   }

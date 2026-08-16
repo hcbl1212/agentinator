@@ -29,7 +29,9 @@ function harness() {
       log.filter((event) => (event.payload as { sessionId?: string }).sessionId === id),
   }
   let n = 0
-  const startStage = vi.fn<(prompt: string, worktree?: WorktreeInfo) => string>(() => `sess${n++}`)
+  const startStage = vi.fn<(prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string>(
+    () => `sess${n++}`,
+  )
   const retireStage = vi.fn<(sessionId: string) => void>()
   const orchestrator = new PipelineOrchestrator({ emit, store, startStage, retireStage })
 
@@ -73,8 +75,11 @@ describe('defaultPipelineStages', () => {
 
     expect(stages.map((stage) => stage.name)).toEqual(['Plan', 'Implement', 'Review'])
     expect(stages[0].prompt).toContain('add a logout button')
-    // The plan stage must not touch files — a later stage implements it.
+    // The plan stage must not touch files — read-only, and a later stage
+    // implements it.
     expect(stages[0].prompt).toContain('Do not edit')
+    expect(stages[0].readOnly).toBe(true)
+    expect(stages[1].readOnly).toBeUndefined() // implement/review may edit
     expect(stages[1].prompt).toContain('add a logout button')
     // Review reads the shared worktree's diff, not the raw task.
     expect(stages[2].prompt).toContain('git diff')
@@ -91,6 +96,7 @@ describe('PipelineOrchestrator', () => {
     expect(h.types()).toEqual(['pipeline.created', 'pipeline.stage.started'])
     expect(h.startStage).toHaveBeenCalledTimes(1)
     expect(h.startStage.mock.calls[0][0]).toContain('PLANNING stage')
+    expect(h.startStage.mock.calls[0][2]).toBe(true) // the plan stage runs read-only
     expect(h.log[1].payload).toMatchObject({ pipelineId: id, stageIndex: 0, sessionId: 'sess0' })
   })
 
@@ -119,6 +125,7 @@ describe('PipelineOrchestrator', () => {
     expect(implementPrompt).toContain('IMPLEMENTATION stage')
     expect(implementPrompt).toContain(HANDOFF_HEADER)
     expect(implementPrompt).toContain('THE PLAN')
+    expect(h.startStage.mock.calls[1][2]).toBe(false) // implement may edit
   })
 
   it('completes a stage that ends with a completed outcome', () => {

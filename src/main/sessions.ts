@@ -22,6 +22,9 @@ export interface StartSession {
    * pipeline so its stages share one checkout and each builds on the last's
    * edits. When set, no new worktree/branch is created. */
   worktree?: WorktreeInfo
+  /** Deny file-editing/command tools for this session (a read-only planning
+   * stage). Passed to the provider, which blocks its mutating tools. */
+  readOnly?: boolean
 }
 
 const NO_BUDGETS: Budgets = { session: null, hour: null, day: null, week: null, month: null }
@@ -202,6 +205,7 @@ export class SessionManager {
         model: options.model,
         images: options.images,
         apiKey,
+        readOnly: options.readOnly,
       },
       this.#sessionEmitter(sessionId, options.providerId),
     )

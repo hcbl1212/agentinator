@@ -333,6 +333,18 @@ describe('SessionManager', () => {
     store.close()
   })
 
+  it('passes the read-only flag to the provider for a planning stage', () => {
+    const store = new EventStore()
+    const recording = recordingProvider('claude')
+    const manager = new SessionManager(store)
+    manager.register(recording.provider)
+
+    manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/repo', readOnly: true })
+
+    expect(recording.context()?.readOnly).toBe(true)
+    store.close()
+  })
+
   it('runs in the repo directly when the cwd is not an isolable git repo', () => {
     const store = new EventStore()
     const worktrees = fakeWorktrees(null) // create declines

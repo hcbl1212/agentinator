@@ -113,6 +113,12 @@ const PREVIEW_TOOL = 'capture_app'
 /** MCP tools are namespaced `mcp__{server}__{tool}` in the SDK. */
 const PREVIEW_TOOL_QUALIFIED = `mcp__${PREVIEW_SERVER}__${PREVIEW_TOOL}`
 
+/** The SDK's built-in tools that change the working tree or run commands —
+ * denied outright for a read-only stage (e.g. planning), which may still read,
+ * grep, and search. Matched case-insensitively so tool-name casing can't slip
+ * an edit past the gate. */
+const MUTATING_TOOLS = new Set(['edit', 'write', 'multiedit', 'notebookedit', 'bash'])
+
 /** The captured console rendered for the model — a text block it reads next to
  * the screenshot. Empty console yields no block (nothing to say). */
 function consoleBlock(console: ConsoleEntry[]): SdkTextContent[] {
@@ -389,6 +395,16 @@ export function createClaudeProvider(
             behavior: 'deny',
             message:
               "Do not call AskUserQuestion. The user's answer will arrive as their next message — end your turn and wait for it.",
+          }
+        }
+        // A read-only stage (planning) may read the code but must not change it
+        // or run commands — hard-block its mutating tools, prompt notwithstanding.
+        if (context.readOnly === true && MUTATING_TOOLS.has(toolName.toLowerCase())) {
+          return {
+            behavior: 'deny',
+            message:
+              'This is a read-only planning stage — you cannot edit files or run commands. ' +
+              'Read and search as needed, then output a written plan.',
           }
         }
         if (decide === undefined) {

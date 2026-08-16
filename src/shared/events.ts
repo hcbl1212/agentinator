@@ -24,6 +24,9 @@ export const ENTITY_KINDS = [
 export interface PipelineStageSpec {
   name: string
   prompt: string
+  /** Run this stage read-only — the agent may read/search but cannot edit files
+   * or run commands (a planning stage). The provider enforces it. */
+  readOnly?: boolean
 }
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
