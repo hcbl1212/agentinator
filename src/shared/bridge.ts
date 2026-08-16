@@ -168,6 +168,9 @@ export interface AgentinatorBridge {
     /** Advance a paused pipeline past a stage boundary: launch the stage after
      * `fromSessionId` (the just-finished stage), carrying its output forward. */
     continue(pipelineId: string, fromSessionId: string): Promise<void>
+    /** Re-run the paused stage (`fromSessionId`) with revision feedback — e.g.
+     * reshape the plan before continuing. */
+    revise(pipelineId: string, fromSessionId: string, feedback: string): Promise<void>
     /** Clear a pipeline from the list (finished or abandoned); it stops
      * advancing and drops out of the UI. */
     remove(pipelineId: string): Promise<void>

@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EventPayloads, EventType, StoredEvent } from '../shared/events'
 import type { EmitStored } from './approvals'
-import { defaultPipelineStages, HANDOFF_HEADER, PipelineOrchestrator } from './pipelines'
+import {
+  defaultPipelineStages,
+  HANDOFF_HEADER,
+  PipelineOrchestrator,
+  PRIOR_ATTEMPT_HEADER,
+  REVISION_HEADER,
+} from './pipelines'
 import type { WorktreeInfo } from './worktrees'
 
 /** A tiny in-memory log that models the real store closely enough for the
@@ -261,6 +267,71 @@ describe('PipelineOrchestrator', () => {
 
     // 'stranger' has no pipeline.stage.started in the log.
     h.orchestrator.continueStage(id, 'stranger')
+
+    expect(h.startStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('revises a paused stage, re-running it with the prior attempt and feedback', () => {
+    const h = harness()
+    const worktree: WorktreeInfo = { repoRoot: '/repo', path: '/wt/x', branch: 'agentinator/x' }
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.seedStarted('sess0', worktree)
+    h.seedText('sess0', 'THE PLAN')
+    h.idled('sess0') // paused at the gate
+
+    h.orchestrator.reviseStage(id, 'sess0', 'add error handling')
+
+    // Re-runs the SAME stage (Plan) in the same worktree, with the prior attempt
+    // and the feedback in the prompt.
+    expect(h.startStage).toHaveBeenCalledTimes(2)
+    const prompt = h.startStage.mock.calls[1][0]
+    expect(prompt).toContain('PLANNING stage')
+    expect(prompt).toContain(PRIOR_ATTEMPT_HEADER)
+    expect(prompt).toContain('THE PLAN')
+    expect(prompt).toContain(REVISION_HEADER)
+    expect(prompt).toContain('add error handling')
+    expect(h.startStage.mock.calls[1][1]).toEqual(worktree)
+    const restarts = h.log.filter(
+      (e) =>
+        e.type === 'pipeline.stage.started' &&
+        (e.payload as { stageIndex: number }).stageIndex === 0,
+    )
+    expect(restarts).toHaveLength(2) // original + revised run of stage 0
+  })
+
+  it('revises with feedback only when the stage produced no output', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.seedStarted('sess0') // no agent.text
+    h.idled('sess0')
+
+    h.orchestrator.reviseStage(id, 'sess0', 'try again')
+
+    const prompt = h.startStage.mock.calls[1][0]
+    expect(prompt).not.toContain(PRIOR_ATTEMPT_HEADER)
+    expect(prompt).toContain(REVISION_HEADER)
+    expect(prompt).toContain('try again')
+  })
+
+  it('does not revise once the pipeline has advanced past the boundary', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.idled('sess0')
+    h.orchestrator.continueStage(id, 'sess0') // stage 1 started
+    const before = h.startStage.mock.calls.length
+
+    h.orchestrator.reviseStage(id, 'sess0', 'too late')
+
+    expect(h.startStage.mock.calls.length).toBe(before)
+  })
+
+  it('revising an unknown pipeline or session is a no-op', () => {
+    const h = harness()
+    const id = h.orchestrator.create('T', defaultPipelineStages('do it'))
+    h.idled('sess0')
+
+    h.orchestrator.reviseStage('nope', 'sess0', 'x') // unknown pipeline
+    h.orchestrator.reviseStage(id, 'stranger', 'x') // unknown session
 
     expect(h.startStage).toHaveBeenCalledTimes(1)
   })

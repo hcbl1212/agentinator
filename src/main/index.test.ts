@@ -762,11 +762,12 @@ describe('registerPipelineIpc', () => {
   it('creates a Plan → Implement → Review pipeline from a prompt', () => {
     const create = vi.fn(() => 'pipeline_7')
     const continueStage = vi.fn()
+    const reviseStage = vi.fn()
     const remove = vi.fn()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerPipelineIpc(
-      { create, continueStage, remove } as unknown as PipelineOrchestrator,
+      { create, continueStage, reviseStage, remove } as unknown as PipelineOrchestrator,
       (channel, listener) => handlers.set(channel, listener),
     )
 
@@ -779,6 +780,9 @@ describe('registerPipelineIpc', () => {
     handlers.get('pipelines:continue')?.(undefined, 'pipeline_7', 'session_plan')
     expect(continueStage).toHaveBeenCalledWith('pipeline_7', 'session_plan')
 
+    handlers.get('pipelines:revise')?.(undefined, 'pipeline_7', 'session_plan', 'tighten it')
+    expect(reviseStage).toHaveBeenCalledWith('pipeline_7', 'session_plan', 'tighten it')
+
     handlers.get('pipelines:remove')?.(undefined, 'pipeline_7')
     expect(remove).toHaveBeenCalledWith('pipeline_7')
   })
@@ -787,7 +791,12 @@ describe('registerPipelineIpc', () => {
     registerPipelineIpc({ create: vi.fn() } as unknown as PipelineOrchestrator)
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
-    expect(channels).toEqual(['pipelines:create', 'pipelines:continue', 'pipelines:remove'])
+    expect(channels).toEqual([
+      'pipelines:create',
+      'pipelines:continue',
+      'pipelines:revise',
+      'pipelines:remove',
+    ])
   })
 })
 

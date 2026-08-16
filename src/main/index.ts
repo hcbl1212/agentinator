@@ -207,6 +207,9 @@ export function registerPipelineIpc(
   handle('pipelines:continue', (_event, pipelineId, fromSessionId) => {
     pipelines.continueStage(pipelineId as string, fromSessionId as string)
   })
+  handle('pipelines:revise', (_event, pipelineId, fromSessionId, feedback) => {
+    pipelines.reviseStage(pipelineId as string, fromSessionId as string, feedback as string)
+  })
   handle('pipelines:remove', (_event, pipelineId) => {
     pipelines.remove(pipelineId as string)
   })

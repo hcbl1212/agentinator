@@ -1733,7 +1733,54 @@ button.pipeline-stage:focus-visible {
   color: var(--err);
 }
 
-/* The human-in-the-loop gate: shown while a pipeline waits for sign-off. */
+/* The human-in-the-loop gate: shown while a pipeline waits for sign-off —
+   revise the finished stage with feedback, or continue to the next one. */
+.pipeline-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.1rem;
+}
+
+.pipeline-revise {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.pipeline-revise-input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  font-size: 0.7rem;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+}
+
+.pipeline-revise-input:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
+.pipeline-revise-send {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.pipeline-revise-send:hover,
+.pipeline-revise-send:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
 .pipeline-continue {
   align-self: start;
   background: rgba(53, 194, 165, 0.12);
@@ -1743,7 +1790,6 @@ button.pipeline-stage:focus-visible {
   cursor: pointer;
   font: inherit;
   font-size: 0.7rem;
-  margin-top: 0.1rem;
   padding: 0.2rem 0.5rem;
 }
 

@@ -18,14 +18,17 @@ function stub(backfill: StoredEvent[] = []): {
   emit: (event: StoredEvent) => void
   remove: ReturnType<typeof vi.fn>
   continueStage: ReturnType<typeof vi.fn>
+  revise: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const remove = vi.fn(() => Promise.resolve())
   const continueStage = vi.fn(() => Promise.resolve())
+  const revise = vi.fn(() => Promise.resolve())
   return {
     emit: (event) => appended(event),
     remove,
     continueStage,
+    revise,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -37,6 +40,7 @@ function stub(backfill: StoredEvent[] = []): {
       pipelines: {
         create: vi.fn(() => Promise.resolve('pl_new')),
         continue: continueStage,
+        revise,
         remove,
       },
     } as unknown as AgentinatorBridge,
@@ -171,6 +175,31 @@ describe('Pipelines', () => {
       s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: 1, sessionId: 's1' }))
     })
     expect(screen.queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument()
+  })
+
+  it('revises the finished stage with feedback at the gate', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    act(() => {
+      s.emit(created('pl1'))
+      s.emit(event('pipeline.stage.started', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }))
+      s.emit(
+        event('pipeline.stage.completed', { pipelineId: 'pl1', stageIndex: 0, sessionId: 's0' }),
+      )
+    })
+
+    const input = screen.getByRole('textbox', { name: 'Revision feedback for Plan' })
+    // Empty feedback does nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Revise' }))
+    expect(s.revise).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: 'break out a helper' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Revise' }))
+
+    expect(s.revise).toHaveBeenCalledWith('pl1', 's0', 'break out a helper')
+    expect(input).toHaveValue('') // cleared after sending
   })
 
   it('offers no Continue button once the pipeline has failed or completed', () => {

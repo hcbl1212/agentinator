@@ -7,6 +7,12 @@ import type { WorktreeInfo } from './worktrees'
  * agent can tell the earlier work apart from its own instructions. */
 export const HANDOFF_HEADER = '--- Output from the previous stage ---'
 
+/** Prefixes a stage's own prior attempt when it's re-run with revisions. */
+export const PRIOR_ATTEMPT_HEADER = '--- Your previous attempt ---'
+
+/** Prefixes the user's revision feedback on a re-run of a stage. */
+export const REVISION_HEADER = '--- Revise it per this feedback ---'
+
 /** The built-in pipeline for a task: plan it, implement it, then review the
  * result. Each stage's prompt is the base instruction; the orchestrator appends
  * the previous stage's output as handoff context when it advances. */
@@ -117,6 +123,34 @@ export class PipelineOrchestrator {
         ? stages[next].prompt
         : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
     this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events))
+  }
+
+  /** Re-run a paused stage with the user's revision feedback (e.g. reshape the
+   * plan before implementing). Dispatches the same stage again — its prior
+   * attempt and the feedback are handed to a fresh agent, in the same worktree.
+   * A no-op if the pipeline was removed, the stage never ran, or the pipeline
+   * already advanced past this boundary. */
+  reviseStage(pipelineId: string, fromSessionId: string, feedback: string): void {
+    const stages = this.#stagesByPipeline.get(pipelineId)
+    if (stages === undefined) {
+      return
+    }
+    const events = this.#store.listBySession(fromSessionId)
+    const started = events.find((e) => e.type === 'pipeline.stage.started')?.payload as
+      EventPayloads['pipeline.stage.started'] | undefined
+    if (
+      started === undefined ||
+      this.#startedStages.has(`${pipelineId}:${started.stageIndex + 1}`)
+    ) {
+      return
+    }
+    const previous = this.#finalText(events)
+    const parts = [stages[started.stageIndex].prompt]
+    if (previous !== '') {
+      parts.push(`${PRIOR_ATTEMPT_HEADER}\n${previous}`)
+    }
+    parts.push(`${REVISION_HEADER}\n${feedback}`)
+    this.#dispatch(pipelineId, started.stageIndex, parts.join('\n\n'), this.#worktreeOf(events))
   }
 
   /** Rebuild in-memory pipeline state from the log (called at boot) so a
