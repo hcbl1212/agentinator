@@ -519,6 +519,46 @@ describe('PlanCanvas', () => {
     expect(screen.getByTitle('Role: at_gone')).toBeInTheDocument()
   })
 
+  it('closes the card (and reports it) when the traced task leaves the shown plan', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    const onInspect = vi.fn()
+    render(
+      <SelectionProvider>
+        <PlanProvider>
+          <AgentTypesProvider>
+            <PlanCanvas onInspect={onInspect} />
+          </AgentTypesProvider>
+        </PlanProvider>
+      </SelectionProvider>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace Scaffold' }))
+    expect(onInspect).toHaveBeenLastCalledWith('ta')
+
+    // A newer plan (different task ids) takes the canvas — the stale trace
+    // opens no card, and the parent hears that.
+    act(() => {
+      s.emit(
+        event('plan.created', {
+          planId: 'plx',
+          title: 'Other',
+          requirement: 'r',
+          tasks: [{ taskId: 'zz', title: 'Z', prompt: 'z', dependsOn: [] }],
+        }),
+      )
+    })
+    expect(screen.queryByRole('region', { name: /Task details/ })).not.toBeInTheDocument()
+    expect(onInspect).toHaveBeenLastCalledWith(null)
+
+    // With every plan gone the empty state returns, stale trace and all.
+    act(() => {
+      s.emit(event('plan.removed', { planId: 'pl1' }))
+      s.emit(event('plan.removed', { planId: 'plx' }))
+    })
+    expect(screen.getByText(/No plan yet/)).toBeInTheDocument()
+  })
+
   it('shows node status from the log (running, done, failed)', async () => {
     const s = stub([created('pl1')])
     window.agentinator = s.bridge

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -131,6 +131,63 @@ describe('Stream', () => {
     expect(await screen.findByRole('region', { name: 'Plan canvas' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Trace Scaffold' })).toBeInTheDocument()
     expect(screen.queryByText(/Select an agent, or start a task below/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Composer')).toBeInTheDocument()
+
+    // One text surface at a time: opening a task's card (its editable brief)
+    // stands the composer down; closing it brings the composer back.
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.getByRole('region', { name: 'Task details: Scaffold' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Composer')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.getByLabelText('Composer')).toBeInTheDocument()
+  })
+
+  it('restores the composer when an agent is selected while a card is open', async () => {
+    window.agentinator = {
+      events: {
+        count: vi.fn(() => Promise.resolve(1)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
+        diffs: vi.fn(() => Promise.resolve([])),
+        list: vi.fn(() => Promise.resolve([])),
+        tail: vi.fn(() =>
+          Promise.resolve([
+            {
+              seq: 1,
+              ts: 't',
+              type: 'plan.created',
+              payload: {
+                planId: 'pl1',
+                title: 'Settings page',
+                requirement: 'r',
+                tasks: [{ taskId: 'ta', title: 'Scaffold', prompt: 'a', dependsOn: [] }],
+              },
+            },
+          ] as StoredEvent[]),
+        ),
+        search: vi.fn(() => Promise.resolve([])),
+        onAppended: vi.fn(() => () => undefined),
+      },
+      agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
+      agentTypes: { list: vi.fn(() => Promise.resolve([])) },
+      skills: { list: vi.fn(() => Promise.resolve([])) },
+    } as unknown as AgentinatorBridge
+    function Selector(): React.JSX.Element {
+      const { select } = useSelection()
+      return (
+        <button type="button" onClick={() => select({ kind: 'session', id: 'x' })}>
+          pick x
+        </button>
+      )
+    }
+
+    renderStream(<Selector />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.queryByLabelText('Composer')).not.toBeInTheDocument()
+
+    // The timeline replaces the canvas — the reply composer must return.
+    fireEvent.click(screen.getByRole('button', { name: 'pick x' }))
     expect(screen.getByLabelText('Composer')).toBeInTheDocument()
   })
 })

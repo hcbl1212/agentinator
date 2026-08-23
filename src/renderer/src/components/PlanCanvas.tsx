@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useAgentTypes } from '../state/agentTypes'
 import { usePlans } from '../state/plans'
@@ -86,7 +86,13 @@ const CANVAS_MARK: Record<
  * cycles, no editing dispatched tasks). Ready nodes dispatch straight from
  * the canvas.
  */
-export function PlanCanvas(): React.JSX.Element {
+export function PlanCanvas({
+  onInspect,
+}: {
+  /** Reports which task's detail card is open (null when none) — the stream
+   * hides the composer while a card is up, so only one text surface shows. */
+  onInspect?: (taskId: string | null) => void
+} = {}): React.JSX.Element {
   const { plans } = usePlans()
   const { types } = useAgentTypes()
   const { selection, select } = useSelection()
@@ -97,6 +103,17 @@ export function PlanCanvas(): React.JSX.Element {
   // Fall back to the newest plan so the canvas is useful even when the
   // selected plan was cleared out from under it.
   const plan: Plan | undefined = selected ?? plans[plans.length - 1]
+
+  // What the parent hears must match what's actually on screen: a stale trace
+  // (its task gone, or another plan shown) opens no card.
+  const inspectedId =
+    traced !== null && plan !== undefined && plan.tasks.some((task) => task.id === traced)
+      ? traced
+      : null
+  useEffect(() => {
+    onInspect?.(inspectedId)
+    return () => onInspect?.(null)
+  }, [inspectedId, onInspect])
 
   if (plan === undefined) {
     return (
@@ -110,7 +127,8 @@ export function PlanCanvas(): React.JSX.Element {
   const boxes = new Map(nodes.map((node) => [node.task.id, node]))
   const doneIds = new Set(plan.tasks.filter((task) => task.status === 'done').map((t) => t.id))
   const chain = traced === null ? null : chainOf(traced, plan.tasks)
-  const inspected = traced === null ? undefined : plan.tasks.find((task) => task.id === traced)
+  const inspected =
+    inspectedId === null ? undefined : plan.tasks.find((task) => task.id === inspectedId)
   const linkSource = linkFrom === null ? undefined : boxes.get(linkFrom)?.task
   const width = Math.max(...nodes.map((node) => node.x)) + NODE_W + PAD
   const height = Math.max(...nodes.map((node) => node.y)) + NODE_H + PAD

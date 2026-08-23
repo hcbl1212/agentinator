@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { usePlans } from '../state/plans'
 import { useScrub } from '../state/scrub'
 import { useSelection } from '../state/selection'
@@ -17,20 +19,24 @@ export function Stream(): React.JSX.Element {
   const { selection } = useSelection()
   const { plans } = usePlans()
   const { seq } = useScrub()
+  const [inspecting, setInspecting] = useState<string | null>(null)
   const sessionId = selection?.kind === 'session' ? selection.id : null
+  const showCanvas = sessionId === null && plans.length > 0
 
   return (
     <section className="stream" aria-label="Conversation">
       {sessionId !== null ? (
         <Timeline sessionId={sessionId} scrubSeq={seq} />
       ) : plans.length > 0 ? (
-        <PlanCanvas />
+        <PlanCanvas onInspect={setInspecting} />
       ) : (
         <section className="pane timeline" aria-label="Activity timeline">
           <p className="empty-state">Select an agent, or start a task below.</p>
         </section>
       )}
-      <ComposerDock />
+      {/* One text surface at a time: while a task's detail card (its editable
+          brief) is open on the canvas, the composer stands down. */}
+      {!(showCanvas && inspecting !== null) && <ComposerDock />}
     </section>
   )
 }
