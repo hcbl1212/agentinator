@@ -1,3 +1,4 @@
+import { useScrub } from '../state/scrub'
 import { useSelection } from '../state/selection'
 import { ComposerDock } from './ComposerDock'
 import { Timeline } from './Timeline'
@@ -10,6 +11,7 @@ import { Timeline } from './Timeline'
  */
 export function Stream(): React.JSX.Element {
   const { selection } = useSelection()
+  const { seq } = useScrub()
   const sessionId = selection?.kind === 'session' ? selection.id : null
 
   return (
@@ -19,7 +21,7 @@ export function Stream(): React.JSX.Element {
           <p className="empty-state">Select an agent, or start a task below.</p>
         </section>
       ) : (
-        <Timeline sessionId={sessionId} />
+        <Timeline sessionId={sessionId} scrubSeq={seq} />
       )}
       <ComposerDock />
     </section>

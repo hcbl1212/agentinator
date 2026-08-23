@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
 import { AgentTypesProvider } from '../state/agentTypes'
+import { ScrubProvider } from '../state/scrub'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
@@ -21,11 +22,13 @@ describe('Stream', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <AgentTypesProvider>
-            <SkillsProvider>
-              <Stream />
-            </SkillsProvider>
-          </AgentTypesProvider>
+          <ScrubProvider>
+            <AgentTypesProvider>
+              <SkillsProvider>
+                <Stream />
+              </SkillsProvider>
+            </AgentTypesProvider>
+          </ScrubProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )
@@ -73,12 +76,14 @@ describe('Stream', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <AgentTypesProvider>
-            <SkillsProvider>
-              <Selector />
-              <Stream />
-            </SkillsProvider>
-          </AgentTypesProvider>
+          <ScrubProvider>
+            <AgentTypesProvider>
+              <SkillsProvider>
+                <Selector />
+                <Stream />
+              </SkillsProvider>
+            </AgentTypesProvider>
+          </ScrubProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )

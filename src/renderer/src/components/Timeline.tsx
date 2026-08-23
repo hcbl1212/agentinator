@@ -27,9 +27,13 @@ const INTERNAL_TYPES = new Set([
 export function Timeline({
   pageSize = 200,
   sessionId = null,
+  scrubSeq = null,
 }: {
   pageSize?: number
   sessionId?: string | null
+  /** When set, only events up to this log sequence show — the scrubber rewinds
+   * the transcript to that point. Null follows the live tail. */
+  scrubSeq?: number | null
 }): React.JSX.Element {
   const [windowEvents, setWindowEvents] = useState<StoredEvent[]>([])
   const [searchResults, setSearchResults] = useState<StoredEvent[]>([])
@@ -92,7 +96,10 @@ export function Timeline({
       : inWindow.filter(
           (event) => (event.payload as { sessionId?: string }).sessionId === sessionId,
         )
-  ).filter((event) => !INTERNAL_TYPES.has(event.type))
+  )
+    .filter((event) => !INTERNAL_TYPES.has(event.type))
+    // Rewind: when scrubbed, hide everything after the scrub point.
+    .filter((event) => scrubSeq === null || event.seq <= scrubSeq)
 
   const scrollToEnd = (): void => {
     const end = endRef.current

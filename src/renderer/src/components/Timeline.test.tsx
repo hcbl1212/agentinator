@@ -146,6 +146,23 @@ describe('Timeline', () => {
     expect(screen.getByText(/Agent activity will stream here/)).toBeInTheDocument()
   })
 
+  it('rewinds the transcript to the scrub point, hiding later events', async () => {
+    const stub = stubBridge(() => [
+      stored('agent.text', { sessionId: 's', text: 'first' }, 1),
+      stored('agent.text', { sessionId: 's', text: 'second' }, 2),
+      stored('agent.text', { sessionId: 's', text: 'third' }, 3),
+    ])
+    window.agentinator = stub.bridge
+
+    render(<Timeline scrubSeq={2} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('first')).toBeInTheDocument()
+    })
+    expect(screen.getByText('second')).toBeInTheDocument()
+    expect(screen.queryByText('third')).not.toBeInTheDocument() // after the scrub point
+  })
+
   it('scopes to a session id, hiding other agents’ events', async () => {
     const stub = stubBridge(() => [
       stored('agent.text', { sessionId: 'a', text: 'from A' }, 1),

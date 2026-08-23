@@ -1221,6 +1221,62 @@ textarea.preview-props-input {
   margin-left: auto;
 }
 
+/* The global time bar: drag to rewind scrub-aware views over the log. */
+.scrubber {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.35rem 0.9rem;
+}
+
+.scrubber-label {
+  color: var(--faint);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scrubber-range {
+  accent-color: var(--accent);
+  flex: 1;
+  min-width: 0;
+}
+
+.scrubber-range:focus-visible {
+  outline: 1px solid var(--soft);
+}
+
+.scrubber-pos {
+  color: var(--soft);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 5.5rem;
+  text-align: right;
+}
+
+.scrubber-live {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.scrubber-live:not(:disabled):hover,
+.scrubber-live:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.scrubber-live:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .budget-button {
   background: transparent;
   border: none;
