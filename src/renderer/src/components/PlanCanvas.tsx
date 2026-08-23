@@ -83,18 +83,35 @@ const CANVAS_MARK: Record<
  */
 export function PlanCanvas(): React.JSX.Element {
   const { plans } = usePlans()
-  const { selection, select } = useSelection()
+  const { selection, select, clear } = useSelection()
   const [traced, setTraced] = useState<string | null>(null)
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
 
   const selected = selection?.kind === 'plan' ? plans.find((p) => p.id === selection.id) : undefined
-  // Fall back to the newest plan so the tab is useful without a selection.
+  // Fall back to the newest plan so the canvas is useful even when the
+  // selected plan was cleared out from under it.
   const plan: Plan | undefined = selected ?? plans[plans.length - 1]
+
+  // Deselecting hands the centre pane back to the stream.
+  const close = (
+    <button
+      type="button"
+      className="queue-action"
+      aria-label="Close plan canvas"
+      title="Back to the stream"
+      onClick={() => clear()}
+    >
+      ✕
+    </button>
+  )
 
   if (plan === undefined) {
     return (
       <section className="plan-canvas" aria-label="Plan canvas">
-        <p className="rail-empty">No plan yet. Plan a requirement in the Planner pane first.</p>
+        <div className="plan-canvas-head">
+          <p className="rail-empty">No plan yet. Plan a requirement in the Planner pane first.</p>
+          {close}
+        </div>
       </section>
     )
   }
@@ -146,6 +163,7 @@ export function PlanCanvas(): React.JSX.Element {
             Linking from {linkSource.title} — click the task that should wait on it
           </span>
         )}
+        {close}
       </div>
       <div className="plan-canvas-scroll">
         <div className="plan-canvas-board" style={{ width: `${width}px`, height: `${height}px` }}>

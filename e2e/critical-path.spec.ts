@@ -517,11 +517,11 @@ test('the plan canvas opens from the plan title and edits dependency edges', asy
     await planner.getByRole('button', { name: 'Plan' }).click()
     await expect(planner.getByLabel('Scaffold — ready')).toBeVisible()
 
-    // Clicking the plan title selects the plan → the inspector follows onto
-    // the Plan tab and the canvas draws the scripted chain.
+    // Clicking the plan title selects the plan → the canvas takes over the
+    // centre pane (where the stream was) and draws the scripted chain.
     await planner.getByRole('button', { name: 'Select plan Wire up billing' }).click()
     const canvas = page.getByRole('region', { name: 'Plan canvas' })
-    await expect(page.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('region', { name: 'Conversation' })).toHaveCount(0)
     await expect(canvas.getByRole('button', { name: 'Trace Verify' })).toBeVisible()
     await expect(
       canvas.getByRole('button', { name: 'Remove dependency Implement → Verify' }),
@@ -537,6 +537,10 @@ test('the plan canvas opens from the plan title and edits dependency edges', asy
     // Erase Implement's own gate instead — it joins the ready frontier.
     await canvas.getByRole('button', { name: 'Remove dependency Scaffold → Implement' }).click()
     await expect(canvas.getByRole('button', { name: 'Dispatch Implement' })).toBeVisible()
+
+    // Closing the canvas hands the centre pane back to the stream.
+    await canvas.getByRole('button', { name: 'Close plan canvas' }).click()
+    await expect(page.getByRole('region', { name: 'Conversation' })).toBeVisible()
   } finally {
     await app.close()
   }

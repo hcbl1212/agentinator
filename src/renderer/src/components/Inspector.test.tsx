@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { PlanProvider } from '../state/plans'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
@@ -12,9 +11,7 @@ import { Inspector } from './Inspector'
 function renderInspector(): void {
   render(
     <SelectionProvider>
-      <PlanProvider>
-        <Inspector />
-      </PlanProvider>
+      <Inspector />
     </SelectionProvider>,
   )
 }
@@ -24,15 +21,6 @@ function Selector(): React.JSX.Element {
   return (
     <button type="button" onClick={() => select({ kind: 'session', id: 'x' })}>
       pick x
-    </button>
-  )
-}
-
-function PlanSelector(): React.JSX.Element {
-  const { select } = useSelection()
-  return (
-    <button type="button" onClick={() => select({ kind: 'plan', id: 'pl1' })}>
-      pick plan
     </button>
   )
 }
@@ -85,35 +73,6 @@ describe('Inspector', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Diff' }))
     expect(screen.getByRole('region', { name: 'Diff' })).toBeInTheDocument()
-  })
-
-  it('switches to the plan tab, empty until a plan exists', async () => {
-    const user = userEvent.setup()
-    renderInspector()
-
-    await user.click(screen.getByRole('tab', { name: 'Plan' }))
-
-    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('region', { name: 'Plan canvas' })).toBeInTheDocument()
-    expect(screen.getByText(/No plan yet/)).toBeInTheDocument()
-  })
-
-  it('follows a plan selection straight onto the canvas', async () => {
-    const user = userEvent.setup()
-    render(
-      <SelectionProvider>
-        <PlanProvider>
-          <PlanSelector />
-          <Inspector />
-        </PlanProvider>
-      </SelectionProvider>,
-    )
-    expect(screen.getByRole('tab', { name: 'Diff' })).toHaveAttribute('aria-selected', 'true')
-
-    await user.click(screen.getByRole('button', { name: 'pick plan' }))
-
-    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('region', { name: 'Plan canvas' })).toBeInTheDocument()
   })
 
   it('scopes to the selected agent', async () => {
