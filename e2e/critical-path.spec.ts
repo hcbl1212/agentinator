@@ -576,30 +576,31 @@ test('a plan task carries an agent type: suggested, editable, frozen at dispatch
   }
 })
 
-test('clicking a task opens its brief, and comments ride the dispatch into the agent', async () => {
+test('clicking a task opens its editable brief, and the edit rides the dispatch', async () => {
   const { app, page } = await launchApp()
   try {
     const planner = page.getByRole('region', { name: 'Planner' })
     await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Ship dark mode')
     await planner.getByRole('button', { name: 'Plan' }).click()
 
-    // Click a node → its detail card shows the exact brief the agent will run.
+    // Click a node → its detail card shows the exact brief the agent will
+    // run, in an editor (the task hasn't launched yet).
     const canvas = page.getByRole('region', { name: 'Plan canvas' })
     await canvas.getByRole('button', { name: 'Trace Scaffold' }).click()
     const detail = page.getByRole('region', { name: 'Task details: Scaffold' })
-    await expect(detail).toContainText('Set up the groundwork for: Ship dark mode')
+    const brief = detail.getByRole('textbox', { name: 'Brief for Scaffold' })
+    await expect(brief).toHaveValue('Set up the groundwork for: Ship dark mode')
+    await expect(detail.getByRole('button', { name: 'Save brief' })).toBeDisabled()
 
-    // Comment on it — the note lands on the card via the event log…
-    await detail.getByRole('textbox', { name: 'Note for Scaffold' }).fill('please add storybook')
-    await detail.getByRole('button', { name: 'Add note' }).click()
-    await expect(detail.getByRole('list', { name: 'Notes on Scaffold' })).toContainText(
-      'please add storybook',
-    )
+    // Rewrite the brief and save — the edit lands via the event log…
+    await brief.fill('Set up the groundwork for: Ship dark mode. Include storybook.')
+    await detail.getByRole('button', { name: 'Save brief' }).click()
+    await expect(detail.getByRole('button', { name: 'Save brief' })).toBeDisabled()
 
-    // …and rides the prompt at dispatch: the agent's opening message carries it.
+    // …and IS the prompt at dispatch: the agent's opening message carries it.
     await canvas.getByRole('button', { name: 'Dispatch Scaffold' }).click()
     const stream = page.getByRole('region', { name: 'Conversation' })
-    await expect(stream.getByText(/please add storybook/)).toBeVisible()
+    await expect(stream.getByText(/Include storybook/)).toBeVisible()
   } finally {
     await app.close()
   }

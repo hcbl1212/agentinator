@@ -1012,7 +1012,7 @@ describe('registerPlannerIpc', () => {
     const addEdge = vi.fn(() => true)
     const removeEdge = vi.fn(() => true)
     const retype = vi.fn(() => true)
-    const note = vi.fn(() => true)
+    const reprompt = vi.fn(() => true)
     const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
     const savedTypes = [{ id: 'at_rev', name: 'Reviewer', instructions: '' }]
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -1025,7 +1025,7 @@ describe('registerPlannerIpc', () => {
         addEdge,
         removeEdge,
         retype,
-        note,
+        reprompt,
       } as unknown as PlanOrchestrator,
       decompose,
       () => savedTypes,
@@ -1059,8 +1059,10 @@ describe('registerPlannerIpc', () => {
     handlers.get('planner:retype')?.(undefined, 'plan_7', 'task_2', null)
     expect(retype).toHaveBeenCalledWith('plan_7', 'task_2', null)
 
-    expect(handlers.get('planner:note')?.(undefined, 'plan_7', 'task_2', 'tighten it')).toBe(true)
-    expect(note).toHaveBeenCalledWith('plan_7', 'task_2', 'tighten it')
+    expect(
+      handlers.get('planner:reprompt')?.(undefined, 'plan_7', 'task_2', 'a sharper brief'),
+    ).toBe(true)
+    expect(reprompt).toHaveBeenCalledWith('plan_7', 'task_2', 'a sharper brief')
   })
 
   it('registers on ipcMain by default', () => {
@@ -1072,7 +1074,7 @@ describe('registerPlannerIpc', () => {
       'planner:dispatch',
       'planner:remove',
       'planner:retype',
-      'planner:note',
+      'planner:reprompt',
       'planner:add-edge',
       'planner:remove-edge',
     ])
@@ -1680,22 +1682,15 @@ describe('bootstrap', () => {
       expect(store.list().filter((event) => event.type === 'plan.task.completed')).toHaveLength(2),
     )
 
-    // A note on the dispatched (idle) task steers into its live session: the
-    // message lands in the conversation and the e2e agent echoes it back.
-    expect(call('planner:note')(undefined, planId, created.tasks[0].taskId, 'and add docs')).toBe(
-      true,
+    // A launched task's brief is frozen; the still-pending Verify task can
+    // still be rewritten, and the edit is in the log.
+    expect(call('planner:reprompt')(undefined, planId, created.tasks[0].taskId, 'too late')).toBe(
+      false,
     )
-    await vi.waitFor(() =>
-      expect(
-        store
-          .list()
-          .some(
-            (event) =>
-              event.type === 'agent.text' &&
-              (event.payload as { text: string }).text.includes('and add docs'),
-          ),
-      ).toBe(true),
-    )
+    expect(
+      call('planner:reprompt')(undefined, planId, created.tasks[2].taskId, 'verify with vitest'),
+    ).toBe(true)
+    expect(store.list().some((event) => event.type === 'plan.task.reprompted')).toBe(true)
     store.close()
   })
 

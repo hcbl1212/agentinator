@@ -170,8 +170,8 @@ export const bridge: AgentinatorBridge = {
       ) as Promise<boolean>,
     retype: (planId, taskId, agentTypeId) =>
       ipcRenderer.invoke('planner:retype', planId, taskId, agentTypeId) as Promise<boolean>,
-    note: (planId, taskId, note) =>
-      ipcRenderer.invoke('planner:note', planId, taskId, note) as Promise<boolean>,
+    reprompt: (planId, taskId, prompt) =>
+      ipcRenderer.invoke('planner:reprompt', planId, taskId, prompt) as Promise<boolean>,
   },
   checkpoints: {
     create: (sessionId, label) =>

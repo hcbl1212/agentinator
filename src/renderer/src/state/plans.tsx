@@ -9,7 +9,8 @@ import type { EventPayloads, StoredEvent } from '../../../shared/events'
 export interface PlanTaskView {
   id: string
   title: string
-  /** The full brief the dispatched agent will run with. */
+  /** The full brief the dispatched agent will run with. Editable until
+   * dispatch (plan.task.reprompted); frozen once its agent launches. */
   prompt: string
   dependsOn: string[]
   status: 'pending' | 'running' | 'done' | 'failed'
@@ -17,8 +18,6 @@ export interface PlanTaskView {
   /** The agent-type preset this task will dispatch under (undefined = the
    * default agent). Editable until dispatch. */
   agentTypeId?: string
-  /** The user's accumulated comments on this task, oldest first. */
-  notes: string[]
 }
 
 /** A plan reduced from the log: its requirement and task graph. */
@@ -70,7 +69,6 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
                 prompt: task.prompt,
                 dependsOn: task.dependsOn,
                 status: 'pending',
-                notes: [],
                 ...(task.agentTypeId === undefined ? {} : { agentTypeId: task.agentTypeId }),
               })),
             },
@@ -140,15 +138,13 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
           : plan,
       )
     }
-    case 'plan.task.noted': {
-      const { planId, taskId, note } = event.payload as EventPayloads['plan.task.noted']
+    case 'plan.task.reprompted': {
+      const { planId, taskId, prompt } = event.payload as EventPayloads['plan.task.reprompted']
       return plans.map((plan) =>
         plan.id === planId
           ? {
               ...plan,
-              tasks: plan.tasks.map((task) =>
-                task.id === taskId ? { ...task, notes: [...task.notes, note] } : task,
-              ),
+              tasks: plan.tasks.map((task) => (task.id === taskId ? { ...task, prompt } : task)),
             }
           : plan,
       )

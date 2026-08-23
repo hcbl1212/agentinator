@@ -73,7 +73,6 @@ describe('taskDepth', () => {
     prompt: `do ${id}`,
     dependsOn,
     status: 'pending',
-    notes: [],
   })
 
   it('is the longest dependency chain below the task', () => {

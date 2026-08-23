@@ -2032,20 +2032,37 @@ button.plan-task:focus-visible {
   word-break: break-word;
 }
 
-.plan-task-notes {
+/* The brief's editor (undispatched tasks): same look as the read-only view,
+   but writable, with Save docked beneath. */
+.plan-task-detail-form {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  gap: 0.3rem;
 }
 
-.plan-task-note {
-  border-left: 2px solid var(--working);
-  color: var(--soft);
+.plan-task-detail-edit {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  font: inherit;
   font-size: 0.72rem;
-  padding-left: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  resize: vertical;
+}
+
+.plan-task-detail-edit:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
+.plan-task-detail-form .plan-form-send {
+  align-self: flex-end;
+}
+
+.plan-task-detail-form .plan-form-send:disabled {
+  color: var(--faint);
+  cursor: default;
 }
 
 /* Once dispatched, the role it ran under is a fact, not a choice. */

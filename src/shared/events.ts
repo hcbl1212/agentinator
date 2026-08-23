@@ -175,10 +175,14 @@ export interface EventPayloads {
    * (null returns it to the default agent). Guarded upstream: only tasks that
    * haven't dispatched yet can be retyped. */
   'plan.task.retyped': { planId: string; taskId: string; agentTypeId: string | null }
-  /** The user commented on a plan task. Notes accumulate on the task and reach
-   * the work: appended to the agent's prompt at dispatch, or steered into the
-   * live session when the task is already running. */
+  /** RETIRED (never repurpose): superseded by plan.task.reprompted — the user
+   * now edits the brief itself rather than layering notes. Kept so logs that
+   * recorded notes still replay. */
   'plan.task.noted': { planId: string; taskId: string; note: string }
+  /** The user rewrote a task's brief (the prompt its agent will run with).
+   * Guarded upstream: only tasks that haven't dispatched can be reprompted —
+   * a launched agent's brief is history. */
+  'plan.task.reprompted': { planId: string; taskId: string; prompt: string }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }

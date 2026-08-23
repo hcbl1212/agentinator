@@ -116,7 +116,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         addEdge: vi.fn(() => Promise.resolve(true)),
         removeEdge: vi.fn(() => Promise.resolve(true)),
         retype: vi.fn(() => Promise.resolve(true)),
-        note: vi.fn(() => Promise.resolve(true)),
+        reprompt: vi.fn(() => Promise.resolve(true)),
       },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),

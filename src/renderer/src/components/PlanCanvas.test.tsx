@@ -26,21 +26,21 @@ function stub(
   addEdge: ReturnType<typeof vi.fn>
   removeEdge: ReturnType<typeof vi.fn>
   retype: ReturnType<typeof vi.fn>
-  note: ReturnType<typeof vi.fn>
+  reprompt: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const dispatch = vi.fn(() => Promise.resolve('sess_new'))
   const addEdge = vi.fn(() => Promise.resolve(true))
   const removeEdge = vi.fn(() => Promise.resolve(true))
   const retype = vi.fn(() => Promise.resolve(true))
-  const note = vi.fn(() => Promise.resolve(true))
+  const reprompt = vi.fn(() => Promise.resolve(true))
   return {
     emit: (event) => appended(event),
     dispatch,
     addEdge,
     removeEdge,
     retype,
-    note,
+    reprompt,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -50,7 +50,15 @@ function stub(
         }),
       },
       agentTypes: { list: vi.fn(() => Promise.resolve(types)) },
-      planner: { create: vi.fn(), dispatch, remove: vi.fn(), addEdge, removeEdge, retype, note },
+      planner: {
+        create: vi.fn(),
+        dispatch,
+        remove: vi.fn(),
+        addEdge,
+        removeEdge,
+        retype,
+        reprompt,
+      },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -93,7 +101,6 @@ const view = (id: string, dependsOn: string[]): PlanTaskView => ({
   prompt: `do ${id}`,
   dependsOn,
   status: 'pending',
-  notes: [],
 })
 
 describe('layoutNodes', () => {
@@ -347,9 +354,9 @@ describe('PlanCanvas', () => {
       // Aimed at pl1 only — pl2 (the shown, newest plan) must keep its edge.
       s.emit(event('plan.edge.removed', { planId: 'pl1', taskId: 'tb', dependsOnTaskId: 'ta' }))
       s.emit(event('plan.edge.added', { planId: 'pl1', taskId: 'td', dependsOnTaskId: 'tc' }))
-      // Same for a retype and a note: pl2's Implement stays untouched.
+      // Same for a retype and a reprompt: pl2's Implement stays untouched.
       s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tb', agentTypeId: 'at_rev' }))
-      s.emit(event('plan.task.noted', { planId: 'pl1', taskId: 'tb', note: 'pl1 only' }))
+      s.emit(event('plan.task.reprompted', { planId: 'pl1', taskId: 'tb', prompt: 'pl1 only' }))
     })
 
     // The canvas shows pl2 (newest): its Scaffold→Implement edge survived the
@@ -362,10 +369,12 @@ describe('PlanCanvas', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Agent type for Implement' })).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: 'Trace Implement' }))
-    expect(screen.queryByRole('list', { name: 'Notes on Implement' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Brief for Implement' })).toHaveValue(
+      'brief: implement it',
+    )
   })
 
-  it('opens a task’s detail card on click: full brief, meta, and comments', async () => {
+  it('opens a task’s detail card on click: meta and an editable brief', async () => {
     const s = stub([created('pl1')])
     window.agentinator = s.bridge
     renderCanvas()
@@ -374,24 +383,36 @@ describe('PlanCanvas', () => {
 
     // The card shows the exact brief the agent will run with, plus its meta.
     const detail = screen.getByRole('region', { name: 'Task details: Implement' })
-    expect(detail).toHaveTextContent('brief: implement it') // the prompt, verbatim
     expect(detail).toHaveTextContent('blocked · Default agent · after Scaffold')
+    const brief = screen.getByRole('textbox', { name: 'Brief for Implement' })
+    expect(brief).toHaveValue('brief: implement it')
 
-    // A comment routes through the bridge and the draft clears; the log's
-    // answer renders it on the card.
-    const input = screen.getByRole('textbox', { name: 'Note for Implement' })
-    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
-    expect(s.note).not.toHaveBeenCalled() // blank drafts don't send
-    fireEvent.change(input, { target: { value: 'use zustand' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
-    expect(s.note).toHaveBeenCalledWith('pl1', 'tb', 'use zustand')
-    expect(input).toHaveValue('')
+    // Unchanged (or blank) drafts can't save; a submit sneaking past the
+    // disabled button is still a no-op.
+    const save = screen.getByRole('button', { name: 'Save brief' })
+    expect(save).toBeDisabled()
+    fireEvent.submit(save.closest('form') as HTMLFormElement)
+    fireEvent.change(brief, { target: { value: '   ' } })
+    expect(save).toBeDisabled()
+    fireEvent.submit(save.closest('form') as HTMLFormElement)
+    expect(s.reprompt).not.toHaveBeenCalled()
+
+    // An edit routes through the bridge; the log's answer re-syncs the task,
+    // leaving the draft saved (Save disables again).
+    fireEvent.change(brief, { target: { value: 'brief: implement it with zustand' } })
+    expect(save).toBeEnabled()
+    fireEvent.click(save)
+    expect(s.reprompt).toHaveBeenCalledWith('pl1', 'tb', 'brief: implement it with zustand')
     act(() => {
-      s.emit(event('plan.task.noted', { planId: 'pl1', taskId: 'tb', note: 'use zustand' }))
+      s.emit(
+        event('plan.task.reprompted', {
+          planId: 'pl1',
+          taskId: 'tb',
+          prompt: 'brief: implement it with zustand',
+        }),
+      )
     })
-    expect(screen.getByRole('list', { name: 'Notes on Implement' })).toHaveTextContent(
-      'use zustand',
-    )
+    expect(screen.getByRole('button', { name: 'Save brief' })).toBeDisabled()
 
     // Clicking the node again closes the card with the trace; a root task
     // with no unmet dependencies reads as ready.
@@ -405,7 +426,7 @@ describe('PlanCanvas', () => {
     )
   })
 
-  it('tells you a comment on a running task goes straight to its agent', async () => {
+  it('freezes a dispatched task’s brief read-only (steer the agent instead)', async () => {
     const s = stub([created('pl1')])
     window.agentinator = s.bridge
     renderCanvas()
@@ -416,9 +437,10 @@ describe('PlanCanvas', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
 
-    expect(
-      screen.getByPlaceholderText('Comment — goes straight to the running agent…'),
-    ).toBeInTheDocument()
+    const detail = screen.getByRole('region', { name: 'Task details: Scaffold' })
+    expect(detail).toHaveTextContent('brief: scaffold it')
+    expect(screen.queryByRole('textbox', { name: 'Brief for Scaffold' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save brief' })).not.toBeInTheDocument()
   })
 
   it('offers a role picker on undispatched nodes and retypes through it', async () => {

@@ -2,12 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EventPayloads, EventType, StoredEvent } from '../shared/events'
 import type { EmitStored } from './approvals'
-import {
-  PLAN_CONTEXT_HEADER,
-  PLAN_NOTES_HEADER,
-  PLAN_STEER_HEADER,
-  PlanOrchestrator,
-} from './plans'
+import { PLAN_CONTEXT_HEADER, PlanOrchestrator } from './plans'
 
 /** A tiny in-memory log that models the real store closely enough for the
  * orchestrator: emitted events land in the log, `listBySession` serves the
@@ -28,15 +23,13 @@ function harness() {
   }
   let n = 0
   const startTask = vi.fn<(prompt: string, agentTypeId?: string) => string>(() => `sess${n++}`)
-  const steer = vi.fn<(sessionId: string, text: string) => void>()
-  const orchestrator = new PlanOrchestrator({ emit, store, startTask, steer })
+  const orchestrator = new PlanOrchestrator({ emit, store, startTask })
 
   return {
     orchestrator,
     log,
     emit,
     startTask,
-    steer,
     types: (): string[] => log.map((event) => event.type),
     // A finished turn — how a task normally completes (the agent stays alive).
     idled: (sessionId: string): void => {
@@ -260,72 +253,53 @@ describe('PlanOrchestrator', () => {
     expect(second.startTask).toHaveBeenCalledWith(expect.any(String), 'at_rev')
   })
 
-  it('rides accumulated notes on the dispatch prompt, after the task brief', () => {
+  it('reprompts an undispatched task, and the edited brief rides the dispatch', () => {
     const h = harness()
     const { planId, tasks } = h.createChain()
 
-    expect(h.orchestrator.note(planId, tasks[0].taskId, '  use zustand, not redux  ')).toBe(true)
-    expect(h.orchestrator.note(planId, tasks[0].taskId, 'keep it under 200 lines')).toBe(true)
-    expect(h.emit).toHaveBeenCalledWith('plan.task.noted', {
+    expect(h.orchestrator.reprompt(planId, tasks[0].taskId, '  do a, with zustand  ')).toBe(true)
+    expect(h.emit).toHaveBeenCalledWith('plan.task.reprompted', {
       planId,
       taskId: tasks[0].taskId,
-      note: 'use zustand, not redux',
+      prompt: 'do a, with zustand',
     })
-    // Nothing dispatched yet — nothing to steer into.
-    expect(h.steer).not.toHaveBeenCalled()
 
     h.orchestrator.dispatch(planId, tasks[0].taskId)
     const prompt = h.startTask.mock.calls[0][0]
-    expect(prompt).toContain(
-      `${PLAN_NOTES_HEADER}\nuse zustand, not redux\nkeep it under 200 lines`,
-    )
-    // Notes sit between the brief and the requirement context.
-    expect(prompt.indexOf('do a')).toBeLessThan(prompt.indexOf(PLAN_NOTES_HEADER))
-    expect(prompt.indexOf(PLAN_NOTES_HEADER)).toBeLessThan(prompt.indexOf(PLAN_CONTEXT_HEADER))
+    expect(prompt).toContain('do a, with zustand')
+    expect(prompt).toContain(PLAN_CONTEXT_HEADER)
   })
 
-  it('steers a note on a running task straight into its agent', () => {
+  it('refuses reprompts on unknown tasks, blank briefs, and launched agents', () => {
     const h = harness()
     const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.reprompt('plan_ghost', tasks[0].taskId, 'x')).toBe(false)
+    expect(h.orchestrator.reprompt(planId, 'task_ghost', 'x')).toBe(false)
+    expect(h.orchestrator.reprompt(planId, tasks[0].taskId, '   ')).toBe(false)
+    // Once dispatched, the brief is history — the agent already has it.
     h.orchestrator.dispatch(planId, tasks[0].taskId)
-
-    expect(h.orchestrator.note(planId, tasks[0].taskId, 'also add tests')).toBe(true)
-
-    expect(h.steer).toHaveBeenCalledWith('sess0', `${PLAN_STEER_HEADER}\nalso add tests`)
-    expect(h.emit).toHaveBeenCalledWith('plan.task.noted', {
-      planId,
-      taskId: tasks[0].taskId,
-      note: 'also add tests',
-    })
+    expect(h.orchestrator.reprompt(planId, tasks[0].taskId, 'too late')).toBe(false)
+    expect(h.types()).not.toContain('plan.task.reprompted')
   })
 
-  it('refuses notes on unknown tasks and blank notes', () => {
-    const h = harness()
-    const { planId, tasks } = h.createChain()
-
-    expect(h.orchestrator.note('plan_ghost', tasks[0].taskId, 'x')).toBe(false)
-    expect(h.orchestrator.note(planId, 'task_ghost', 'x')).toBe(false)
-    expect(h.orchestrator.note(planId, tasks[0].taskId, '   ')).toBe(false)
-    expect(h.types()).not.toContain('plan.task.noted')
-  })
-
-  it('reconciles notes and sessions: a restart rides notes on dispatch and steers late ones', () => {
+  it('reconciles an edited brief across a restart (and ignores one for a ghost task)', () => {
     const first = harness()
     const { planId, tasks } = first.createChain()
-    first.orchestrator.note(planId, tasks[0].taskId, 'remember the migration')
+    first.orchestrator.reprompt(planId, tasks[0].taskId, 'do a, remembering the migration')
+    // A reprompt event for a forgotten plan replays as a no-op.
+    const stray: StoredEvent = {
+      seq: 99,
+      ts: 't',
+      type: 'plan.task.reprompted',
+      payload: { planId: 'plan_ghost', taskId: 'task_x', prompt: 'nope' },
+    }
 
-    // Restart before dispatch: the reconciled note rides the prompt.
     const second = harness()
-    second.orchestrator.reconcile(first.log)
+    second.orchestrator.reconcile([...first.log, stray])
     second.orchestrator.dispatch(planId, tasks[0].taskId)
-    expect(second.startTask.mock.calls[0][0]).toContain('remember the migration')
 
-    // Restart after dispatch: the task↔session link survives, so a late note
-    // still steers into the (resumable) agent.
-    const third = harness()
-    third.orchestrator.reconcile([...first.log, ...second.log])
-    third.orchestrator.note(planId, tasks[0].taskId, 'late thought')
-    expect(third.steer).toHaveBeenCalledWith('sess0', `${PLAN_STEER_HEADER}\nlate thought`)
+    expect(second.startTask.mock.calls[0][0]).toContain('do a, remembering the migration')
   })
 
   it('adds a dependency edge that the dispatch guard then honours', () => {

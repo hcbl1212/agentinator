@@ -286,8 +286,8 @@ export function registerPlannerIpc(
   handle('planner:retype', (_event, planId, taskId, agentTypeId) =>
     plans.retype(planId as string, taskId as string, agentTypeId as string | null),
   )
-  handle('planner:note', (_event, planId, taskId, note) =>
-    plans.note(planId as string, taskId as string, note as string),
+  handle('planner:reprompt', (_event, planId, taskId, prompt) =>
+    plans.reprompt(planId as string, taskId as string, prompt as string),
   )
   handle('planner:add-edge', (_event, planId, taskId, dependsOnTaskId) =>
     plans.addEdge(planId as string, taskId as string, dependsOnTaskId as string),
@@ -840,8 +840,6 @@ export async function bootstrap(
           settings.skills.bind(settings),
         ),
       ),
-    // A note on a running task goes straight into its agent's conversation.
-    steer: (sessionId, text) => void manager.send(sessionId, text),
   })
   pipelineObservers.push(plans.observe.bind(plans))
   plans.reconcile(store.list())

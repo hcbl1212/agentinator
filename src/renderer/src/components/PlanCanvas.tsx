@@ -295,9 +295,9 @@ export function PlanCanvas(): React.JSX.Element {
   )
 }
 
-/** The inspected task's card: its full brief (the prompt its agent runs
- * with), dependencies, role, accumulated notes, and the comment box. Keyed by
- * task so switching nodes resets the draft note. */
+/** The inspected task's card: its meta (state, role, dependencies) and its
+ * brief — the exact prompt its agent will run with, editable until dispatch.
+ * Keyed by task so switching nodes resets the draft. */
 function TaskDetail({
   plan,
   task,
@@ -307,7 +307,7 @@ function TaskDetail({
   task: PlanTaskView
   types: { id: string; name: string }[]
 }): React.JSX.Element {
-  const [note, setNote] = useState('')
+  const [draft, setDraft] = useState(task.prompt)
   const byId = new Map(plan.tasks.map((t) => [t.id, t]))
   const blockers = task.dependsOn
     .map((dep) => byId.get(dep)?.title)
@@ -320,13 +320,15 @@ function TaskDetail({
       ? 'Default agent'
       : (types.find((type) => type.id === task.agentTypeId)?.name ?? task.agentTypeId)
 
-  const add = (): void => {
-    const trimmed = note.trim()
-    if (trimmed === '') {
+  // Editable exactly while the orchestrator would accept it: the task's agent
+  // hasn't launched (pending, or reopened by failure).
+  const editable = task.status === 'pending' || task.status === 'failed'
+  const save = (): void => {
+    const trimmed = draft.trim()
+    if (trimmed === '' || trimmed === task.prompt) {
       return
     }
-    void window.agentinator?.planner.note(plan.id, task.id, trimmed)
-    setNote('')
+    void window.agentinator?.planner.reprompt(plan.id, task.id, trimmed)
   }
 
   return (
@@ -340,38 +342,34 @@ function TaskDetail({
           {blockers.length === 0 ? '' : ` · after ${blockers.join(', ')}`}
         </span>
       </div>
-      <pre className="plan-task-detail-prompt">{task.prompt}</pre>
-      {task.notes.length > 0 && (
-        <ul className="plan-task-notes" aria-label={`Notes on ${task.title}`}>
-          {task.notes.map((text, index) => (
-            <li key={index} className="plan-task-note">
-              {text}
-            </li>
-          ))}
-        </ul>
+      {editable ? (
+        <form
+          className="plan-task-detail-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            save()
+          }}
+        >
+          <textarea
+            className="plan-task-detail-edit"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={5}
+            aria-label={`Brief for ${task.title}`}
+          />
+          <button
+            type="submit"
+            className="plan-form-send"
+            disabled={draft.trim() === '' || draft.trim() === task.prompt}
+          >
+            Save brief
+          </button>
+        </form>
+      ) : (
+        // A launched agent's brief is history — read-only; steer the running
+        // agent through its reply box instead.
+        <pre className="plan-task-detail-prompt">{task.prompt}</pre>
       )}
-      <form
-        className="plan-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          add()
-        }}
-      >
-        <input
-          className="plan-form-input"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder={
-            task.status === 'running'
-              ? 'Comment — goes straight to the running agent…'
-              : 'Comment — rides the prompt when this task dispatches…'
-          }
-          aria-label={`Note for ${task.title}`}
-        />
-        <button type="submit" className="plan-form-send">
-          Add note
-        </button>
-      </form>
     </section>
   )
 }
