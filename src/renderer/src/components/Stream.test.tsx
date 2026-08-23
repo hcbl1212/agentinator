@@ -9,6 +9,7 @@ import { AgentTypesProvider } from '../state/agentTypes'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
+import { SkillsProvider } from '../state/skills'
 import { Stream } from './Stream'
 
 afterEach(() => {
@@ -21,7 +22,9 @@ describe('Stream', () => {
       <SelectionProvider>
         <SessionsProvider>
           <AgentTypesProvider>
-            <Stream />
+            <SkillsProvider>
+              <Stream />
+            </SkillsProvider>
           </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,
@@ -55,6 +58,7 @@ describe('Stream', () => {
       agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
       approvals: { pending: vi.fn(() => Promise.resolve([])) },
       agentTypes: { list: vi.fn(() => Promise.resolve([])) },
+      skills: { list: vi.fn(() => Promise.resolve([])) },
     } as unknown as AgentinatorBridge
 
     function Selector(): React.JSX.Element {
@@ -70,8 +74,10 @@ describe('Stream', () => {
       <SelectionProvider>
         <SessionsProvider>
           <AgentTypesProvider>
-            <Selector />
-            <Stream />
+            <SkillsProvider>
+              <Selector />
+              <Stream />
+            </SkillsProvider>
           </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,

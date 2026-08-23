@@ -1,5 +1,6 @@
 import type { AgentType } from './agentTypes'
 import type { ImageAttachment, StoredEvent } from './events'
+import type { Skill } from './skills'
 
 /** Grace window for a DENY before it reaches the agent — a mis-clicked deny
  * is the costly mistake, so it's undoable; approvals commit instantly.
@@ -159,6 +160,15 @@ export interface AgentinatorBridge {
     /** Create or update a type (upsert by id). */
     save(type: AgentType): Promise<void>
     /** Delete a type by id. */
+    remove(id: string): Promise<void>
+  }
+  /** Reusable instruction packages attachable to agent types. */
+  skills: {
+    /** Every saved skill, in insertion order. */
+    list(): Promise<Skill[]>
+    /** Create or update a skill (upsert by id). */
+    save(skill: Skill): Promise<void>
+    /** Delete a skill by id. */
     remove(id: string): Promise<void>
   }
   /** The task backlog: park prompts, then dispatch them to agents on demand. */

@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, safeStorage, shell }
 
 import type { AgentType } from '../shared/agentTypes'
 import type { BudgetScope } from '../shared/budget'
+import type { Skill } from '../shared/skills'
 import { createEntityId } from '../shared/events'
 import type { EventPayloads, ImageAttachment, StoredEvent } from '../shared/events'
 import { PermissionBroker } from './approvals'
@@ -137,6 +138,7 @@ export function registerCheckpointIpc(
 export function registerAgentIpc(
   manager: SessionManager,
   agentTypes: () => AgentType[],
+  skills: () => Skill[],
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -161,7 +163,7 @@ export function registerAgentIpc(
   handle('agent:start-task', (_event, prompt, images, agentTypeId) =>
     startAgentTask(manager, prompt as string, {
       images: images as ImageAttachment[] | undefined,
-      ...agentTaskOptions(agentTypeId, agentTypes),
+      ...agentTaskOptions(agentTypeId, agentTypes, skills),
     }),
   )
   handle('agent:send', (_event, sessionId, text, images) =>
@@ -185,6 +187,23 @@ export function registerAgentTypeIpc(
   })
   handle('agent-types:remove', (_event, id) => {
     settings.removeAgentType(id as string)
+  })
+}
+
+/** Skills (reusable instruction packages attachable to agent types). Stored in
+ * the settings store; the renderer manages them. */
+export function registerSkillIpc(
+  settings: SettingsStore,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('skills:list', () => settings.skills())
+  handle('skills:save', (_event, skill) => {
+    settings.saveSkill(skill as Skill)
+  })
+  handle('skills:remove', (_event, id) => {
+    settings.removeSkill(id as string)
   })
 }
 
@@ -276,18 +295,31 @@ export function startAgentTask(
   })
 }
 
-/** An agent type's launch posture, or empty when none/unknown is chosen. */
+/** An agent type's launch posture (its instructions plus every attached skill's
+ * body), or empty when none/unknown is chosen. */
 export function agentTaskOptions(
   agentTypeId: unknown,
   types: () => AgentType[],
+  skills: () => Skill[],
 ): Pick<AgentTaskOptions, 'instructions' | 'model' | 'readOnly'> {
   if (typeof agentTypeId !== 'string') {
     return {}
   }
   const type = types().find((candidate) => candidate.id === agentTypeId)
-  return type === undefined
-    ? {}
-    : { instructions: type.instructions, model: type.model, readOnly: type.readOnly }
+  if (type === undefined) {
+    return {}
+  }
+  const all = skills()
+  const bodies = (type.skillIds ?? [])
+    .map((id) => all.find((skill) => skill.id === id))
+    .filter((skill): skill is Skill => skill !== undefined)
+    .map((skill) => `# ${skill.name}\n${skill.body}`)
+  const instructions = [type.instructions, ...bodies].filter((part) => part.length > 0).join('\n\n')
+  return {
+    instructions: instructions === '' ? undefined : instructions,
+    model: type.model,
+    readOnly: type.readOnly,
+  }
 }
 
 /** A short one-line title from a task prompt for the roster and timeline. */
@@ -751,8 +783,9 @@ export async function bootstrap(
   pipelineObservers.push(pipelines.observe.bind(pipelines))
   pipelines.reconcile(store.list())
 
-  registerAgentIpc(manager, settings.agentTypes.bind(settings))
+  registerAgentIpc(manager, settings.agentTypes.bind(settings), settings.skills.bind(settings))
   registerAgentTypeIpc(settings)
+  registerSkillIpc(settings)
   registerQueueIpc(manager, makeEmitStored(store, sink))
   registerPipelineIpc(pipelines)
   const checkpoints = new NodeCheckpoints(runGitSync)

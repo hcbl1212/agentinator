@@ -92,6 +92,11 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         save: vi.fn(() => Promise.resolve()),
         remove: vi.fn(() => Promise.resolve()),
       },
+      skills: {
+        list: vi.fn(() => Promise.resolve([])),
+        save: vi.fn(() => Promise.resolve()),
+        remove: vi.fn(() => Promise.resolve()),
+      },
       queue: {
         add: vi.fn(() => Promise.resolve('task_x')),
         remove: vi.fn(() => Promise.resolve()),

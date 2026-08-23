@@ -17,4 +17,7 @@ export interface AgentType {
   /** Run the role read-only (may read/search but not edit or run commands) —
    * e.g. a reviewer that shouldn't touch the code. */
   readOnly?: boolean
+  /** Ids of skills attached to this role — their bodies are injected into the
+   * agent's context on every launch under this type. */
+  skillIds?: string[]
 }

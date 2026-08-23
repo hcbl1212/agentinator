@@ -126,6 +126,11 @@ export const bridge: AgentinatorBridge = {
     save: (type) => ipcRenderer.invoke('agent-types:save', type) as Promise<void>,
     remove: (id) => ipcRenderer.invoke('agent-types:remove', id) as Promise<void>,
   },
+  skills: {
+    list: () => ipcRenderer.invoke('skills:list') as Promise<import('../shared/skills').Skill[]>,
+    save: (skill) => ipcRenderer.invoke('skills:save', skill) as Promise<void>,
+    remove: (id) => ipcRenderer.invoke('skills:remove', id) as Promise<void>,
+  },
   queue: {
     add: (prompt) => ipcRenderer.invoke('queue:add', prompt) as Promise<string>,
     remove: (taskId) => ipcRenderer.invoke('queue:remove', taskId) as Promise<void>,

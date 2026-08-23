@@ -92,6 +92,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 
 import type { AgentType } from '../shared/agentTypes'
 import type { StoredEvent } from '../shared/events'
+import type { Skill } from '../shared/skills'
 import {
   agentTaskOptions,
   bootstrap,
@@ -109,6 +110,7 @@ import {
   nativeAttentionNotifier,
   registerCheckpointIpc,
   registerPipelineIpc,
+  registerSkillIpc,
   registerPreviewIpc,
   resolveWorktreePath,
   restoreCheckpoint,
@@ -177,6 +179,9 @@ function fakeSettings(): SettingsStore {
     agentTypes: vi.fn(() => []),
     saveAgentType: vi.fn(),
     removeAgentType: vi.fn(),
+    skills: vi.fn(() => []),
+    saveSkill: vi.fn(),
+    removeSkill: vi.fn(),
     secrets: vi.fn(() => []),
     saveSecret: vi.fn(),
     readSecret: vi.fn(),
@@ -292,6 +297,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(
       manager as unknown as SessionManager,
       () => [],
+      () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
       },
@@ -316,6 +322,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(
       manager as unknown as SessionManager,
       () => [],
+      () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
       },
@@ -336,6 +343,7 @@ describe('registerAgentIpc', () => {
 
     registerAgentIpc(
       manager as unknown as SessionManager,
+      () => [],
       () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
@@ -359,6 +367,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(
       manager as unknown as SessionManager,
       () => [],
+      () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
       },
@@ -372,16 +381,34 @@ describe('registerAgentIpc', () => {
     const manager = fakeManager()
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
     const types = (): AgentType[] => [
-      { id: 'type_r', name: 'Reviewer', instructions: 'Review only.', readOnly: true },
+      {
+        id: 'type_r',
+        name: 'Reviewer',
+        instructions: 'Review only.',
+        readOnly: true,
+        skillIds: ['skill_c'],
+      },
+    ]
+    const skills = (): Skill[] => [
+      {
+        id: 'skill_c',
+        name: 'Commits',
+        description: 'commit style',
+        body: 'Use conventional commits.',
+      },
     ]
 
-    registerAgentIpc(manager as unknown as SessionManager, types, (channel, listener) => {
+    registerAgentIpc(manager as unknown as SessionManager, types, skills, (channel, listener) => {
       handlers.set(channel, listener)
     })
     handlers.get('agent:start-task')?.(undefined, 'Look it over', undefined, 'type_r')
 
     expect(manager.start).toHaveBeenCalledWith(
-      expect.objectContaining({ instructions: 'Review only.', readOnly: true }),
+      expect.objectContaining({
+        // The type's instructions plus its attached skill's body.
+        instructions: 'Review only.\n\n# Commits\nUse conventional commits.',
+        readOnly: true,
+      }),
     )
   })
 
@@ -391,6 +418,7 @@ describe('registerAgentIpc', () => {
 
     registerAgentIpc(
       manager as unknown as SessionManager,
+      () => [],
       () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
@@ -408,6 +436,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(
       manager as unknown as SessionManager,
       () => [],
+      () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
       },
@@ -418,7 +447,11 @@ describe('registerAgentIpc', () => {
   })
 
   it('registers on ipcMain by default', () => {
-    registerAgentIpc(fakeManager() as unknown as SessionManager, () => [])
+    registerAgentIpc(
+      fakeManager() as unknown as SessionManager,
+      () => [],
+      () => [],
+    )
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
@@ -437,6 +470,7 @@ describe('registerAgentIpc', () => {
 
     registerAgentIpc(
       manager as unknown as SessionManager,
+      () => [],
       () => [],
       (channel, listener) => {
         handlers.set(channel, listener)
@@ -788,20 +822,40 @@ describe('taskProviderId and startAgentTask', () => {
 
 describe('agentTaskOptions', () => {
   const types = (): AgentType[] => [
-    { id: 'type_r', name: 'Reviewer', instructions: 'Review only.', readOnly: true, model: 'm' },
+    {
+      id: 'type_r',
+      name: 'Reviewer',
+      instructions: 'Review only.',
+      readOnly: true,
+      model: 'm',
+      skillIds: ['skill_c', 'skill_gone'],
+    },
+    { id: 'type_bare', name: 'Bare', instructions: '' },
+  ]
+  const skills = (): Skill[] => [
+    { id: 'skill_c', name: 'Commits', description: 'd', body: 'Use conventional commits.' },
   ]
 
-  it('resolves an agent type into its launch posture', () => {
-    expect(agentTaskOptions('type_r', types)).toEqual({
-      instructions: 'Review only.',
+  it('resolves a type into its posture, appending each attached skill body', () => {
+    expect(agentTaskOptions('type_r', types, skills)).toEqual({
+      // Missing skill ids are skipped; present ones are appended by name.
+      instructions: 'Review only.\n\n# Commits\nUse conventional commits.',
       readOnly: true,
       model: 'm',
     })
   })
 
+  it('leaves instructions undefined when a type has none and no skills', () => {
+    expect(agentTaskOptions('type_bare', types, skills)).toEqual({
+      instructions: undefined,
+      readOnly: undefined,
+      model: undefined,
+    })
+  })
+
   it('is empty for no type, a non-string id, or an unknown id', () => {
-    expect(agentTaskOptions(undefined, types)).toEqual({})
-    expect(agentTaskOptions('type_missing', types)).toEqual({})
+    expect(agentTaskOptions(undefined, types, skills)).toEqual({})
+    expect(agentTaskOptions('type_missing', types, skills)).toEqual({})
   })
 })
 
@@ -833,6 +887,37 @@ describe('registerAgentTypeIpc', () => {
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual(['agent-types:list', 'agent-types:save', 'agent-types:remove'])
+  })
+})
+
+describe('registerSkillIpc', () => {
+  it('lists, saves, and removes skills through the settings store', () => {
+    const settings = {
+      skills: vi.fn(() => [{ id: 's1', name: 'Commits', description: 'd', body: 'b' }]),
+      saveSkill: vi.fn(),
+      removeSkill: vi.fn(),
+    }
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerSkillIpc(settings as unknown as SettingsStore, (channel, listener) =>
+      handlers.set(channel, listener),
+    )
+
+    expect(handlers.get('skills:list')?.(undefined)).toEqual([
+      { id: 's1', name: 'Commits', description: 'd', body: 'b' },
+    ])
+    const skill = { id: 's2', name: 'Tests', description: 'd', body: 'write tests' }
+    handlers.get('skills:save')?.(undefined, skill)
+    expect(settings.saveSkill).toHaveBeenCalledWith(skill)
+    handlers.get('skills:remove')?.(undefined, 's1')
+    expect(settings.removeSkill).toHaveBeenCalledWith('s1')
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerSkillIpc(fakeSettings())
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['skills:list', 'skills:save', 'skills:remove'])
   })
 })
 

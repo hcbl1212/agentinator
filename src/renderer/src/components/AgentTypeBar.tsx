@@ -1,12 +1,13 @@
 import { useState } from 'react'
 
 import { useAgentTypes } from '../state/agentTypes'
+import { useSkills } from '../state/skills'
 
 /**
  * Picks the agent-type preset a new task launches under, and manages the set.
  * "Default agent" is the base behaviour; other options apply a role's
- * instructions, model, and read-only posture. The Manage panel creates and
- * deletes types inline.
+ * instructions, model, read-only posture, and attached skills. The Manage panel
+ * creates/deletes types and skills inline and attaches skills to a new type.
  */
 export function AgentTypeBar({
   selectedId,
@@ -16,11 +17,20 @@ export function AgentTypeBar({
   onSelect: (id: string | null) => void
 }): React.JSX.Element {
   const { types, save, remove } = useAgentTypes()
+  const { skills, save: saveSkill, remove: removeSkill } = useSkills()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [instructions, setInstructions] = useState('')
   const [model, setModel] = useState('')
   const [readOnly, setReadOnly] = useState(false)
+  const [skillIds, setSkillIds] = useState<string[]>([])
+  const [skillName, setSkillName] = useState('')
+  const [skillDescription, setSkillDescription] = useState('')
+  const [skillBody, setSkillBody] = useState('')
+
+  const toggleSkill = (id: string): void => {
+    setSkillIds((was) => (was.includes(id) ? was.filter((s) => s !== id) : [...was, id]))
+  }
 
   const add = (): void => {
     const trimmed = name.trim()
@@ -33,11 +43,29 @@ export function AgentTypeBar({
       instructions: instructions.trim(),
       ...(model.trim() === '' ? {} : { model: model.trim() }),
       ...(readOnly ? { readOnly: true } : {}),
+      ...(skillIds.length === 0 ? {} : { skillIds }),
     })
     setName('')
     setInstructions('')
     setModel('')
     setReadOnly(false)
+    setSkillIds([])
+  }
+
+  const addSkill = (): void => {
+    const trimmed = skillName.trim()
+    if (trimmed === '') {
+      return
+    }
+    void saveSkill({
+      id: `skill_${crypto.randomUUID()}`,
+      name: trimmed,
+      description: skillDescription.trim(),
+      body: skillBody.trim(),
+    })
+    setSkillName('')
+    setSkillDescription('')
+    setSkillBody('')
   }
 
   return (
@@ -91,6 +119,22 @@ export function AgentTypeBar({
               aria-label="Agent type instructions"
               rows={2}
             />
+            {skills.length > 0 && (
+              <fieldset className="agent-type-skills">
+                <legend>Skills</legend>
+                {skills.map((skill) => (
+                  <label key={skill.id} className="agent-type-skill" title={skill.description}>
+                    <input
+                      type="checkbox"
+                      checked={skillIds.includes(skill.id)}
+                      onChange={() => toggleSkill(skill.id)}
+                      aria-label={`Attach ${skill.name}`}
+                    />
+                    {skill.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <div className="agent-type-controls">
               <input
                 className="agent-type-input agent-type-model"
@@ -121,6 +165,7 @@ export function AgentTypeBar({
                     {type.name}
                     {type.readOnly ? ' · read-only' : ''}
                     {type.model === undefined ? '' : ` · ${type.model}`}
+                    {type.skillIds === undefined ? '' : ` · ${type.skillIds.length} skill(s)`}
                   </span>
                   <button
                     type="button"
@@ -132,6 +177,60 @@ export function AgentTypeBar({
                         onSelect(null)
                       }
                     }}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="agent-type-form skill-form"
+            aria-label="New skill"
+            onSubmit={(event) => {
+              event.preventDefault()
+              addSkill()
+            }}
+          >
+            <input
+              className="agent-type-input"
+              value={skillName}
+              onChange={(event) => setSkillName(event.target.value)}
+              placeholder="Skill name (e.g. Conventional commits)"
+              aria-label="Skill name"
+            />
+            <input
+              className="agent-type-input"
+              value={skillDescription}
+              onChange={(event) => setSkillDescription(event.target.value)}
+              placeholder="One-line description"
+              aria-label="Skill description"
+            />
+            <textarea
+              className="agent-type-input agent-type-instructions"
+              value={skillBody}
+              onChange={(event) => setSkillBody(event.target.value)}
+              placeholder="Skill instructions (the body injected into context)"
+              aria-label="Skill body"
+              rows={2}
+            />
+            <button type="submit" className="agent-type-add">
+              Add skill
+            </button>
+          </form>
+          {skills.length > 0 && (
+            <ul className="agent-type-list">
+              {skills.map((skill) => (
+                <li key={skill.id} className="agent-type-item">
+                  <span className="agent-type-item-name" title={skill.body}>
+                    {skill.name}
+                    {skill.description === '' ? '' : ` — ${skill.description}`}
+                  </span>
+                  <button
+                    type="button"
+                    className="queue-action"
+                    aria-label={`Delete skill ${skill.name}`}
+                    onClick={() => void removeSkill(skill.id)}
                   >
                     ✕
                   </button>

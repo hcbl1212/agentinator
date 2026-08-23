@@ -8,6 +8,7 @@ import type { StoredEvent } from '../../../shared/events'
 import { AgentTypesProvider } from '../state/agentTypes'
 import { SelectionProvider, useSelection } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
+import { SkillsProvider } from '../state/skills'
 import { ComposerDock } from './ComposerDock'
 
 /** Selects a session id — the composer scopes approvals/questions to it. */
@@ -111,6 +112,11 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         save: vi.fn(() => Promise.resolve()),
         remove: vi.fn(() => Promise.resolve()),
       },
+      skills: {
+        list: vi.fn(() => Promise.resolve([])),
+        save: vi.fn(() => Promise.resolve()),
+        remove: vi.fn(() => Promise.resolve()),
+      },
       queue: {
         add: queueAdd,
         remove: vi.fn(() => Promise.resolve()),
@@ -175,7 +181,9 @@ function renderDock(): void {
     <SelectionProvider>
       <SessionsProvider>
         <AgentTypesProvider>
-          <ComposerDock />
+          <SkillsProvider>
+            <ComposerDock />
+          </SkillsProvider>
         </AgentTypesProvider>
       </SessionsProvider>
     </SelectionProvider>,
@@ -188,8 +196,10 @@ async function renderSelected(sessionId: string): Promise<void> {
     <SelectionProvider>
       <SessionsProvider>
         <AgentTypesProvider>
-          <Selector id={sessionId} />
-          <ComposerDock />
+          <SkillsProvider>
+            <Selector id={sessionId} />
+            <ComposerDock />
+          </SkillsProvider>
         </AgentTypesProvider>
       </SessionsProvider>
     </SelectionProvider>,
@@ -496,7 +506,9 @@ describe('ComposerDock', () => {
       <SelectionProvider>
         <SessionsProvider>
           <AgentTypesProvider>
-            <ComposerDock />
+            <SkillsProvider>
+              <ComposerDock />
+            </SkillsProvider>
           </AgentTypesProvider>
         </SessionsProvider>
       </SelectionProvider>,

@@ -1,6 +1,7 @@
 import { DatabaseSync, StatementSync } from 'node:sqlite'
 
 import type { AgentType } from '../shared/agentTypes'
+import type { Skill } from '../shared/skills'
 import { BUDGET_SCOPES, EMPTY_BUDGETS } from '../shared/budget'
 import type { BudgetScope, Budgets } from '../shared/budget'
 import { clampSettleMs, DEFAULT_SETTLE_MS } from '../shared/preview'
@@ -222,6 +223,24 @@ export class SettingsStore {
   /** Delete an agent type by id (a no-op if it doesn't exist). */
   removeAgentType(id: string): void {
     this.#set.run('agentTypes', JSON.stringify(this.agentTypes().filter((type) => type.id !== id)))
+  }
+
+  /** The saved skills, in insertion order. Empty until the user creates one. */
+  skills(): Skill[] {
+    const row = this.#get.get('skills') as { value: string } | undefined
+    return row === undefined ? [] : (JSON.parse(row.value) as Skill[])
+  }
+
+  /** Create or update a skill (upsert by id); a re-saved skill moves to the end. */
+  saveSkill(skill: Skill): void {
+    const list = this.skills().filter((existing) => existing.id !== skill.id)
+    list.push(skill)
+    this.#set.run('skills', JSON.stringify(list))
+  }
+
+  /** Delete a skill by id (a no-op if it doesn't exist). */
+  removeSkill(id: string): void {
+    this.#set.run('skills', JSON.stringify(this.skills().filter((skill) => skill.id !== id)))
   }
 
   /** Set (positive number) or clear (null) the cap for one scope. */

@@ -244,6 +244,22 @@ describe('SettingsStore', () => {
     store.close()
   })
 
+  it('saves (upsert), lists, and removes skills', () => {
+    const store = new SettingsStore()
+
+    expect(store.skills()).toEqual([])
+    store.saveSkill({ id: 's1', name: 'Commits', description: 'd', body: 'body1' })
+    store.saveSkill({ id: 's2', name: 'Tests', description: 'd2', body: 'body2' })
+    expect(store.skills().map((skill) => skill.id)).toEqual(['s1', 's2'])
+
+    store.saveSkill({ id: 's1', name: 'Commits v2', description: 'd', body: 'body1b' })
+    expect(store.skills().map((skill) => skill.name)).toEqual(['Tests', 'Commits v2'])
+
+    store.removeSkill('s2')
+    expect(store.skills().map((skill) => skill.id)).toEqual(['s1'])
+    store.close()
+  })
+
   it('stores, reads, lists, and deletes credential ciphertext', () => {
     const store = new SettingsStore()
 

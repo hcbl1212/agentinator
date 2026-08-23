@@ -2140,6 +2140,37 @@ button.pipeline-stage:focus-visible {
   resize: vertical;
 }
 
+.agent-type-skills {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+}
+
+.agent-type-skills legend {
+  color: var(--faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  padding: 0 0.25rem;
+  text-transform: uppercase;
+}
+
+.agent-type-skill {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: 0.72rem;
+  gap: 0.25rem;
+}
+
+.skill-form {
+  border-top: 1px solid var(--line);
+  padding-top: 0.4rem;
+}
+
 .agent-type-controls {
   align-items: center;
   display: flex;

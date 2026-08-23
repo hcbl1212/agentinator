@@ -165,6 +165,17 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('agent-types:remove', 't1')
   })
 
+  it('routes skill list/save/remove over IPC', async () => {
+    const skill = { id: 's1', name: 'Commits', description: 'd', body: 'b' }
+    await bridge.skills.list()
+    await bridge.skills.save(skill)
+    await bridge.skills.remove('s1')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('skills:list')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('skills:save', skill)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('skills:remove', 's1')
+  })
+
   it('routes credential set/has/clear and the API-key switch over IPC', async () => {
     await bridge.agent.switchToApiKey('session_9')
     await bridge.agent.switchToSubscription('session_9')

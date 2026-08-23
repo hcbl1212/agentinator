@@ -7,6 +7,7 @@ import { PipelineProvider } from './state/pipelines'
 import { QueueProvider } from './state/queue'
 import { SelectionProvider } from './state/selection'
 import { SessionsProvider } from './state/sessions'
+import { SkillsProvider } from './state/skills'
 
 export function App(): React.JSX.Element {
   return (
@@ -15,9 +16,11 @@ export function App(): React.JSX.Element {
         <QueueProvider>
           <PipelineProvider>
             <AgentTypesProvider>
-              <InboxProvider>
-                <AppShell />
-              </InboxProvider>
+              <SkillsProvider>
+                <InboxProvider>
+                  <AppShell />
+                </InboxProvider>
+              </SkillsProvider>
             </AgentTypesProvider>
           </PipelineProvider>
         </QueueProvider>
