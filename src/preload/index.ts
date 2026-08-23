@@ -3,6 +3,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { AgentinatorBridge, PendingApproval } from '../shared/bridge'
 import type { StoredEvent } from '../shared/events'
 
+// Every pane and state provider subscribes to the appended-event stream, so
+// there are well over a dozen live subscribers. Registering one ipcRenderer
+// listener each trips Node's default 10-listener leak warning — so keep a
+// single IPC listener and fan out to the app's subscribers ourselves.
+const appendedSubscribers = new Set<(event: StoredEvent) => void>()
+ipcRenderer.on('events:appended', (_event: unknown, stored: StoredEvent) => {
+  for (const subscriber of appendedSubscribers) {
+    subscriber(stored)
+  }
+})
+
 export const bridge: AgentinatorBridge = {
   events: {
     count: () => ipcRenderer.invoke('events:count') as Promise<number>,
@@ -14,12 +25,9 @@ export const bridge: AgentinatorBridge = {
     search: (query, limit) =>
       ipcRenderer.invoke('events:search', query, limit) as Promise<StoredEvent[]>,
     onAppended: (listener) => {
-      const wrapped = (_event: unknown, stored: StoredEvent): void => {
-        listener(stored)
-      }
-      ipcRenderer.on('events:appended', wrapped)
+      appendedSubscribers.add(listener)
       return () => {
-        ipcRenderer.removeListener('events:appended', wrapped)
+        appendedSubscribers.delete(listener)
       }
     },
   },

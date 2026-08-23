@@ -104,28 +104,30 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:search', 'greet', 100)
   })
 
-  it('subscribes to appended events and unwraps the IPC envelope', () => {
-    const listener = vi.fn()
+  it('fans one IPC listener out to every subscriber, and unwraps the envelope', () => {
+    // A single ipcRenderer listener is registered at module load, no matter how
+    // many subscribers there are (avoids Node's 10-listener leak warning).
+    const appendedRegistrations = mockIpcRenderer.on.mock.calls.filter(
+      ([channel]: unknown[]) => channel === 'events:appended',
+    )
+    expect(appendedRegistrations).toHaveLength(1)
+    const fanOut = appendedRegistrations[0][1] as (event: unknown, stored: StoredEvent) => void
 
-    bridge.events.onAppended(listener)
+    const a = vi.fn()
+    const b = vi.fn()
+    const unsubscribeA = bridge.events.onAppended(a)
+    bridge.events.onAppended(b)
 
-    expect(mockIpcRenderer.on).toHaveBeenCalledWith('events:appended', expect.any(Function))
-    const wrapped = mockIpcRenderer.on.mock.calls.at(-1)?.[1] as (
-      event: unknown,
-      stored: StoredEvent,
-    ) => void
     const stored = { seq: 4, ts: 't', type: 'agent.text', payload: {} } as unknown as StoredEvent
-    wrapped(undefined, stored)
-    expect(listener).toHaveBeenCalledWith(stored)
-  })
+    fanOut(undefined, stored)
+    expect(a).toHaveBeenCalledWith(stored)
+    expect(b).toHaveBeenCalledWith(stored)
 
-  it('unsubscribes the same wrapped listener it registered', () => {
-    const unsubscribe = bridge.events.onAppended(vi.fn())
-    const wrapped = mockIpcRenderer.on.mock.calls.at(-1)?.[1] as unknown
-
-    unsubscribe()
-
-    expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith('events:appended', wrapped)
+    // Unsubscribing drops only that subscriber from the fan-out.
+    unsubscribeA()
+    fanOut(undefined, stored)
+    expect(a).toHaveBeenCalledTimes(1)
+    expect(b).toHaveBeenCalledTimes(2)
   })
 
   it('routes agent.current, startDemo, startTask, send, cancel, and dismiss over IPC', async () => {
