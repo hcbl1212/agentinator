@@ -254,7 +254,7 @@ describe('ComposerDock', () => {
     const input = screen.getByRole('textbox', { name: 'Task for the agent' })
     await userEvent.type(input, 'Add a hello util{Enter}')
 
-    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [], undefined)
+    expect(stub.startTask).toHaveBeenCalledWith('Add a hello util', [])
     expect(input).toHaveValue('')
   })
 
@@ -318,7 +318,7 @@ describe('ComposerDock', () => {
     expect(stub.startTask).not.toHaveBeenCalled()
 
     await userEvent.type(input, '{Enter}')
-    expect(stub.startTask).toHaveBeenCalledWith('first line', [], undefined)
+    expect(stub.startTask).toHaveBeenCalledWith('first line', [])
   })
 
   it('ignores an empty/whitespace submission', async () => {
@@ -542,11 +542,7 @@ describe('ComposerDock', () => {
     await screen.findByAltText('pasted screenshot')
     await userEvent.type(input, '{Enter}')
 
-    expect(stub.startTask).toHaveBeenCalledWith(
-      '',
-      [{ mediaType: 'image/png', data: 'AQID' }],
-      undefined,
-    )
+    expect(stub.startTask).toHaveBeenCalledWith('', [{ mediaType: 'image/png', data: 'AQID' }])
     expect(screen.queryByAltText('pasted screenshot')).not.toBeInTheDocument()
   })
 

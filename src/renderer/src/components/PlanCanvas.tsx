@@ -200,9 +200,6 @@ export function PlanCanvas(): React.JSX.Element {
             const dispatchable = (task.status === 'pending' || task.status === 'failed') && ready
             const shown = task.status === 'pending' ? (ready ? 'ready' : 'blocked') : task.status
             const dimmed = chain !== null && !chain.has(task.id)
-            // Retypeable exactly while the orchestrator would accept it: the
-            // task's agent hasn't launched (pending, or reopened by failure).
-            const retypeable = task.status === 'pending' || task.status === 'failed'
             const typeName =
               task.agentTypeId === undefined
                 ? undefined
@@ -231,33 +228,10 @@ export function PlanCanvas(): React.JSX.Element {
                   </span>
                   <span className="plan-node-title">{task.title}</span>
                 </button>
-                {retypeable ? (
-                  <select
-                    className="plan-node-type"
-                    value={task.agentTypeId ?? ''}
-                    aria-label={`Agent type for ${task.title}`}
-                    title="The role this task dispatches under"
-                    onChange={(event) =>
-                      void window.agentinator?.planner.retype(
-                        plan.id,
-                        task.id,
-                        event.target.value === '' ? null : event.target.value,
-                      )
-                    }
-                  >
-                    <option value="">Default</option>
-                    {types.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  typeName !== undefined && (
-                    <span className="plan-node-type-badge" title={`Ran as ${typeName}`}>
-                      {typeName}
-                    </span>
-                  )
+                {typeName !== undefined && (
+                  <span className="plan-node-type-badge" title={`Role: ${typeName}`}>
+                    {typeName}
+                  </span>
                 )}
                 {dispatchable && (
                   <button
@@ -338,9 +312,32 @@ function TaskDetail({
           {task.title}
         </span>
         <span className="plan-task-detail-meta">
-          {shown} · {typeName}
+          {shown}
+          {editable ? '' : ` · ${typeName}`}
           {blockers.length === 0 ? '' : ` · after ${blockers.join(', ')}`}
         </span>
+        {editable && (
+          <select
+            className="plan-node-type plan-task-detail-type"
+            value={task.agentTypeId ?? ''}
+            aria-label={`Agent type for ${task.title}`}
+            title="The role this task dispatches under"
+            onChange={(event) =>
+              void window.agentinator?.planner.retype(
+                plan.id,
+                task.id,
+                event.target.value === '' ? null : event.target.value,
+              )
+            }
+          >
+            <option value="">Default agent</option>
+            {types.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       {editable ? (
         <form

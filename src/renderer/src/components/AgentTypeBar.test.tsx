@@ -14,14 +14,9 @@ interface Spies {
   remove: ReturnType<typeof vi.fn>
   saveSkill: ReturnType<typeof vi.fn>
   removeSkill: ReturnType<typeof vi.fn>
-  onSelect: ReturnType<typeof vi.fn>
 }
 
-function renderBar(
-  types: AgentType[] = [],
-  skills: Skill[] = [],
-  selectedId: string | null = null,
-): Spies {
+function renderBar(types: AgentType[] = [], skills: Skill[] = []): Spies {
   const save = vi.fn(() => Promise.resolve())
   const remove = vi.fn(() => Promise.resolve())
   const saveSkill = vi.fn(() => Promise.resolve())
@@ -30,15 +25,14 @@ function renderBar(
     agentTypes: { list: vi.fn(() => Promise.resolve(types)), save, remove },
     skills: { list: vi.fn(() => Promise.resolve(skills)), save: saveSkill, remove: removeSkill },
   } as unknown as AgentinatorBridge
-  const onSelect = vi.fn()
   render(
     <AgentTypesProvider>
       <SkillsProvider>
-        <AgentTypeBar selectedId={selectedId} onSelect={onSelect} />
+        <AgentTypeBar />
       </SkillsProvider>
     </AgentTypesProvider>,
   )
-  return { save, remove, saveSkill, removeSkill, onSelect }
+  return { save, remove, saveSkill, removeSkill }
 }
 
 afterEach(() => {
@@ -46,18 +40,11 @@ afterEach(() => {
 })
 
 describe('AgentTypeBar', () => {
-  it('lists saved types in the picker and reports a selection', async () => {
-    const { onSelect } = renderBar([{ id: 'r', name: 'Reviewer', instructions: 'x' }])
+  it('has no role picker of its own — roles are assigned on plan tasks', () => {
+    renderBar([{ id: 'r', name: 'Reviewer', instructions: 'x' }])
 
-    const select = screen.getByRole('combobox', { name: 'Agent type' })
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Reviewer' })).toBeInTheDocument()
-    })
-    fireEvent.change(select, { target: { value: 'r' } })
-    expect(onSelect).toHaveBeenCalledWith('r')
-    // The default option clears the selection.
-    fireEvent.change(select, { target: { value: '' } })
-    expect(onSelect).toHaveBeenCalledWith(null)
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeInTheDocument()
   })
 
   it('creates a type via the Manage panel', () => {
@@ -109,22 +96,18 @@ describe('AgentTypeBar', () => {
     expect(saved).not.toHaveProperty('readOnly')
   })
 
-  it('lists types with their posture and deletes them, clearing selection only when needed', async () => {
-    const { remove, onSelect } = renderBar(
-      [
-        {
-          id: 'r',
-          name: 'Reviewer',
-          instructions: 'x',
-          readOnly: true,
-          model: 'm',
-          skillIds: ['s'],
-        },
-        { id: 't', name: 'Tester', instructions: 'y' },
-      ],
-      [],
-      'r',
-    )
+  it('lists types with their posture and deletes them', async () => {
+    const { remove } = renderBar([
+      {
+        id: 'r',
+        name: 'Reviewer',
+        instructions: 'x',
+        readOnly: true,
+        model: 'm',
+        skillIds: ['s'],
+      },
+      { id: 't', name: 'Tester', instructions: 'y' },
+    ])
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
     await waitFor(() => {
@@ -134,15 +117,10 @@ describe('AgentTypeBar', () => {
     // none, renders just its name — exercised by its Delete button below).
     expect(screen.getByText('Reviewer · read-only · m · 1 skill(s)')).toBeInTheDocument()
 
-    // Deleting a non-selected type leaves the selection alone.
     fireEvent.click(screen.getByRole('button', { name: 'Delete Tester' }))
     expect(remove).toHaveBeenCalledWith('t')
-    expect(onSelect).not.toHaveBeenCalled()
-
-    // Deleting the selected type clears it.
     fireEvent.click(screen.getByRole('button', { name: 'Delete Reviewer' }))
     expect(remove).toHaveBeenCalledWith('r')
-    expect(onSelect).toHaveBeenCalledWith(null)
   })
 
   it('creates a skill and deletes an existing one', async () => {

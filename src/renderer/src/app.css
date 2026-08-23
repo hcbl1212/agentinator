@@ -1972,7 +1972,8 @@ button.plan-task:focus-visible {
   color: var(--working);
 }
 
-/* The role picker on an undispatched node — which agent type it launches as. */
+/* The role picker on the detail card — the ONE place a task's agent type is
+   assigned (nodes just wear the result as a badge). */
 .plan-node-type {
   background: var(--bg);
   border: 1px solid var(--line);
@@ -1984,6 +1985,13 @@ button.plan-task:focus-visible {
   font-size: 0.6rem;
   max-width: 64px;
   padding: 0.1rem;
+}
+
+.plan-task-detail-type {
+  font-size: 0.7rem;
+  margin-left: auto;
+  max-width: 140px;
+  padding: 0.15rem 0.3rem;
 }
 
 .plan-node-type:focus-visible {
@@ -2532,32 +2540,9 @@ button.pipeline-stage:focus-visible {
   gap: 0.4rem;
 }
 
-.agent-type-pick {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
-}
-
-.agent-type-label {
-  color: var(--faint);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.agent-type-select {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.3rem;
-}
-
-.agent-type-select:focus-visible {
-  border-color: var(--soft);
-  outline: none;
+/* With the role picker gone, Manage sits alone at the composer's right edge. */
+.agent-types > .agent-type-manage {
+  align-self: flex-end;
 }
 
 .agent-type-manage {

@@ -336,9 +336,7 @@ describe('PlanCanvas', () => {
 
     // Its detail treats the ghost dependency as never-met: blocked, no name.
     fireEvent.click(screen.getByRole('button', { name: 'Trace X' }))
-    expect(screen.getByRole('region', { name: 'Task details: X' })).toHaveTextContent(
-      'blocked · Default agent',
-    )
+    expect(screen.getByRole('region', { name: 'Task details: X' })).toHaveTextContent('blocked')
   })
 
   it('scopes edge events to their plan and ignores a duplicate edge', () => {
@@ -367,8 +365,8 @@ describe('PlanCanvas', () => {
     expect(
       screen.queryByRole('button', { name: 'Remove dependency Verify → Docs' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Agent type for Implement' })).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: 'Trace Implement' }))
+    expect(screen.getByRole('combobox', { name: 'Agent type for Implement' })).toHaveValue('')
     expect(screen.getByRole('textbox', { name: 'Brief for Implement' })).toHaveValue(
       'brief: implement it',
     )
@@ -383,7 +381,7 @@ describe('PlanCanvas', () => {
 
     // The card shows the exact brief the agent will run with, plus its meta.
     const detail = screen.getByRole('region', { name: 'Task details: Implement' })
-    expect(detail).toHaveTextContent('blocked · Default agent · after Scaffold')
+    expect(detail).toHaveTextContent('blocked · after Scaffold')
     const brief = screen.getByRole('textbox', { name: 'Brief for Implement' })
     expect(brief).toHaveValue('brief: implement it')
 
@@ -421,9 +419,8 @@ describe('PlanCanvas', () => {
       screen.queryByRole('region', { name: 'Task details: Implement' }),
     ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Trace Docs' }))
-    expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent(
-      'ready · Default agent',
-    )
+    expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent('ready')
+    expect(screen.getByRole('combobox', { name: 'Agent type for Docs' })).toHaveValue('')
   })
 
   it('freezes a dispatched task’s brief read-only (steer the agent instead)', async () => {
@@ -443,7 +440,7 @@ describe('PlanCanvas', () => {
     expect(screen.queryByRole('button', { name: 'Save brief' })).not.toBeInTheDocument()
   })
 
-  it('offers a role picker on undispatched nodes and retypes through it', async () => {
+  it('assigns roles on the detail card — the one picker — with nodes wearing badges', async () => {
     const s = stub([
       event('plan.created', {
         planId: 'pl1',
@@ -457,29 +454,37 @@ describe('PlanCanvas', () => {
     ])
     window.agentinator = s.bridge
     renderCanvas()
+    await screen.findByText('Typed')
 
-    // The decomposer's suggestion pre-selects the role; the untyped task
-    // sits on Default.
-    const verifyPick = await screen.findByRole('combobox', { name: 'Agent type for Verify' })
+    // Nodes carry no picker of their own — the typed one wears a badge.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Role: Reviewer')).toBeInTheDocument()
+
+    // The detail card's picker pre-selects the decomposer's suggestion…
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Verify' }))
+    const verifyPick = screen.getByRole('combobox', { name: 'Agent type for Verify' })
     expect(verifyPick).toHaveValue('at_rev')
-    const scaffoldPick = screen.getByRole('combobox', { name: 'Agent type for Scaffold' })
-    expect(scaffoldPick).toHaveValue('')
-
-    fireEvent.change(scaffoldPick, { target: { value: 'at_doc' } })
-    expect(s.retype).toHaveBeenCalledWith('pl1', 'ta', 'at_doc')
-
-    // Back to Default sends null; the log's answer moves the pre-selection.
+    // …and returning it to Default sends null.
     fireEvent.change(verifyPick, { target: { value: '' } })
     expect(s.retype).toHaveBeenCalledWith('pl1', 'tc', null)
+
+    // Assign the untyped task a role; the log's answer badges its node.
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Verify' })) // close
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    const scaffoldPick = screen.getByRole('combobox', { name: 'Agent type for Scaffold' })
+    expect(scaffoldPick).toHaveValue('')
+    fireEvent.change(scaffoldPick, { target: { value: 'at_doc' } })
+    expect(s.retype).toHaveBeenCalledWith('pl1', 'ta', 'at_doc')
     act(() => {
       s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'ta', agentTypeId: 'at_doc' }))
       s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tc', agentTypeId: null }))
     })
-    expect(screen.getByRole('combobox', { name: 'Agent type for Scaffold' })).toHaveValue('at_doc')
-    expect(screen.getByRole('combobox', { name: 'Agent type for Verify' })).toHaveValue('')
+    expect(scaffoldPick).toHaveValue('at_doc')
+    expect(screen.getByTitle('Role: Doc writer')).toBeInTheDocument()
+    expect(screen.queryByTitle('Role: Reviewer')).not.toBeInTheDocument()
   })
 
-  it('freezes a dispatched node’s role into a badge (raw id when the type is gone)', async () => {
+  it('freezes a dispatched task’s role: no picker, a badge and read-only meta', async () => {
     const s = stub([
       event('plan.created', {
         planId: 'pl1',
@@ -500,16 +505,10 @@ describe('PlanCanvas', () => {
       s.emit(event('plan.task.dispatched', { planId: 'pl1', taskId: 'td', sessionId: 's1' }))
     })
 
-    // Once launched, the role is a fact: no picker, a badge instead. A type
-    // deleted since assignment falls back to its raw id.
-    expect(
-      screen.queryByRole('combobox', { name: 'Agent type for Scaffold' }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByTitle('Ran as Reviewer')).toBeInTheDocument()
-    expect(screen.getByTitle('Ran as at_gone')).toBeInTheDocument()
-
-    // The detail card shows the same role facts (raw id when the type is gone).
+    // Once launched, the role is a fact — the detail card shows it as text,
+    // never a picker; a type deleted since assignment falls back to its id.
     fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Task details: Scaffold' })).toHaveTextContent(
       'running · Reviewer',
     )
@@ -517,6 +516,7 @@ describe('PlanCanvas', () => {
     expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent(
       'running · at_gone',
     )
+    expect(screen.getByTitle('Role: at_gone')).toBeInTheDocument()
   })
 
   it('shows node status from the log (running, done, failed)', async () => {

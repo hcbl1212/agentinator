@@ -29,7 +29,6 @@ export function ComposerDock(): React.JSX.Element {
   const { sessions } = useSessions()
   const { selection, select, clear } = useSelection()
   const [prompt, setPrompt] = useState('')
-  const [agentTypeId, setAgentTypeId] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [questions, setQuestions] = useState<Record<string, EventPayloads['agent.question']>>({})
   const [images, setImages] = useState<PastedImage[]>([])
@@ -124,7 +123,9 @@ export function ComposerDock(): React.JSX.Element {
     if (selected !== undefined) {
       sendMessage(selected.id, trimmed, attachments)
     } else {
-      void bridge.agent.startTask(trimmed, attachments, agentTypeId ?? undefined).then((id) => {
+      // Composer launches run the default agent — roles are assigned on plan
+      // tasks (the detail card), not per ad-hoc launch.
+      void bridge.agent.startTask(trimmed, attachments).then((id) => {
         select({ kind: 'session', id })
       })
     }
@@ -267,7 +268,7 @@ export function ComposerDock(): React.JSX.Element {
               ))}
             </div>
           )}
-          {!replying && <AgentTypeBar selectedId={agentTypeId} onSelect={setAgentTypeId} />}
+          {!replying && <AgentTypeBar />}
           <div className="console">
             <span className="console-prompt" aria-hidden="true">
               &gt;

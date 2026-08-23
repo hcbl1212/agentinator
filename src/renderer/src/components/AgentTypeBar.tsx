@@ -4,18 +4,12 @@ import { useAgentTypes } from '../state/agentTypes'
 import { useSkills } from '../state/skills'
 
 /**
- * Picks the agent-type preset a new task launches under, and manages the set.
- * "Default agent" is the base behaviour; other options apply a role's
- * instructions, model, read-only posture, and attached skills. The Manage panel
- * creates/deletes types and skills inline and attaches skills to a new type.
+ * Manages the agent-type presets and skills (the Manage panel): create/delete
+ * types, attach skills, and author skills inline. Roles are ASSIGNED where
+ * work is defined — on a plan task's detail card — not here; composer
+ * launches run the default agent (one picker fewer to confuse).
  */
-export function AgentTypeBar({
-  selectedId,
-  onSelect,
-}: {
-  selectedId: string | null
-  onSelect: (id: string | null) => void
-}): React.JSX.Element {
+export function AgentTypeBar(): React.JSX.Element {
   const { types, save, remove } = useAgentTypes()
   const { skills, save: saveSkill, remove: removeSkill } = useSkills()
   const [open, setOpen] = useState(false)
@@ -70,30 +64,14 @@ export function AgentTypeBar({
 
   return (
     <div className="agent-types">
-      <label className="agent-type-pick">
-        <span className="agent-type-label">Type</span>
-        <select
-          className="agent-type-select"
-          value={selectedId ?? ''}
-          onChange={(event) => onSelect(event.target.value === '' ? null : event.target.value)}
-          aria-label="Agent type"
-        >
-          <option value="">Default agent</option>
-          {types.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="agent-type-manage"
-          aria-expanded={open}
-          onClick={() => setOpen((was) => !was)}
-        >
-          Manage
-        </button>
-      </label>
+      <button
+        type="button"
+        className="agent-type-manage"
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+      >
+        Manage
+      </button>
       {open && (
         <div className="agent-type-manager">
           <form
@@ -171,12 +149,7 @@ export function AgentTypeBar({
                     type="button"
                     className="queue-action"
                     aria-label={`Delete ${type.name}`}
-                    onClick={() => {
-                      void remove(type.id)
-                      if (selectedId === type.id) {
-                        onSelect(null)
-                      }
-                    }}
+                    onClick={() => void remove(type.id)}
                   >
                     ✕
                   </button>
