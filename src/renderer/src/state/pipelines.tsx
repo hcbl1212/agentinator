@@ -8,6 +8,8 @@ export interface PipelineStageView {
   name: string
   status: 'pending' | 'running' | 'done' | 'failed'
   sessionId?: string
+  /** The model this stage is routed to, if it overrides the default. */
+  model?: string
 }
 
 /** A pipeline reduced from the log: its stages in order, whether it finished,
@@ -53,7 +55,11 @@ export function reducePipelines(pipelines: Pipeline[], event: StoredEvent): Pipe
             {
               id: payload.pipelineId,
               title: payload.title,
-              stages: payload.stages.map((stage) => ({ name: stage.name, status: 'pending' })),
+              stages: payload.stages.map((stage) => ({
+                name: stage.name,
+                status: 'pending',
+                ...(stage.model === undefined ? {} : { model: stage.model }),
+              })),
               done: false,
               approved: false,
             },

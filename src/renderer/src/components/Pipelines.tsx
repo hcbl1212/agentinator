@@ -97,7 +97,9 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
       </div>
       <ol className="pipeline-stages">
         {pipeline.stages.map((stage, index) => {
-          const label = `${stage.name} — ${stage.status}`
+          const label =
+            `${stage.name} — ${stage.status}` +
+            (stage.model === undefined ? '' : ` · ${stage.model}`)
           const className = `pipeline-stage is-${stage.status}`
           return (
             <li key={index} className="pipeline-stage-item">

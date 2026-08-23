@@ -13,6 +13,11 @@ export const PRIOR_ATTEMPT_HEADER = '--- Your previous attempt ---'
 /** Prefixes the user's revision feedback on a re-run of a stage. */
 export const REVISION_HEADER = '--- Revise it per this feedback ---'
 
+/** Stage-aware routing: the planning stage only produces a written plan (it
+ * can't edit), so a fast, cheap model handles it; implement/review keep the
+ * provider default (a stronger model) since they write and vet real code. */
+export const PLAN_MODEL = 'claude-haiku-4-5'
+
 /** The built-in pipeline for a task: plan it, implement it, then review the
  * result. Each stage's prompt is the base instruction; the orchestrator appends
  * the previous stage's output as handoff context when it advances. */
@@ -23,6 +28,8 @@ export function defaultPipelineStages(task: string): PipelineStageSpec[] {
       // Read-only: the provider blocks its edit/command tools, so it can only
       // read and plan even if the model tries to jump ahead.
       readOnly: true,
+      // A cheap model — planning is text, not code (stage-aware routing).
+      model: PLAN_MODEL,
       prompt:
         'You are the PLANNING stage of a pipeline. Do not edit, create, or run ' +
         'anything — a later stage implements your plan. Output only a written, ' +
@@ -62,7 +69,12 @@ type PipelineReader = { listBySession(sessionId: string): StoredEvent[] }
 export class PipelineOrchestrator {
   readonly #emit: EmitStored
   readonly #store: PipelineReader
-  readonly #startStage: (prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string
+  readonly #startStage: (
+    prompt: string,
+    worktree?: WorktreeInfo,
+    readOnly?: boolean,
+    model?: string,
+  ) => string
   readonly #retireStage: (sessionId: string) => void
   readonly #stagesByPipeline = new Map<string, PipelineStageSpec[]>()
   /** `${pipelineId}:${stageIndex}` for every stage already dispatched, so a
@@ -72,7 +84,12 @@ export class PipelineOrchestrator {
   constructor(options: {
     emit: EmitStored
     store: PipelineReader
-    startStage: (prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string
+    startStage: (
+      prompt: string,
+      worktree?: WorktreeInfo,
+      readOnly?: boolean,
+      model?: string,
+    ) => string
     /** End a completed stage's agent so it leaves the rail (the pipeline chip
      * still shows its status). The worktree is left for the next stage. */
     retireStage: (sessionId: string) => void
@@ -88,7 +105,7 @@ export class PipelineOrchestrator {
     const pipelineId = createEntityId('pipeline')
     this.#stagesByPipeline.set(pipelineId, stages)
     this.#emit('pipeline.created', { pipelineId, title, stages })
-    this.#dispatch(pipelineId, 0, stages[0].prompt, undefined, stages[0].readOnly)
+    this.#dispatch(pipelineId, 0, stages[0].prompt, undefined, stages[0].readOnly, stages[0].model)
     return pipelineId
   }
 
@@ -132,7 +149,14 @@ export class PipelineOrchestrator {
       handoff === ''
         ? stages[next].prompt
         : `${stages[next].prompt}\n\n${HANDOFF_HEADER}\n${handoff}`
-    this.#dispatch(pipelineId, next, prompt, this.#worktreeOf(events), stages[next].readOnly)
+    this.#dispatch(
+      pipelineId,
+      next,
+      prompt,
+      this.#worktreeOf(events),
+      stages[next].readOnly,
+      stages[next].model,
+    )
   }
 
   /** Re-run a paused stage with the user's revision feedback (e.g. reshape the
@@ -166,6 +190,7 @@ export class PipelineOrchestrator {
       parts.join('\n\n'),
       this.#worktreeOf(events),
       stages[started.stageIndex].readOnly,
+      stages[started.stageIndex].model,
     )
   }
 
@@ -237,15 +262,17 @@ export class PipelineOrchestrator {
   }
 
   /** Launch a stage's agent and link the resulting session to the stage. The
-   * stage's own read-only flag rides along, so a planning stage can't edit. */
+   * stage's read-only flag and routed model ride along, so a planning stage
+   * can't edit and runs on its cheaper model. */
   #dispatch(
     pipelineId: string,
     stageIndex: number,
     prompt: string,
     worktree?: WorktreeInfo,
     readOnly?: boolean,
+    model?: string,
   ): void {
-    const sessionId = this.#startStage(prompt, worktree, readOnly === true)
+    const sessionId = this.#startStage(prompt, worktree, readOnly === true, model)
     this.#startedStages.add(`${pipelineId}:${stageIndex}`)
     this.#emit('pipeline.stage.started', { pipelineId, stageIndex, sessionId })
   }

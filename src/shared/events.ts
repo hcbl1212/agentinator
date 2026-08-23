@@ -27,6 +27,9 @@ export interface PipelineStageSpec {
   /** Run this stage read-only — the agent may read/search but cannot edit files
    * or run commands (a planning stage). The provider enforces it. */
   readOnly?: boolean
+  /** The model this stage runs on (stage-aware routing) — a cheaper/faster model
+   * for lighter stages. Undefined uses the provider default. */
+  model?: string
 }
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]

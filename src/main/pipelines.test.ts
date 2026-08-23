@@ -6,6 +6,7 @@ import {
   defaultPipelineStages,
   HANDOFF_HEADER,
   PipelineOrchestrator,
+  PLAN_MODEL,
   PRIOR_ATTEMPT_HEADER,
   REVISION_HEADER,
 } from './pipelines'
@@ -29,9 +30,9 @@ function harness() {
       log.filter((event) => (event.payload as { sessionId?: string }).sessionId === id),
   }
   let n = 0
-  const startStage = vi.fn<(prompt: string, worktree?: WorktreeInfo, readOnly?: boolean) => string>(
-    () => `sess${n++}`,
-  )
+  const startStage = vi.fn<
+    (prompt: string, worktree?: WorktreeInfo, readOnly?: boolean, model?: string) => string
+  >(() => `sess${n++}`)
   const retireStage = vi.fn<(sessionId: string) => void>()
   const orchestrator = new PipelineOrchestrator({ emit, store, startStage, retireStage })
 
@@ -79,6 +80,9 @@ describe('defaultPipelineStages', () => {
     // implements it.
     expect(stages[0].prompt).toContain('Do not edit')
     expect(stages[0].readOnly).toBe(true)
+    // Stage-aware routing: the plan runs on a cheap model; the rest default.
+    expect(stages[0].model).toBe(PLAN_MODEL)
+    expect(stages[1].model).toBeUndefined()
     expect(stages[1].readOnly).toBeUndefined() // implement/review may edit
     expect(stages[1].prompt).toContain('add a logout button')
     // Review reads the shared worktree's diff, not the raw task.
@@ -97,6 +101,7 @@ describe('PipelineOrchestrator', () => {
     expect(h.startStage).toHaveBeenCalledTimes(1)
     expect(h.startStage.mock.calls[0][0]).toContain('PLANNING stage')
     expect(h.startStage.mock.calls[0][2]).toBe(true) // the plan stage runs read-only
+    expect(h.startStage.mock.calls[0][3]).toBe(PLAN_MODEL) // …on its routed model
     expect(h.log[1].payload).toMatchObject({ pipelineId: id, stageIndex: 0, sessionId: 'sess0' })
   })
 

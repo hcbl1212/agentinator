@@ -776,8 +776,8 @@ export async function bootstrap(
   const pipelines = new PipelineOrchestrator({
     emit: makeEmitStored(store),
     store,
-    startStage: (prompt, worktree, readOnly) =>
-      startAgentTask(manager, prompt, { worktree, readOnly }),
+    startStage: (prompt, worktree, readOnly, model) =>
+      startAgentTask(manager, prompt, { worktree, readOnly, model }),
     retireStage: (sessionId) => void manager.retire(sessionId),
   })
   pipelineObservers.push(pipelines.observe.bind(pipelines))

@@ -101,6 +101,29 @@ describe('Pipelines', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows a stage’s routed model in its chip label', () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderPipelines()
+
+    act(() => {
+      s.emit(
+        event('pipeline.created', {
+          pipelineId: 'plm',
+          title: 'Routed',
+          stages: [
+            { name: 'Plan', prompt: 'p', model: 'claude-haiku-4-5' },
+            { name: 'Do', prompt: 'd' },
+          ],
+        }),
+      )
+    })
+
+    // The routed stage carries its model; the default-model stage doesn't.
+    expect(screen.getByLabelText('Plan — pending · claude-haiku-4-5')).toBeInTheDocument()
+    expect(screen.getByLabelText('Do — pending')).toBeInTheDocument()
+  })
+
   it('clears a pipeline via its remove button, and folds out a removed one', () => {
     const s = stub()
     window.agentinator = s.bridge
