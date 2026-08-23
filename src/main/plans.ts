@@ -1,0 +1,166 @@
+import { createEntityId } from '../shared/events'
+import type { EventPayloads, PlanTaskSpec, StoredEvent } from '../shared/events'
+import type { EmitStored } from './approvals'
+import type { DecomposedTask } from './planDecomposer'
+
+/** Prefixes the plan's requirement when a task is handed to its agent, so the
+ * agent sees the larger goal its task serves. */
+export const PLAN_CONTEXT_HEADER = '--- The requirement this task belongs to ---'
+
+/** What the orchestrator needs from the event store: a session's events, which
+ * carry its `plan.task.dispatched` (so a finished session maps back to its
+ * task) and any earlier resolution (the idempotency check). */
+type PlanReader = { listBySession(sessionId: string): StoredEvent[] }
+
+interface PlanState {
+  requirement: string
+  tasks: PlanTaskSpec[]
+}
+
+/**
+ * Runs plans: a requirement decomposed into a task DAG, dispatched task by task
+ * as the user fires the ready frontier. {@link dispatch} launches one ready
+ * task (every dependency completed) as an agent; {@link observe} marks the task
+ * completed when that agent finishes a turn — which may unlock dependents —
+ * or failed when it's cancelled/errors (the task can then be dispatched again).
+ * Unlike a pipeline stage, a finished task's agent is NOT retired: plan tasks
+ * are ordinary agents the user may keep steering. State lives in memory and is
+ * rebuilt from the log via {@link reconcile} so a plan survives a restart.
+ */
+export class PlanOrchestrator {
+  readonly #emit: EmitStored
+  readonly #store: PlanReader
+  readonly #startTask: (prompt: string) => string
+  readonly #plans = new Map<string, PlanState>()
+  /** `${planId}:${taskId}` for every task in flight or done, so a double
+   * Dispatch can't launch the same task twice. A failed task is removed again
+   * — failure unlocks a retry, not a dead end. */
+  readonly #dispatched = new Set<string>()
+  /** `${planId}:${taskId}` for every completed task — the dependency check. */
+  readonly #completed = new Set<string>()
+
+  constructor(options: {
+    emit: EmitStored
+    store: PlanReader
+    startTask: (prompt: string) => string
+  }) {
+    this.#emit = options.emit
+    this.#store = options.store
+    this.#startTask = options.startTask
+  }
+
+  /** Record a decomposed requirement as a plan: mint stable task ids, map the
+   * decomposition's index-based dependencies onto them, and log the whole
+   * graph. Nothing dispatches until the user fires a ready task. */
+  create(title: string, requirement: string, decomposed: DecomposedTask[]): string {
+    const planId = createEntityId('plan')
+    const ids = decomposed.map(() => createEntityId('task'))
+    const tasks: PlanTaskSpec[] = decomposed.map((task, index) => ({
+      taskId: ids[index],
+      title: task.title,
+      prompt: task.prompt,
+      dependsOn: task.dependsOn.map((dep) => ids[dep]),
+    }))
+    this.#plans.set(planId, { requirement, tasks })
+    this.#emit('plan.created', { planId, title, requirement, tasks })
+    return planId
+  }
+
+  /** Launch a ready task as an agent, returning the new session id — or null
+   * when it isn't dispatchable (unknown plan/task, already in flight or done,
+   * or a dependency hasn't completed). The renderer shows the same frontier,
+   * but the guard lives here so a stale click can't jump the graph. */
+  dispatch(planId: string, taskId: string): string | null {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined) {
+      return null
+    }
+    const key = `${planId}:${taskId}`
+    if (this.#dispatched.has(key)) {
+      return null
+    }
+    if (!task.dependsOn.every((dep) => this.#completed.has(`${planId}:${dep}`))) {
+      return null
+    }
+    const sessionId = this.#startTask(
+      `${task.prompt}\n\n${PLAN_CONTEXT_HEADER}\n${plan.requirement}`,
+    )
+    this.#dispatched.add(key)
+    this.#emit('plan.task.dispatched', { planId, taskId, sessionId })
+    return sessionId
+  }
+
+  /** Clear a plan from the list. It stops tracking (a still-running task's
+   * agent that later finishes finds no plan and is left alone) and drops out
+   * of the UI. */
+  remove(planId: string): void {
+    this.#plans.delete(planId)
+    this.#emit('plan.removed', { planId })
+  }
+
+  /** Rebuild in-memory plan state from the log (called at boot) so a plan in
+   * flight before a restart keeps its graph, frontier, and double-dispatch
+   * guards. A removed plan is forgotten so it neither advances nor reappears. */
+  reconcile(events: StoredEvent[]): void {
+    for (const event of events) {
+      if (event.type === 'plan.created') {
+        const payload = event.payload as EventPayloads['plan.created']
+        this.#plans.set(payload.planId, { requirement: payload.requirement, tasks: payload.tasks })
+      } else if (event.type === 'plan.removed') {
+        this.#plans.delete((event.payload as EventPayloads['plan.removed']).planId)
+      } else if (event.type === 'plan.task.dispatched') {
+        const { planId, taskId } = event.payload as EventPayloads['plan.task.dispatched']
+        this.#dispatched.add(`${planId}:${taskId}`)
+      } else if (event.type === 'plan.task.completed') {
+        const { planId, taskId } = event.payload as EventPayloads['plan.task.completed']
+        this.#completed.add(`${planId}:${taskId}`)
+      } else if (event.type === 'plan.task.failed') {
+        const { planId, taskId } = event.payload as EventPayloads['plan.task.failed']
+        this.#dispatched.delete(`${planId}:${taskId}`)
+      }
+    }
+  }
+
+  /**
+   * React to a task's agent finishing. A task completes when its agent goes
+   * idle (a finished turn — the agent stays alive for follow-ups) or ends
+   * "completed"; completing it may put dependent tasks on the ready frontier.
+   * A session that ends cancelled/failed marks the task failed and reopens it
+   * for dispatch (a retry with a fresh agent).
+   */
+  observe(event: StoredEvent): void {
+    if (event.type !== 'session.idle' && event.type !== 'session.ended') {
+      return
+    }
+    const sessionId = (event.payload as { sessionId: string }).sessionId
+    const events = this.#store.listBySession(sessionId)
+    const dispatched = events.find((e) => e.type === 'plan.task.dispatched')?.payload as
+      EventPayloads['plan.task.dispatched'] | undefined
+    if (dispatched === undefined) {
+      return // not a plan task's agent
+    }
+    // Idempotency: this task already resolved through this session (completed
+    // or failed) — don't record it twice. Both carry the sessionId, so they're
+    // in the session index.
+    if (events.some((e) => e.type === 'plan.task.completed' || e.type === 'plan.task.failed')) {
+      return
+    }
+    const { planId, taskId } = dispatched
+    if (!this.#plans.has(planId)) {
+      return // plan was removed — its stray agents resolve nothing
+    }
+    const key = `${planId}:${taskId}`
+    if (
+      event.type === 'session.ended' &&
+      (event.payload as EventPayloads['session.ended']).outcome !== 'completed'
+    ) {
+      // Reopen the task so it can be dispatched again with a fresh agent.
+      this.#dispatched.delete(key)
+      this.#emit('plan.task.failed', { planId, taskId, sessionId })
+      return
+    }
+    this.#completed.add(key)
+    this.#emit('plan.task.completed', { planId, taskId, sessionId })
+  }
+}

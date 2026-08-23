@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { InboxProvider } from '../state/inbox'
 import { PipelineProvider } from '../state/pipelines'
+import { PlanProvider } from '../state/plans'
 import { QueueProvider } from '../state/queue'
 import { ScrubProvider } from '../state/scrub'
 import { SelectionProvider } from '../state/selection'
@@ -16,11 +17,13 @@ function renderPanes(): void {
       <SessionsProvider>
         <QueueProvider>
           <PipelineProvider>
-            <ScrubProvider>
-              <InboxProvider>
-                <Panes />
-              </InboxProvider>
-            </ScrubProvider>
+            <PlanProvider>
+              <ScrubProvider>
+                <InboxProvider>
+                  <Panes />
+                </InboxProvider>
+              </ScrubProvider>
+            </PlanProvider>
           </PipelineProvider>
         </QueueProvider>
       </SessionsProvider>

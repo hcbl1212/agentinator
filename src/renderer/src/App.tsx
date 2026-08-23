@@ -5,6 +5,7 @@ import { StatusBar } from './components/StatusBar'
 import { AgentTypesProvider } from './state/agentTypes'
 import { InboxProvider } from './state/inbox'
 import { PipelineProvider } from './state/pipelines'
+import { PlanProvider } from './state/plans'
 import { QueueProvider } from './state/queue'
 import { ScrubProvider } from './state/scrub'
 import { SelectionProvider } from './state/selection'
@@ -17,15 +18,17 @@ export function App(): React.JSX.Element {
       <SessionsProvider>
         <QueueProvider>
           <PipelineProvider>
-            <AgentTypesProvider>
-              <SkillsProvider>
-                <ScrubProvider>
-                  <InboxProvider>
-                    <AppShell />
-                  </InboxProvider>
-                </ScrubProvider>
-              </SkillsProvider>
-            </AgentTypesProvider>
+            <PlanProvider>
+              <AgentTypesProvider>
+                <SkillsProvider>
+                  <ScrubProvider>
+                    <InboxProvider>
+                      <AppShell />
+                    </InboxProvider>
+                  </ScrubProvider>
+                </SkillsProvider>
+              </AgentTypesProvider>
+            </PlanProvider>
           </PipelineProvider>
         </QueueProvider>
       </SessionsProvider>

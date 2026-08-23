@@ -17,8 +17,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-/** Concatenate the assistant text blocks from an SDK message stream. */
-function assistantText(message: unknown): string {
+/** Concatenate the assistant text blocks from an SDK message stream. Shared
+ * with the plan decomposer, which reads the same stream shape. */
+export function assistantText(message: unknown): string {
   if (!isRecord(message) || message['type'] !== 'assistant') {
     return ''
   }

@@ -199,6 +199,18 @@ export interface AgentinatorBridge {
      * advancing and drops out of the UI. */
     remove(pipelineId: string): Promise<void>
   }
+  /** The planner: requirements decomposed into dependency-aware task lists,
+   * dispatched task by task from the ready frontier. */
+  planner: {
+    /** Decompose a requirement into a plan (the AI call happens before this
+     * resolves); resolves to the new plan id. Nothing dispatches yet. */
+    create(requirement: string): Promise<string>
+    /** Launch a ready task (every dependency completed) as an agent; resolves
+     * to the new session id, or null when the task isn't dispatchable. */
+    dispatch(planId: string, taskId: string): Promise<string | null>
+    /** Clear a plan from the list; it stops tracking and drops out of the UI. */
+    remove(planId: string): Promise<void>
+  }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {
     /** Snapshot the session's worktree; resolves to the new checkpoint id, or

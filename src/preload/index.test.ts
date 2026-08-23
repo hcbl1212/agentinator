@@ -286,6 +286,16 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('pipelines:remove', 'pipeline_1')
   })
 
+  it('routes planner create, dispatch, and remove over IPC', async () => {
+    await bridge.planner.create('add a settings page')
+    await bridge.planner.dispatch('plan_1', 'task_1')
+    await bridge.planner.remove('plan_1')
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:create', 'add a settings page')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:dispatch', 'plan_1', 'task_1')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:remove', 'plan_1')
+  })
+
   it('routes checkpoints over IPC', async () => {
     await bridge.checkpoints.create('session_1', 'before change')
     await bridge.checkpoints.restore('session_1', 'checkpoint_1', 'sha_abc')

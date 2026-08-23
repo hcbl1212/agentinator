@@ -154,6 +154,12 @@ export const bridge: AgentinatorBridge = {
     approve: (pipelineId) => ipcRenderer.invoke('pipelines:approve', pipelineId) as Promise<void>,
     remove: (pipelineId) => ipcRenderer.invoke('pipelines:remove', pipelineId) as Promise<void>,
   },
+  planner: {
+    create: (requirement) => ipcRenderer.invoke('planner:create', requirement) as Promise<string>,
+    dispatch: (planId, taskId) =>
+      ipcRenderer.invoke('planner:dispatch', planId, taskId) as Promise<string | null>,
+    remove: (planId) => ipcRenderer.invoke('planner:remove', planId) as Promise<void>,
+  },
   checkpoints: {
     create: (sessionId, label) =>
       ipcRenderer.invoke('checkpoints:create', sessionId, label) as Promise<string | null>,

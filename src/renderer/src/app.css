@@ -1688,6 +1688,147 @@ textarea.preview-props-input {
   overflow-y: auto;
 }
 
+.pane.planner {
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  max-height: 35%;
+  overflow-y: auto;
+}
+
+.plan-form {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.plan-form-input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  font-size: 0.7rem;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+}
+
+.plan-form-input:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
+.plan-form-send {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.plan-form-send:hover,
+.plan-form-send:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.plan-form-send:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The task tree: one row per task, indented by dependency depth (inline). */
+.plan-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-task-item {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* A task chip: state shows in the border + mark glyph, not colour alone. */
+.plan-task {
+  align-items: center;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  display: flex;
+  font: inherit;
+  font-size: 0.7rem;
+  gap: 0.25rem;
+  line-height: 1;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+}
+
+button.plan-task {
+  cursor: pointer;
+}
+
+button.plan-task:hover,
+button.plan-task:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.plan-task.is-blocked .pipeline-stage-mark {
+  color: var(--faint);
+}
+
+.plan-task.is-ready .pipeline-stage-mark {
+  color: var(--ink);
+}
+
+.plan-task.is-running {
+  border-color: var(--working);
+}
+
+.plan-task.is-running .pipeline-stage-mark {
+  color: var(--working);
+}
+
+.plan-task.is-done {
+  border-color: var(--ok);
+}
+
+.plan-task.is-done .pipeline-stage-mark {
+  color: var(--ok);
+}
+
+.plan-task.is-failed {
+  border-color: var(--err);
+}
+
+.plan-task.is-failed .pipeline-stage-mark {
+  color: var(--err);
+}
+
 .pipeline-list {
   display: flex;
   flex-direction: column;

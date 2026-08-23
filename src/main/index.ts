@@ -30,6 +30,9 @@ import type { Checkpoints } from './checkpoints'
 import { NodeWorktrees } from './worktrees'
 import type { WorktreeInfo } from './worktrees'
 import { defaultPipelineStages, PipelineOrchestrator } from './pipelines'
+import { decomposePlanWith, scriptedDecomposer } from './planDecomposer'
+import type { PlanDecomposer } from './planDecomposer'
+import { PlanOrchestrator } from './plans'
 import { PreviewController } from './preview'
 import { ElectronPreviewBrowser } from './previewBrowser'
 import type { PreviewBrowser } from './previewBrowser'
@@ -256,6 +259,27 @@ export function registerPipelineIpc(
   })
   handle('pipelines:remove', (_event, pipelineId) => {
     pipelines.remove(pipelineId as string)
+  })
+}
+
+/** The planner: decompose a requirement into a task DAG (the AI call happens
+ * here, before the plan exists), then dispatch ready tasks and clear plans. */
+export function registerPlannerIpc(
+  plans: PlanOrchestrator,
+  decompose: PlanDecomposer,
+  handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
+    ipcMain.handle(channel, listener)
+  },
+): void {
+  handle('planner:create', async (_event, requirement) => {
+    const tasks = await decompose(requirement as string)
+    return plans.create(taskTitle(requirement as string), requirement as string, tasks)
+  })
+  handle('planner:dispatch', (_event, planId, taskId) =>
+    plans.dispatch(planId as string, taskId as string),
+  )
+  handle('planner:remove', (_event, planId) => {
+    plans.remove(planId as string)
   })
 }
 
@@ -783,11 +807,27 @@ export async function bootstrap(
   pipelineObservers.push(pipelines.observe.bind(pipelines))
   pipelines.reconcile(store.list())
 
+  // The planner shares the pipelines' shape: dispatch through the manager,
+  // observe session lifecycle via the sink's observer list, rebuild from the
+  // log at boot. Mock-tasks mode swaps in the scripted decomposer so the e2e
+  // plans deterministically with no network.
+  const plans = new PlanOrchestrator({
+    emit: makeEmitStored(store),
+    store,
+    startTask: (prompt) => startAgentTask(manager, prompt),
+  })
+  pipelineObservers.push(plans.observe.bind(plans))
+  plans.reconcile(store.list())
+
   registerAgentIpc(manager, settings.agentTypes.bind(settings), settings.skills.bind(settings))
   registerAgentTypeIpc(settings)
   registerSkillIpc(settings)
   registerQueueIpc(manager, makeEmitStored(store, sink))
   registerPipelineIpc(pipelines)
+  registerPlannerIpc(
+    plans,
+    env['AGENTINATOR_MOCK_TASKS'] === '1' ? scriptedDecomposer : decomposePlanWith(claudeQuery),
+  )
   const checkpoints = new NodeCheckpoints(runGitSync)
   const emitCheckpoint = makeEmitStored(store, sink)
   registerCheckpointIpc(

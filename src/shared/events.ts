@@ -16,6 +16,7 @@ export const ENTITY_KINDS = [
   'approval',
   'checkpoint',
   'pipeline',
+  'plan',
 ] as const
 
 /** One stage of a pipeline: a human label and the prompt its agent runs with.
@@ -30,6 +31,19 @@ export interface PipelineStageSpec {
   /** The model this stage runs on (stage-aware routing) — a cheaper/faster model
    * for lighter stages. Undefined uses the provider default. */
   model?: string
+}
+
+/** One task of a plan: what to do and which sibling tasks must finish first.
+ * The whole list is recorded on `plan.created` (like a pipeline's stages), so
+ * the dependency graph replays from the log alone. */
+export interface PlanTaskSpec {
+  taskId: string
+  /** A short human label for the tree. */
+  title: string
+  /** The prompt the dispatched agent runs with. */
+  prompt: string
+  /** taskIds (within the same plan) this task waits on — its "blocked by". */
+  dependsOn: string[]
 }
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
@@ -131,6 +145,21 @@ export interface EventPayloads {
   'pipeline.removed': { pipelineId: string }
   /** A stage's agent failed or was cancelled; the pipeline halts at that stage. */
   'pipeline.failed': { pipelineId: string; stageIndex: number; sessionId: string }
+  /** A requirement was decomposed into a dependency-aware task list (the
+   * planner). The full graph is recorded here so it replays from one event;
+   * tasks with no unmet dependencies form the "ready to start" frontier. */
+  'plan.created': { planId: string; title: string; requirement: string; tasks: PlanTaskSpec[] }
+  /** A ready plan task was launched as an agent — links the task to its
+   * session so live plan status can follow it. */
+  'plan.task.dispatched': { planId: string; taskId: string; sessionId: string }
+  /** A dispatched task's agent finished cleanly — tasks depending on it may
+   * now join the ready frontier. */
+  'plan.task.completed': { planId: string; taskId: string; sessionId: string }
+  /** A dispatched task's agent was cancelled or failed; the task may be
+   * dispatched again (a retry with a fresh agent). */
+  'plan.task.failed': { planId: string; taskId: string; sessionId: string }
+  /** The user cleared a plan; it stops tracking and drops out of the UI. */
+  'plan.removed': { planId: string }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }

@@ -479,3 +479,32 @@ test('a low session budget stops the agent when its cost exceeds the cap', async
     await app.close()
   }
 })
+
+test('planning a requirement builds a task tree whose frontier advances as agents finish', async () => {
+  const { app, page } = await launchApp()
+  try {
+    // Decompose a requirement (the scripted decomposer under mock tasks).
+    const planner = page.getByRole('region', { name: 'Planner' })
+    const requirement = planner.getByRole('textbox', { name: 'Requirement to plan' })
+    await requirement.fill('Add a settings page')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+
+    // The task tree: only the first task is on the ready frontier.
+    await expect(planner.getByLabel('Scaffold — ready')).toBeVisible()
+    await expect(planner.getByLabel('Implement — blocked · after Scaffold')).toBeVisible()
+    await expect(planner.getByLabel('Verify — blocked · after Implement')).toBeVisible()
+    await expect(planner.getByRole('button', { name: 'Dispatch Implement' })).toHaveCount(0)
+
+    // Dispatch the frontier → a real agent appears in the rail, selected.
+    await planner.getByRole('button', { name: 'Dispatch Scaffold' }).click()
+    await expect(page.getByRole('button', { name: /^Set up the groundwork/ })).toBeVisible()
+
+    // The scripted agent finishes → the task completes and unlocks Implement.
+    await expect(
+      planner.getByRole('button', { name: 'Scaffold — done — select its agent' }),
+    ).toBeVisible()
+    await expect(planner.getByRole('button', { name: 'Dispatch Implement' })).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})

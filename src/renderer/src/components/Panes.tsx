@@ -4,6 +4,7 @@ import { AgentRail } from './AgentRail'
 import { Inspector } from './Inspector'
 import { PaneGutter } from './PaneGutter'
 import { Pipelines } from './Pipelines'
+import { Planner } from './Planner'
 import { Stream } from './Stream'
 import { TaskQueue } from './TaskQueue'
 
@@ -60,6 +61,7 @@ export function Panes(): React.JSX.Element {
       style={{ gridTemplateColumns: `${railWidth}px 6px 1fr 6px ${inspectorWidth}px` }}
     >
       <div className="rail-col">
+        <Planner />
         <TaskQueue />
         <Pipelines />
         <AgentRail />

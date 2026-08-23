@@ -129,6 +129,11 @@ function stubBridge(pending: PendingApproval[] = []): BridgeStub {
         approve: vi.fn(() => Promise.resolve()),
         remove: vi.fn(() => Promise.resolve()),
       },
+      planner: {
+        create: vi.fn(() => Promise.resolve('plan_1')),
+        dispatch: vi.fn(() => Promise.resolve(null)),
+        remove: vi.fn(() => Promise.resolve()),
+      },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),
         restore: vi.fn(() => Promise.resolve(true)),

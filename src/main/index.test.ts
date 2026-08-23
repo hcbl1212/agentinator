@@ -110,6 +110,7 @@ import {
   nativeAttentionNotifier,
   registerCheckpointIpc,
   registerPipelineIpc,
+  registerPlannerIpc,
   registerSkillIpc,
   registerPreviewIpc,
   resolveWorktreePath,
@@ -132,6 +133,7 @@ import type { DevServers } from './devServers'
 import type { GitRunner } from './git'
 import type { WorktreeJanitor } from './worktreeGc'
 import type { PipelineOrchestrator } from './pipelines'
+import type { PlanOrchestrator } from './plans'
 import type { PreviewController } from './preview'
 import type { CredentialVault } from './credentials'
 import type { SessionManager } from './sessions'
@@ -1002,6 +1004,43 @@ describe('registerPipelineIpc', () => {
   })
 })
 
+describe('registerPlannerIpc', () => {
+  it('decomposes a requirement into a plan, then dispatches and removes', async () => {
+    const create = vi.fn(() => 'plan_7')
+    const dispatch = vi.fn(() => 'session_3')
+    const remove = vi.fn()
+    const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+
+    registerPlannerIpc(
+      { create, dispatch, remove } as unknown as PlanOrchestrator,
+      decompose,
+      (channel, listener) => handlers.set(channel, listener),
+    )
+
+    const id = await handlers.get('planner:create')?.(undefined, 'Add a settings page')
+    expect(id).toBe('plan_7')
+    expect(decompose).toHaveBeenCalledWith('Add a settings page')
+    expect(create).toHaveBeenCalledWith('Add a settings page', 'Add a settings page', [
+      { title: 'A', prompt: 'do a', dependsOn: [] },
+    ])
+
+    const sessionId = handlers.get('planner:dispatch')?.(undefined, 'plan_7', 'task_1')
+    expect(sessionId).toBe('session_3')
+    expect(dispatch).toHaveBeenCalledWith('plan_7', 'task_1')
+
+    handlers.get('planner:remove')?.(undefined, 'plan_7')
+    expect(remove).toHaveBeenCalledWith('plan_7')
+  })
+
+  it('registers on ipcMain by default', () => {
+    registerPlannerIpc({ create: vi.fn() } as unknown as PlanOrchestrator, vi.fn())
+
+    const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
+    expect(channels).toEqual(['planner:create', 'planner:dispatch', 'planner:remove'])
+  })
+})
+
 describe('checkpoints', () => {
   const storeWith = (worktree?: { repoRoot: string; path: string; branch: string }): EventStore =>
     ({
@@ -1555,6 +1594,53 @@ describe('bootstrap', () => {
           (event.payload as { outcome: string }).outcome === 'completed',
       ),
     ).toHaveLength(2)
+    store.close()
+  })
+
+  it('plans a requirement with the scripted decomposer and advances the frontier', async () => {
+    // Mock-tasks mode: the scripted decomposer plans deterministically and the
+    // e2e provider runs each dispatched task with no network.
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const store = new EventStore(':memory:')
+
+    await bootstrap(
+      mockApp as never,
+      () => store,
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+    )
+
+    const call = (channel: string): ((...args: unknown[]) => unknown) =>
+      mockIpcMain.handle.mock.calls.find(([c]: string[]) => c === channel)?.[1] as (
+        ...args: unknown[]
+      ) => unknown
+    const planId = (await call('planner:create')(undefined, 'Add a settings page')) as string
+
+    const created = store.list().find((event) => event.type === 'plan.created')?.payload as {
+      planId: string
+      tasks: { taskId: string; title: string; dependsOn: string[] }[]
+    }
+    expect(created.planId).toBe(planId)
+    expect(created.tasks.map((task) => task.title)).toEqual(['Scaffold', 'Implement', 'Verify'])
+    // Nothing dispatched yet, and a blocked task refuses to jump the graph.
+    expect(call('planner:dispatch')(undefined, planId, created.tasks[1].taskId)).toBeNull()
+
+    // Dispatch the frontier; its e2e agent runs to idle → the task completes.
+    const sessionId = call('planner:dispatch')(undefined, planId, created.tasks[0].taskId)
+    expect(typeof sessionId).toBe('string')
+    await vi.waitFor(() =>
+      expect(store.list().some((event) => event.type === 'plan.task.completed')).toBe(true),
+    )
+    // Scaffold done → Implement is on the frontier now. Let its agent run to
+    // completion too, so nothing is still appending when the store closes.
+    expect(typeof call('planner:dispatch')(undefined, planId, created.tasks[1].taskId)).toBe(
+      'string',
+    )
+    await vi.waitFor(() =>
+      expect(store.list().filter((event) => event.type === 'plan.task.completed')).toHaveLength(2),
+    )
     store.close()
   })
 
