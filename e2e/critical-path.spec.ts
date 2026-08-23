@@ -508,3 +508,36 @@ test('planning a requirement builds a task tree whose frontier advances as agent
     await app.close()
   }
 })
+
+test('the plan canvas opens from the plan title and edits dependency edges', async () => {
+  const { app, page } = await launchApp()
+  try {
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Wire up billing')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+    await expect(planner.getByLabel('Scaffold — ready')).toBeVisible()
+
+    // Clicking the plan title selects the plan → the inspector follows onto
+    // the Plan tab and the canvas draws the scripted chain.
+    await planner.getByRole('button', { name: 'Select plan Wire up billing' }).click()
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await expect(page.getByRole('tab', { name: 'Plan' })).toHaveAttribute('aria-selected', 'true')
+    await expect(canvas.getByRole('button', { name: 'Trace Verify' })).toBeVisible()
+    await expect(
+      canvas.getByRole('button', { name: 'Remove dependency Implement → Verify' }),
+    ).toBeVisible()
+
+    // Draw an edge: Verify now also waits on Scaffold directly.
+    await canvas.getByRole('button', { name: 'Link from Scaffold' }).click()
+    await canvas.getByRole('button', { name: 'Make Verify depend on Scaffold' }).click()
+    await expect(
+      canvas.getByRole('button', { name: 'Remove dependency Scaffold → Verify' }),
+    ).toBeVisible()
+
+    // Erase Implement's own gate instead — it joins the ready frontier.
+    await canvas.getByRole('button', { name: 'Remove dependency Scaffold → Implement' }).click()
+    await expect(canvas.getByRole('button', { name: 'Dispatch Implement' })).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})

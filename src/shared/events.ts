@@ -160,6 +160,13 @@ export interface EventPayloads {
   'plan.task.failed': { planId: string; taskId: string; sessionId: string }
   /** The user cleared a plan; it stops tracking and drops out of the UI. */
   'plan.removed': { planId: string }
+  /** The user drew a dependency edge on the plan canvas: `taskId` now also
+   * waits on `dependsOnTaskId`. Guarded upstream (no cycles, no self, no
+   * editing an already-dispatched task), so a logged edge is always valid. */
+  'plan.edge.added': { planId: string; taskId: string; dependsOnTaskId: string }
+  /** The user removed a dependency edge — `taskId` no longer waits on
+   * `dependsOnTaskId`, which may put it on the ready frontier. */
+  'plan.edge.removed': { planId: string; taskId: string; dependsOnTaskId: string }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }

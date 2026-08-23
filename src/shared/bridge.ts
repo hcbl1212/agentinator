@@ -210,6 +210,13 @@ export interface AgentinatorBridge {
     dispatch(planId: string, taskId: string): Promise<string | null>
     /** Clear a plan from the list; it stops tracking and drops out of the UI. */
     remove(planId: string): Promise<void>
+    /** Draw a dependency edge on the canvas — `taskId` will also wait on
+     * `dependsOnTaskId`. Resolves false when refused (unknown tasks, self,
+     * duplicate, a dispatched task, or a cycle). */
+    addEdge(planId: string, taskId: string, dependsOnTaskId: string): Promise<boolean>
+    /** Erase a dependency edge, which may put the task on the ready frontier.
+     * Resolves false when refused (no such edge, or a dispatched task). */
+    removeEdge(planId: string, taskId: string, dependsOnTaskId: string): Promise<boolean>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

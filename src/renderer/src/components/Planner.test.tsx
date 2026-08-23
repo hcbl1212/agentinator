@@ -257,6 +257,28 @@ describe('Planner', () => {
     expect(screen.queryByRole('button', { name: 'Dispatch Verify' })).not.toBeInTheDocument()
   })
 
+  it('selects the plan itself from its title (opening the canvas via focus-follows)', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    let selection: unknown
+    function Probe(): null {
+      selection = useSelection().selection
+      return null
+    }
+    render(
+      <SelectionProvider>
+        <PlanProvider>
+          <Probe />
+          <Planner />
+        </PlanProvider>
+      </SelectionProvider>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select plan Settings page' }))
+
+    expect(selection).toEqual({ kind: 'plan', id: 'pl1' })
+  })
+
   it('selects a launched task’s agent on click', () => {
     const s = stub()
     window.agentinator = s.bridge

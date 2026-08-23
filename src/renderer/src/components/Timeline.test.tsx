@@ -124,6 +124,8 @@ function stubBridge(
         create: vi.fn(() => Promise.resolve('plan_1')),
         dispatch: vi.fn(() => Promise.resolve(null)),
         remove: vi.fn(() => Promise.resolve()),
+        addEdge: vi.fn(() => Promise.resolve(true)),
+        removeEdge: vi.fn(() => Promise.resolve(true)),
       },
       checkpoints: {
         create: vi.fn(() => Promise.resolve('checkpoint_1')),

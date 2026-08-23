@@ -17,6 +17,12 @@ interface PlanState {
   tasks: PlanTaskSpec[]
 }
 
+/** A private deep copy of a task list, so edge edits mutate orchestrator state
+ * without reaching back into logged event payloads. */
+function copyTasks(tasks: PlanTaskSpec[]): PlanTaskSpec[] {
+  return tasks.map((task) => ({ ...task, dependsOn: [...task.dependsOn] }))
+}
+
 /**
  * Runs plans: a requirement decomposed into a task DAG, dispatched task by task
  * as the user fires the ready frontier. {@link dispatch} launches one ready
@@ -61,9 +67,69 @@ export class PlanOrchestrator {
       prompt: task.prompt,
       dependsOn: task.dependsOn.map((dep) => ids[dep]),
     }))
-    this.#plans.set(planId, { requirement, tasks })
+    this.#plans.set(planId, { requirement, tasks: copyTasks(tasks) })
     this.#emit('plan.created', { planId, title, requirement, tasks })
     return planId
+  }
+
+  /** Draw a dependency edge: `taskId` will also wait on `dependsOnTaskId`.
+   * Refused (false) when either task is unknown, the edge is a self-loop or
+   * already present, the dependent task has already been dispatched (its agent
+   * launched under the old graph), or the edge would close a cycle. */
+  addEdge(planId: string, taskId: string, dependsOnTaskId: string): boolean {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    const dependency = plan?.tasks.find((candidate) => candidate.taskId === dependsOnTaskId)
+    if (plan === undefined || task === undefined || dependency === undefined) {
+      return false
+    }
+    if (taskId === dependsOnTaskId || task.dependsOn.includes(dependsOnTaskId)) {
+      return false
+    }
+    if (this.#dispatched.has(`${planId}:${taskId}`)) {
+      return false
+    }
+    // A cycle would exist iff taskId is already upstream of dependsOnTaskId —
+    // walk the dependency's ancestors before accepting.
+    if (this.#upstreamOf(plan, dependsOnTaskId).has(taskId)) {
+      return false
+    }
+    task.dependsOn.push(dependsOnTaskId)
+    this.#emit('plan.edge.added', { planId, taskId, dependsOnTaskId })
+    return true
+  }
+
+  /** Erase a dependency edge, which may put `taskId` on the ready frontier.
+   * Refused (false) when the edge doesn't exist or the dependent task has
+   * already been dispatched (nothing left for the edge to gate). */
+  removeEdge(planId: string, taskId: string, dependsOnTaskId: string): boolean {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined || !task.dependsOn.includes(dependsOnTaskId)) {
+      return false
+    }
+    if (this.#dispatched.has(`${planId}:${taskId}`)) {
+      return false
+    }
+    task.dependsOn = task.dependsOn.filter((dep) => dep !== dependsOnTaskId)
+    this.#emit('plan.edge.removed', { planId, taskId, dependsOnTaskId })
+    return true
+  }
+
+  /** Every task upstream of `taskId` (its transitive dependencies). */
+  #upstreamOf(plan: PlanState, taskId: string): Set<string> {
+    const seen = new Set<string>()
+    const walk = (id: string): void => {
+      const task = plan.tasks.find((candidate) => candidate.taskId === id)
+      for (const dep of task?.dependsOn ?? []) {
+        if (!seen.has(dep)) {
+          seen.add(dep)
+          walk(dep)
+        }
+      }
+    }
+    walk(taskId)
+    return seen
   }
 
   /** Launch a ready task as an agent, returning the new session id — or null
@@ -106,7 +172,22 @@ export class PlanOrchestrator {
     for (const event of events) {
       if (event.type === 'plan.created') {
         const payload = event.payload as EventPayloads['plan.created']
-        this.#plans.set(payload.planId, { requirement: payload.requirement, tasks: payload.tasks })
+        this.#plans.set(payload.planId, {
+          requirement: payload.requirement,
+          tasks: copyTasks(payload.tasks),
+        })
+      } else if (event.type === 'plan.edge.added') {
+        const { planId, taskId, dependsOnTaskId } =
+          event.payload as EventPayloads['plan.edge.added']
+        const task = this.#plans.get(planId)?.tasks.find((t) => t.taskId === taskId)
+        task?.dependsOn.push(dependsOnTaskId)
+      } else if (event.type === 'plan.edge.removed') {
+        const { planId, taskId, dependsOnTaskId } =
+          event.payload as EventPayloads['plan.edge.removed']
+        const task = this.#plans.get(planId)?.tasks.find((t) => t.taskId === taskId)
+        if (task !== undefined) {
+          task.dependsOn = task.dependsOn.filter((dep) => dep !== dependsOnTaskId)
+        }
       } else if (event.type === 'plan.removed') {
         this.#plans.delete((event.payload as EventPayloads['plan.removed']).planId)
       } else if (event.type === 'plan.task.dispatched') {

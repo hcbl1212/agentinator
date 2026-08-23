@@ -1009,11 +1009,13 @@ describe('registerPlannerIpc', () => {
     const create = vi.fn(() => 'plan_7')
     const dispatch = vi.fn(() => 'session_3')
     const remove = vi.fn()
+    const addEdge = vi.fn(() => true)
+    const removeEdge = vi.fn(() => true)
     const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerPlannerIpc(
-      { create, dispatch, remove } as unknown as PlanOrchestrator,
+      { create, dispatch, remove, addEdge, removeEdge } as unknown as PlanOrchestrator,
       decompose,
       (channel, listener) => handlers.set(channel, listener),
     )
@@ -1031,13 +1033,26 @@ describe('registerPlannerIpc', () => {
 
     handlers.get('planner:remove')?.(undefined, 'plan_7')
     expect(remove).toHaveBeenCalledWith('plan_7')
+
+    expect(handlers.get('planner:add-edge')?.(undefined, 'plan_7', 'task_2', 'task_1')).toBe(true)
+    expect(addEdge).toHaveBeenCalledWith('plan_7', 'task_2', 'task_1')
+    expect(handlers.get('planner:remove-edge')?.(undefined, 'plan_7', 'task_2', 'task_1')).toBe(
+      true,
+    )
+    expect(removeEdge).toHaveBeenCalledWith('plan_7', 'task_2', 'task_1')
   })
 
   it('registers on ipcMain by default', () => {
     registerPlannerIpc({ create: vi.fn() } as unknown as PlanOrchestrator, vi.fn())
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
-    expect(channels).toEqual(['planner:create', 'planner:dispatch', 'planner:remove'])
+    expect(channels).toEqual([
+      'planner:create',
+      'planner:dispatch',
+      'planner:remove',
+      'planner:add-edge',
+      'planner:remove-edge',
+    ])
   })
 })
 

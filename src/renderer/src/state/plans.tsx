@@ -78,6 +78,37 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
       const { planId, taskId } = event.payload as EventPayloads['plan.task.failed']
       return patchTask(plans, planId, taskId, { status: 'failed' })
     }
+    case 'plan.edge.added': {
+      const { planId, taskId, dependsOnTaskId } = event.payload as EventPayloads['plan.edge.added']
+      return plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              tasks: plan.tasks.map((task) =>
+                task.id === taskId && !task.dependsOn.includes(dependsOnTaskId)
+                  ? { ...task, dependsOn: [...task.dependsOn, dependsOnTaskId] }
+                  : task,
+              ),
+            }
+          : plan,
+      )
+    }
+    case 'plan.edge.removed': {
+      const { planId, taskId, dependsOnTaskId } =
+        event.payload as EventPayloads['plan.edge.removed']
+      return plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              tasks: plan.tasks.map((task) =>
+                task.id === taskId
+                  ? { ...task, dependsOn: task.dependsOn.filter((d) => d !== dependsOnTaskId) }
+                  : task,
+              ),
+            }
+          : plan,
+      )
+    }
     case 'plan.removed': {
       const { planId } = event.payload as EventPayloads['plan.removed']
       return plans.filter((plan) => plan.id !== planId)

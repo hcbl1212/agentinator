@@ -180,6 +180,151 @@ describe('PlanOrchestrator', () => {
     expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBeNull()
   })
 
+  it('adds a dependency edge that the dispatch guard then honours', () => {
+    const h = harness()
+    const planId = h.orchestrator.create('Wide', 'two independent tasks', [
+      { title: 'X', prompt: 'x', dependsOn: [] },
+      { title: 'Y', prompt: 'y', dependsOn: [] },
+    ])
+    const tasks = (
+      h.log.find((event) => event.type === 'plan.created')?.payload as EventPayloads['plan.created']
+    ).tasks
+
+    expect(h.orchestrator.addEdge(planId, tasks[1].taskId, tasks[0].taskId)).toBe(true)
+    expect(h.emit).toHaveBeenCalledWith('plan.edge.added', {
+      planId,
+      taskId: tasks[1].taskId,
+      dependsOnTaskId: tasks[0].taskId,
+    })
+    // Y now waits on X — no longer dispatchable until X completes.
+    expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBeNull()
+  })
+
+  it('refuses edges that are unknown, self-loops, duplicates, cycles, or too late', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.addEdge('plan_ghost', tasks[1].taskId, tasks[0].taskId)).toBe(false)
+    expect(h.orchestrator.addEdge(planId, 'task_ghost', tasks[0].taskId)).toBe(false)
+    expect(h.orchestrator.addEdge(planId, tasks[1].taskId, 'task_ghost')).toBe(false)
+    expect(h.orchestrator.addEdge(planId, tasks[0].taskId, tasks[0].taskId)).toBe(false)
+    // B already waits on A.
+    expect(h.orchestrator.addEdge(planId, tasks[1].taskId, tasks[0].taskId)).toBe(false)
+    // C waits on B (transitively on A) — A waiting on C would close a cycle.
+    expect(h.orchestrator.addEdge(planId, tasks[0].taskId, tasks[2].taskId)).toBe(false)
+    // A dispatched task's graph is history — its edges can't change.
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(h.orchestrator.addEdge(planId, tasks[0].taskId, tasks[1].taskId)).toBe(false)
+    expect(h.types()).not.toContain('plan.edge.added')
+  })
+
+  it('removes an edge, putting the freed task on the frontier', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    // B waits on A; erase that edge and B is immediately dispatchable.
+    expect(h.orchestrator.removeEdge(planId, tasks[1].taskId, tasks[0].taskId)).toBe(true)
+    expect(h.emit).toHaveBeenCalledWith('plan.edge.removed', {
+      planId,
+      taskId: tasks[1].taskId,
+      dependsOnTaskId: tasks[0].taskId,
+    })
+    expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBe('sess0')
+  })
+
+  it('refuses removing an edge that does not exist or gates a dispatched task', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.removeEdge('plan_ghost', tasks[1].taskId, tasks[0].taskId)).toBe(false)
+    expect(h.orchestrator.removeEdge(planId, tasks[1].taskId, tasks[2].taskId)).toBe(false)
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    h.idled('sess0')
+    h.orchestrator.dispatch(planId, tasks[1].taskId)
+    expect(h.orchestrator.removeEdge(planId, tasks[1].taskId, tasks[0].taskId)).toBe(false)
+    expect(h.types()).not.toContain('plan.edge.removed')
+  })
+
+  it('does not let an edge edit mutate the logged plan.created payload', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    h.orchestrator.removeEdge(planId, tasks[1].taskId, tasks[0].taskId)
+
+    // The logged graph is history — the edit lives in orchestrator state (and
+    // its own edge event), not retroactively in the created payload.
+    const created = h.log.find((event) => event.type === 'plan.created')
+      ?.payload as EventPayloads['plan.created']
+    expect(created.tasks[1].dependsOn).toEqual([created.tasks[0].taskId])
+  })
+
+  it('reconciles edited edges across a restart', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    // Free B from A, and chain A onto B instead (A waits on B now).
+    first.orchestrator.removeEdge(planId, tasks[1].taskId, tasks[0].taskId)
+    first.orchestrator.addEdge(planId, tasks[0].taskId, tasks[1].taskId)
+
+    const second = harness()
+    second.orchestrator.reconcile(first.log)
+
+    // The edited graph survived: B is free, A now waits on B.
+    expect(second.orchestrator.dispatch(planId, tasks[0].taskId)).toBeNull()
+    expect(second.orchestrator.dispatch(planId, tasks[1].taskId)).toBe('sess0')
+  })
+
+  it('reconciles edge events for a forgotten plan as no-ops', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    first.orchestrator.remove(planId)
+    // Hand-build edge events that replay AFTER the removal — the plan is
+    // forgotten, so they must fall through without crashing.
+    const log: StoredEvent[] = [
+      ...first.log,
+      {
+        seq: 98,
+        ts: 't',
+        type: 'plan.edge.added',
+        payload: { planId, taskId: tasks[1].taskId, dependsOnTaskId: tasks[0].taskId },
+      },
+      {
+        seq: 99,
+        ts: 't',
+        type: 'plan.edge.removed',
+        payload: { planId, taskId: tasks[1].taskId, dependsOnTaskId: tasks[0].taskId },
+      },
+    ]
+
+    const second = harness()
+    second.orchestrator.reconcile(log)
+
+    expect(second.orchestrator.dispatch(planId, tasks[0].taskId)).toBeNull()
+  })
+
+  it('walks safely past a dependency the plan does not carry (hand-built log)', () => {
+    const h = harness()
+    h.orchestrator.reconcile([
+      {
+        seq: 1,
+        ts: 't',
+        type: 'plan.created',
+        payload: {
+          planId: 'plan_g',
+          title: 'G',
+          requirement: 'r',
+          tasks: [
+            { taskId: 'task_x', title: 'X', prompt: 'x', dependsOn: [] },
+            { taskId: 'task_y', title: 'Y', prompt: 'y', dependsOn: ['task_ghost'] },
+          ],
+        },
+      },
+    ])
+
+    // The cycle walk crosses the ghost dependency without exploding, so the
+    // (acyclic) edge still lands.
+    expect(h.orchestrator.addEdge('plan_g', 'task_x', 'task_y')).toBe(true)
+  })
+
   it('reconciles a plan from the log across a restart, keeping its guards', () => {
     const first = harness()
     const { planId, tasks } = first.createChain()

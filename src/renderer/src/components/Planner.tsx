@@ -117,9 +117,15 @@ function PlanRow({ plan }: { plan: Plan }): React.JSX.Element {
   return (
     <li className="plan-row">
       <div className="pipeline-head">
-        <span className="pipeline-title" title={plan.requirement}>
+        <button
+          type="button"
+          className="pipeline-title plan-title-button"
+          title={`${plan.requirement} — open on the plan canvas`}
+          aria-label={`Select plan ${plan.title}`}
+          onClick={() => select({ kind: 'plan', id: plan.id })}
+        >
           {plan.title}
-        </span>
+        </button>
         <button
           type="button"
           className="queue-action"

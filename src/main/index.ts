@@ -281,6 +281,12 @@ export function registerPlannerIpc(
   handle('planner:remove', (_event, planId) => {
     plans.remove(planId as string)
   })
+  handle('planner:add-edge', (_event, planId, taskId, dependsOnTaskId) =>
+    plans.addEdge(planId as string, taskId as string, dependsOnTaskId as string),
+  )
+  handle('planner:remove-edge', (_event, planId, taskId, dependsOnTaskId) =>
+    plans.removeEdge(planId as string, taskId as string, dependsOnTaskId as string),
+  )
 }
 
 /** The provider a "Run task" (and a dispatched queue item) uses. Swapping this
