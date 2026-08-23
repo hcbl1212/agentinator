@@ -293,6 +293,7 @@ describe('preload bridge', () => {
     await bridge.planner.addEdge('plan_1', 'task_2', 'task_1')
     await bridge.planner.removeEdge('plan_1', 'task_2', 'task_1')
     await bridge.planner.retype('plan_1', 'task_2', 'at_rev')
+    await bridge.planner.note('plan_1', 'task_2', 'a thought')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:create', 'add a settings page')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:dispatch', 'plan_1', 'task_1')
@@ -314,6 +315,12 @@ describe('preload bridge', () => {
       'plan_1',
       'task_2',
       'at_rev',
+    )
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'planner:note',
+      'plan_1',
+      'task_2',
+      'a thought',
     )
   })
 

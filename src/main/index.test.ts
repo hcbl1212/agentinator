@@ -1012,12 +1012,21 @@ describe('registerPlannerIpc', () => {
     const addEdge = vi.fn(() => true)
     const removeEdge = vi.fn(() => true)
     const retype = vi.fn(() => true)
+    const note = vi.fn(() => true)
     const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
     const savedTypes = [{ id: 'at_rev', name: 'Reviewer', instructions: '' }]
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerPlannerIpc(
-      { create, dispatch, remove, addEdge, removeEdge, retype } as unknown as PlanOrchestrator,
+      {
+        create,
+        dispatch,
+        remove,
+        addEdge,
+        removeEdge,
+        retype,
+        note,
+      } as unknown as PlanOrchestrator,
       decompose,
       () => savedTypes,
       (channel, listener) => handlers.set(channel, listener),
@@ -1049,6 +1058,9 @@ describe('registerPlannerIpc', () => {
     expect(retype).toHaveBeenCalledWith('plan_7', 'task_2', 'at_rev')
     handlers.get('planner:retype')?.(undefined, 'plan_7', 'task_2', null)
     expect(retype).toHaveBeenCalledWith('plan_7', 'task_2', null)
+
+    expect(handlers.get('planner:note')?.(undefined, 'plan_7', 'task_2', 'tighten it')).toBe(true)
+    expect(note).toHaveBeenCalledWith('plan_7', 'task_2', 'tighten it')
   })
 
   it('registers on ipcMain by default', () => {
@@ -1060,6 +1072,7 @@ describe('registerPlannerIpc', () => {
       'planner:dispatch',
       'planner:remove',
       'planner:retype',
+      'planner:note',
       'planner:add-edge',
       'planner:remove-edge',
     ])
@@ -1665,6 +1678,23 @@ describe('bootstrap', () => {
     )
     await vi.waitFor(() =>
       expect(store.list().filter((event) => event.type === 'plan.task.completed')).toHaveLength(2),
+    )
+
+    // A note on the dispatched (idle) task steers into its live session: the
+    // message lands in the conversation and the e2e agent echoes it back.
+    expect(call('planner:note')(undefined, planId, created.tasks[0].taskId, 'and add docs')).toBe(
+      true,
+    )
+    await vi.waitFor(() =>
+      expect(
+        store
+          .list()
+          .some(
+            (event) =>
+              event.type === 'agent.text' &&
+              (event.payload as { text: string }).text.includes('and add docs'),
+          ),
+      ).toBe(true),
     )
     store.close()
   })

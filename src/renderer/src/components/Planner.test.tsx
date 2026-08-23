@@ -70,8 +70,10 @@ describe('taskDepth', () => {
   const view = (id: string, dependsOn: string[]): PlanTaskView => ({
     id,
     title: id,
+    prompt: `do ${id}`,
     dependsOn,
     status: 'pending',
+    notes: [],
   })
 
   it('is the longest dependency chain below the task', () => {

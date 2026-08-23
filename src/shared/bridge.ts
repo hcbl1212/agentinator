@@ -221,6 +221,10 @@ export interface AgentinatorBridge {
      * default agent). Resolves false when refused (unknown task, or its agent
      * already launched). */
     retype(planId: string, taskId: string, agentTypeId: string | null): Promise<boolean>
+    /** Comment on a task. The note accumulates on it — appended to the agent's
+     * prompt at dispatch, or steered into the live session when the task is
+     * already running. Resolves false when refused (unknown task or blank). */
+    note(planId: string, taskId: string, note: string): Promise<boolean>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

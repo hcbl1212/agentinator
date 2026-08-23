@@ -9,12 +9,16 @@ import type { EventPayloads, StoredEvent } from '../../../shared/events'
 export interface PlanTaskView {
   id: string
   title: string
+  /** The full brief the dispatched agent will run with. */
+  prompt: string
   dependsOn: string[]
   status: 'pending' | 'running' | 'done' | 'failed'
   sessionId?: string
   /** The agent-type preset this task will dispatch under (undefined = the
    * default agent). Editable until dispatch. */
   agentTypeId?: string
+  /** The user's accumulated comments on this task, oldest first. */
+  notes: string[]
 }
 
 /** A plan reduced from the log: its requirement and task graph. */
@@ -63,8 +67,10 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
               tasks: payload.tasks.map((task) => ({
                 id: task.taskId,
                 title: task.title,
+                prompt: task.prompt,
                 dependsOn: task.dependsOn,
                 status: 'pending',
+                notes: [],
                 ...(task.agentTypeId === undefined ? {} : { agentTypeId: task.agentTypeId }),
               })),
             },
@@ -130,6 +136,19 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
                 }
                 return { ...task, agentTypeId }
               }),
+            }
+          : plan,
+      )
+    }
+    case 'plan.task.noted': {
+      const { planId, taskId, note } = event.payload as EventPayloads['plan.task.noted']
+      return plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              tasks: plan.tasks.map((task) =>
+                task.id === taskId ? { ...task, notes: [...task.notes, note] } : task,
+              ),
             }
           : plan,
       )

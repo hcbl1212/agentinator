@@ -575,3 +575,32 @@ test('a plan task carries an agent type: suggested, editable, frozen at dispatch
     await app.close()
   }
 })
+
+test('clicking a task opens its brief, and comments ride the dispatch into the agent', async () => {
+  const { app, page } = await launchApp()
+  try {
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Ship dark mode')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+
+    // Click a node → its detail card shows the exact brief the agent will run.
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await canvas.getByRole('button', { name: 'Trace Scaffold' }).click()
+    const detail = page.getByRole('region', { name: 'Task details: Scaffold' })
+    await expect(detail).toContainText('Set up the groundwork for: Ship dark mode')
+
+    // Comment on it — the note lands on the card via the event log…
+    await detail.getByRole('textbox', { name: 'Note for Scaffold' }).fill('please add storybook')
+    await detail.getByRole('button', { name: 'Add note' }).click()
+    await expect(detail.getByRole('list', { name: 'Notes on Scaffold' })).toContainText(
+      'please add storybook',
+    )
+
+    // …and rides the prompt at dispatch: the agent's opening message carries it.
+    await canvas.getByRole('button', { name: 'Dispatch Scaffold' }).click()
+    const stream = page.getByRole('region', { name: 'Conversation' })
+    await expect(stream.getByText(/please add storybook/)).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})

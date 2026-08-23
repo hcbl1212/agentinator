@@ -75,13 +75,16 @@ const CANVAS_MARK: Record<
 }
 
 /**
- * The editable DAG canvas (the Inspector's Plan tab): the selected plan's task
- * graph as nodes in dependency-depth columns with curved edges. Click a node to
- * trace its chain — everything upstream and downstream stays lit, the rest
- * dims. "Link" arms a node as a dependency source; clicking another node then
- * draws the edge (the new task waits on the source), and ✕ on an edge erases
- * it — both guarded upstream (no cycles, no editing dispatched tasks). Ready
- * nodes dispatch straight from the canvas.
+ * The editable DAG canvas (the stream's idle slot): the selected plan's task
+ * graph as nodes in dependency-depth columns with curved edges. Click a node
+ * to inspect it — its chain stays lit while the rest dims, and a detail card
+ * opens beneath the graph with the task's full brief (the prompt its agent
+ * will run with) and a comment box: notes accumulate on the task, ride the
+ * prompt at dispatch, and steer straight into the agent when it's already
+ * running. "Link" arms a node as a dependency source; clicking another node
+ * then draws the edge, and ✕ on an edge erases it — both guarded upstream (no
+ * cycles, no editing dispatched tasks). Ready nodes dispatch straight from
+ * the canvas.
  */
 export function PlanCanvas(): React.JSX.Element {
   const { plans } = usePlans()
@@ -107,6 +110,7 @@ export function PlanCanvas(): React.JSX.Element {
   const boxes = new Map(nodes.map((node) => [node.task.id, node]))
   const doneIds = new Set(plan.tasks.filter((task) => task.status === 'done').map((t) => t.id))
   const chain = traced === null ? null : chainOf(traced, plan.tasks)
+  const inspected = traced === null ? undefined : plan.tasks.find((task) => task.id === traced)
   const linkSource = linkFrom === null ? undefined : boxes.get(linkFrom)?.task
   const width = Math.max(...nodes.map((node) => node.x)) + NODE_W + PAD
   const height = Math.max(...nodes.map((node) => node.y)) + NODE_H + PAD
@@ -284,6 +288,90 @@ export function PlanCanvas(): React.JSX.Element {
           })}
         </div>
       </div>
+      {inspected !== undefined && (
+        <TaskDetail key={inspected.id} plan={plan} task={inspected} types={types} />
+      )}
+    </section>
+  )
+}
+
+/** The inspected task's card: its full brief (the prompt its agent runs
+ * with), dependencies, role, accumulated notes, and the comment box. Keyed by
+ * task so switching nodes resets the draft note. */
+function TaskDetail({
+  plan,
+  task,
+  types,
+}: {
+  plan: Plan
+  task: PlanTaskView
+  types: { id: string; name: string }[]
+}): React.JSX.Element {
+  const [note, setNote] = useState('')
+  const byId = new Map(plan.tasks.map((t) => [t.id, t]))
+  const blockers = task.dependsOn
+    .map((dep) => byId.get(dep)?.title)
+    .filter((title): title is string => title !== undefined)
+  // The same state language as the nodes: pending splits into ready/blocked.
+  const ready = task.dependsOn.every((dep) => byId.get(dep)?.status === 'done')
+  const shown = task.status === 'pending' ? (ready ? 'ready' : 'blocked') : task.status
+  const typeName =
+    task.agentTypeId === undefined
+      ? 'Default agent'
+      : (types.find((type) => type.id === task.agentTypeId)?.name ?? task.agentTypeId)
+
+  const add = (): void => {
+    const trimmed = note.trim()
+    if (trimmed === '') {
+      return
+    }
+    void window.agentinator?.planner.note(plan.id, task.id, trimmed)
+    setNote('')
+  }
+
+  return (
+    <section className="plan-task-detail" aria-label={`Task details: ${task.title}`}>
+      <div className="plan-task-detail-head">
+        <span className="pipeline-title" title={task.title}>
+          {task.title}
+        </span>
+        <span className="plan-task-detail-meta">
+          {shown} · {typeName}
+          {blockers.length === 0 ? '' : ` · after ${blockers.join(', ')}`}
+        </span>
+      </div>
+      <pre className="plan-task-detail-prompt">{task.prompt}</pre>
+      {task.notes.length > 0 && (
+        <ul className="plan-task-notes" aria-label={`Notes on ${task.title}`}>
+          {task.notes.map((text, index) => (
+            <li key={index} className="plan-task-note">
+              {text}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="plan-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          add()
+        }}
+      >
+        <input
+          className="plan-form-input"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder={
+            task.status === 'running'
+              ? 'Comment — goes straight to the running agent…'
+              : 'Comment — rides the prompt when this task dispatches…'
+          }
+          aria-label={`Note for ${task.title}`}
+        />
+        <button type="submit" className="plan-form-send">
+          Add note
+        </button>
+      </form>
     </section>
   )
 }

@@ -26,18 +26,21 @@ function stub(
   addEdge: ReturnType<typeof vi.fn>
   removeEdge: ReturnType<typeof vi.fn>
   retype: ReturnType<typeof vi.fn>
+  note: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const dispatch = vi.fn(() => Promise.resolve('sess_new'))
   const addEdge = vi.fn(() => Promise.resolve(true))
   const removeEdge = vi.fn(() => Promise.resolve(true))
   const retype = vi.fn(() => Promise.resolve(true))
+  const note = vi.fn(() => Promise.resolve(true))
   return {
     emit: (event) => appended(event),
     dispatch,
     addEdge,
     removeEdge,
     retype,
+    note,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -47,7 +50,7 @@ function stub(
         }),
       },
       agentTypes: { list: vi.fn(() => Promise.resolve(types)) },
-      planner: { create: vi.fn(), dispatch, remove: vi.fn(), addEdge, removeEdge, retype },
+      planner: { create: vi.fn(), dispatch, remove: vi.fn(), addEdge, removeEdge, retype, note },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -57,10 +60,10 @@ function event<T extends EventType>(type: T, payload: EventPayloads[T]): StoredE
 }
 
 const TASKS: PlanTaskSpec[] = [
-  { taskId: 'ta', title: 'Scaffold', prompt: 'a', dependsOn: [] },
-  { taskId: 'tb', title: 'Implement', prompt: 'b', dependsOn: ['ta'] },
-  { taskId: 'tc', title: 'Verify', prompt: 'c', dependsOn: ['tb'] },
-  { taskId: 'td', title: 'Docs', prompt: 'd', dependsOn: [] },
+  { taskId: 'ta', title: 'Scaffold', prompt: 'brief: scaffold it', dependsOn: [] },
+  { taskId: 'tb', title: 'Implement', prompt: 'brief: implement it', dependsOn: ['ta'] },
+  { taskId: 'tc', title: 'Verify', prompt: 'brief: verify it', dependsOn: ['tb'] },
+  { taskId: 'td', title: 'Docs', prompt: 'brief: document it', dependsOn: [] },
 ]
 
 function created(planId: string, title = 'Settings page'): StoredEvent {
@@ -87,8 +90,10 @@ afterEach(() => {
 const view = (id: string, dependsOn: string[]): PlanTaskView => ({
   id,
   title: id,
+  prompt: `do ${id}`,
   dependsOn,
   status: 'pending',
+  notes: [],
 })
 
 describe('layoutNodes', () => {
@@ -321,6 +326,12 @@ describe('PlanCanvas', () => {
 
     expect(await screen.findByRole('button', { name: 'Trace X' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove dependency/ })).not.toBeInTheDocument()
+
+    // Its detail treats the ghost dependency as never-met: blocked, no name.
+    fireEvent.click(screen.getByRole('button', { name: 'Trace X' }))
+    expect(screen.getByRole('region', { name: 'Task details: X' })).toHaveTextContent(
+      'blocked · Default agent',
+    )
   })
 
   it('scopes edge events to their plan and ignores a duplicate edge', () => {
@@ -336,8 +347,9 @@ describe('PlanCanvas', () => {
       // Aimed at pl1 only — pl2 (the shown, newest plan) must keep its edge.
       s.emit(event('plan.edge.removed', { planId: 'pl1', taskId: 'tb', dependsOnTaskId: 'ta' }))
       s.emit(event('plan.edge.added', { planId: 'pl1', taskId: 'td', dependsOnTaskId: 'tc' }))
-      // Same for a retype: pl2's Implement stays on the default role.
+      // Same for a retype and a note: pl2's Implement stays untouched.
       s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tb', agentTypeId: 'at_rev' }))
+      s.emit(event('plan.task.noted', { planId: 'pl1', taskId: 'tb', note: 'pl1 only' }))
     })
 
     // The canvas shows pl2 (newest): its Scaffold→Implement edge survived the
@@ -349,6 +361,64 @@ describe('PlanCanvas', () => {
       screen.queryByRole('button', { name: 'Remove dependency Verify → Docs' }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Agent type for Implement' })).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Implement' }))
+    expect(screen.queryByRole('list', { name: 'Notes on Implement' })).not.toBeInTheDocument()
+  })
+
+  it('opens a task’s detail card on click: full brief, meta, and comments', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    renderCanvas()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace Implement' }))
+
+    // The card shows the exact brief the agent will run with, plus its meta.
+    const detail = screen.getByRole('region', { name: 'Task details: Implement' })
+    expect(detail).toHaveTextContent('brief: implement it') // the prompt, verbatim
+    expect(detail).toHaveTextContent('blocked · Default agent · after Scaffold')
+
+    // A comment routes through the bridge and the draft clears; the log's
+    // answer renders it on the card.
+    const input = screen.getByRole('textbox', { name: 'Note for Implement' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
+    expect(s.note).not.toHaveBeenCalled() // blank drafts don't send
+    fireEvent.change(input, { target: { value: 'use zustand' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
+    expect(s.note).toHaveBeenCalledWith('pl1', 'tb', 'use zustand')
+    expect(input).toHaveValue('')
+    act(() => {
+      s.emit(event('plan.task.noted', { planId: 'pl1', taskId: 'tb', note: 'use zustand' }))
+    })
+    expect(screen.getByRole('list', { name: 'Notes on Implement' })).toHaveTextContent(
+      'use zustand',
+    )
+
+    // Clicking the node again closes the card with the trace; a root task
+    // with no unmet dependencies reads as ready.
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Implement' }))
+    expect(
+      screen.queryByRole('region', { name: 'Task details: Implement' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Docs' }))
+    expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent(
+      'ready · Default agent',
+    )
+  })
+
+  it('tells you a comment on a running task goes straight to its agent', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    renderCanvas()
+    await screen.findByText('Settings page')
+
+    act(() => {
+      s.emit(event('plan.task.dispatched', { planId: 'pl1', taskId: 'ta', sessionId: 's0' }))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+
+    expect(
+      screen.getByPlaceholderText('Comment — goes straight to the running agent…'),
+    ).toBeInTheDocument()
   })
 
   it('offers a role picker on undispatched nodes and retypes through it', async () => {
@@ -415,6 +485,16 @@ describe('PlanCanvas', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByTitle('Ran as Reviewer')).toBeInTheDocument()
     expect(screen.getByTitle('Ran as at_gone')).toBeInTheDocument()
+
+    // The detail card shows the same role facts (raw id when the type is gone).
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.getByRole('region', { name: 'Task details: Scaffold' })).toHaveTextContent(
+      'running · Reviewer',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Docs' }))
+    expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent(
+      'running · at_gone',
+    )
   })
 
   it('shows node status from the log (running, done, failed)', async () => {

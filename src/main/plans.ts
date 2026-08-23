@@ -7,6 +7,12 @@ import type { DecomposedTask } from './planDecomposer'
  * agent sees the larger goal its task serves. */
 export const PLAN_CONTEXT_HEADER = '--- The requirement this task belongs to ---'
 
+/** Prefixes the user's accumulated notes when a task dispatches with them. */
+export const PLAN_NOTES_HEADER = '--- Notes from the user on this task ---'
+
+/** Prefixes a note steered into a task's already-running agent. */
+export const PLAN_STEER_HEADER = '--- A note from the user on your task ---'
+
 /** What the orchestrator needs from the event store: a session's events, which
  * carry its `plan.task.dispatched` (so a finished session maps back to its
  * task) and any earlier resolution (the idempotency check). */
@@ -44,16 +50,26 @@ export class PlanOrchestrator {
   readonly #dispatched = new Set<string>()
   /** `${planId}:${taskId}` for every completed task — the dependency check. */
   readonly #completed = new Set<string>()
+  /** Accumulated user notes per task — appended to the prompt at dispatch. */
+  readonly #notes = new Map<string, string[]>()
+  /** The session running each dispatched task, so a later note can be steered
+   * into the live agent. */
+  readonly #sessions = new Map<string, string>()
+  readonly #steer: (sessionId: string, text: string) => void
 
   constructor(options: {
     emit: EmitStored
     store: PlanReader
     /** Launch a task's agent, under an agent-type preset when one is set. */
     startTask: (prompt: string, agentTypeId?: string) => string
+    /** Send a message into a task's already-running session (a note arriving
+     * after dispatch). */
+    steer: (sessionId: string, text: string) => void
   }) {
     this.#emit = options.emit
     this.#store = options.store
     this.#startTask = options.startTask
+    this.#steer = options.steer
   }
 
   /** Record a decomposed requirement as a plan: mint stable task ids, map the
@@ -151,13 +167,40 @@ export class PlanOrchestrator {
     if (!task.dependsOn.every((dep) => this.#completed.has(`${planId}:${dep}`))) {
       return null
     }
-    const sessionId = this.#startTask(
-      `${task.prompt}\n\n${PLAN_CONTEXT_HEADER}\n${plan.requirement}`,
-      task.agentTypeId,
-    )
+    const notes = this.#notes.get(key) ?? []
+    const parts = [task.prompt]
+    if (notes.length > 0) {
+      parts.push(`${PLAN_NOTES_HEADER}\n${notes.join('\n')}`)
+    }
+    parts.push(`${PLAN_CONTEXT_HEADER}\n${plan.requirement}`)
+    const sessionId = this.#startTask(parts.join('\n\n'), task.agentTypeId)
     this.#dispatched.add(key)
+    this.#sessions.set(key, sessionId)
     this.#emit('plan.task.dispatched', { planId, taskId, sessionId })
     return sessionId
+  }
+
+  /** Record a user note on a task. Before dispatch it accumulates and rides
+   * the agent's prompt; on a task already running it is ALSO steered into the
+   * live session, so the comment reaches the work either way. Refused (false)
+   * for an unknown plan/task or a blank note. */
+  note(planId: string, taskId: string, note: string): boolean {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    const trimmed = note.trim()
+    if (plan === undefined || task === undefined || trimmed === '') {
+      return false
+    }
+    const key = `${planId}:${taskId}`
+    const notes = this.#notes.get(key) ?? []
+    notes.push(trimmed)
+    this.#notes.set(key, notes)
+    const sessionId = this.#sessions.get(key)
+    if (this.#dispatched.has(key) && sessionId !== undefined) {
+      this.#steer(sessionId, `${PLAN_STEER_HEADER}\n${trimmed}`)
+    }
+    this.#emit('plan.task.noted', { planId, taskId, note: trimmed })
+    return true
   }
 
   /** Reassign which agent-type preset a task will dispatch under (null returns
@@ -224,9 +267,16 @@ export class PlanOrchestrator {
         }
       } else if (event.type === 'plan.removed') {
         this.#plans.delete((event.payload as EventPayloads['plan.removed']).planId)
+      } else if (event.type === 'plan.task.noted') {
+        const { planId, taskId, note } = event.payload as EventPayloads['plan.task.noted']
+        const key = `${planId}:${taskId}`
+        const notes = this.#notes.get(key) ?? []
+        notes.push(note)
+        this.#notes.set(key, notes)
       } else if (event.type === 'plan.task.dispatched') {
-        const { planId, taskId } = event.payload as EventPayloads['plan.task.dispatched']
+        const { planId, taskId, sessionId } = event.payload as EventPayloads['plan.task.dispatched']
         this.#dispatched.add(`${planId}:${taskId}`)
+        this.#sessions.set(`${planId}:${taskId}`, sessionId)
       } else if (event.type === 'plan.task.completed') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.completed']
         this.#completed.add(`${planId}:${taskId}`)
