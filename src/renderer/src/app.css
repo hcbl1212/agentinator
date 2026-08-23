@@ -1972,6 +1972,36 @@ button.plan-task:focus-visible {
   color: var(--working);
 }
 
+/* The role picker on an undispatched node — which agent type it launches as. */
+.plan-node-type {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--soft);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 0.6rem;
+  max-width: 64px;
+  padding: 0.1rem;
+}
+
+.plan-node-type:focus-visible {
+  border-color: var(--soft);
+  outline: none;
+}
+
+/* Once dispatched, the role it ran under is a fact, not a choice. */
+.plan-node-type-badge {
+  color: var(--faint);
+  flex: none;
+  font-size: 0.6rem;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .plan-node.is-running {
   border-color: var(--working);
 }

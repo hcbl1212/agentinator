@@ -2,29 +2,42 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { AgentType } from '../../../shared/agentTypes'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { EventPayloads, EventType, PlanTaskSpec, StoredEvent } from '../../../shared/events'
+import { AgentTypesProvider } from '../state/agentTypes'
 import { PlanProvider } from '../state/plans'
 import type { PlanTaskView } from '../state/plans'
 import { SelectionProvider, useSelection } from '../state/selection'
 import { chainOf, layoutNodes, PlanCanvas } from './PlanCanvas'
 
-function stub(backfill: StoredEvent[] = []): {
+const SAVED_TYPES: AgentType[] = [
+  { id: 'at_rev', name: 'Reviewer', instructions: 'review' },
+  { id: 'at_doc', name: 'Doc writer', instructions: 'write docs' },
+]
+
+function stub(
+  backfill: StoredEvent[] = [],
+  types: AgentType[] = SAVED_TYPES,
+): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   dispatch: ReturnType<typeof vi.fn>
   addEdge: ReturnType<typeof vi.fn>
   removeEdge: ReturnType<typeof vi.fn>
+  retype: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const dispatch = vi.fn(() => Promise.resolve('sess_new'))
   const addEdge = vi.fn(() => Promise.resolve(true))
   const removeEdge = vi.fn(() => Promise.resolve(true))
+  const retype = vi.fn(() => Promise.resolve(true))
   return {
     emit: (event) => appended(event),
     dispatch,
     addEdge,
     removeEdge,
+    retype,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -33,7 +46,8 @@ function stub(backfill: StoredEvent[] = []): {
           return () => undefined
         }),
       },
-      planner: { create: vi.fn(), dispatch, remove: vi.fn(), addEdge, removeEdge },
+      agentTypes: { list: vi.fn(() => Promise.resolve(types)) },
+      planner: { create: vi.fn(), dispatch, remove: vi.fn(), addEdge, removeEdge, retype },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -53,11 +67,14 @@ function created(planId: string, title = 'Settings page'): StoredEvent {
   return event('plan.created', { planId, title, requirement: 'Add a settings page', tasks: TASKS })
 }
 
-function renderCanvas(): void {
+function renderCanvas(children?: React.ReactNode): void {
   render(
     <SelectionProvider>
       <PlanProvider>
-        <PlanCanvas />
+        <AgentTypesProvider>
+          {children}
+          <PlanCanvas />
+        </AgentTypesProvider>
       </PlanProvider>
     </SelectionProvider>,
   )
@@ -138,14 +155,7 @@ describe('PlanCanvas', () => {
         </button>
       )
     }
-    render(
-      <SelectionProvider>
-        <PlanProvider>
-          <Pick />
-          <PlanCanvas />
-        </PlanProvider>
-      </SelectionProvider>,
-    )
+    renderCanvas(<Pick />)
 
     expect(await screen.findByText('Newest')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'pick older' }))
@@ -162,14 +172,7 @@ describe('PlanCanvas', () => {
       selection = useSelection().selection
       return null
     }
-    render(
-      <SelectionProvider>
-        <PlanProvider>
-          <Probe />
-          <PlanCanvas />
-        </PlanProvider>
-      </SelectionProvider>,
-    )
+    renderCanvas(<Probe />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Dispatch Scaffold' }))
     expect(s.dispatch).toHaveBeenCalledWith('pl1', 'ta')
@@ -188,14 +191,7 @@ describe('PlanCanvas', () => {
       selection = useSelection().selection
       return null
     }
-    render(
-      <SelectionProvider>
-        <PlanProvider>
-          <Probe />
-          <PlanCanvas />
-        </PlanProvider>
-      </SelectionProvider>,
-    )
+    renderCanvas(<Probe />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Dispatch Scaffold' }))
     await act(async () => {
@@ -340,6 +336,8 @@ describe('PlanCanvas', () => {
       // Aimed at pl1 only — pl2 (the shown, newest plan) must keep its edge.
       s.emit(event('plan.edge.removed', { planId: 'pl1', taskId: 'tb', dependsOnTaskId: 'ta' }))
       s.emit(event('plan.edge.added', { planId: 'pl1', taskId: 'td', dependsOnTaskId: 'tc' }))
+      // Same for a retype: pl2's Implement stays on the default role.
+      s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tb', agentTypeId: 'at_rev' }))
     })
 
     // The canvas shows pl2 (newest): its Scaffold→Implement edge survived the
@@ -350,6 +348,73 @@ describe('PlanCanvas', () => {
     expect(
       screen.queryByRole('button', { name: 'Remove dependency Verify → Docs' }),
     ).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Agent type for Implement' })).toHaveValue('')
+  })
+
+  it('offers a role picker on undispatched nodes and retypes through it', async () => {
+    const s = stub([
+      event('plan.created', {
+        planId: 'pl1',
+        title: 'Typed',
+        requirement: 'r',
+        tasks: [
+          { taskId: 'ta', title: 'Scaffold', prompt: 'a', dependsOn: [] },
+          { taskId: 'tc', title: 'Verify', prompt: 'c', dependsOn: ['ta'], agentTypeId: 'at_rev' },
+        ],
+      }),
+    ])
+    window.agentinator = s.bridge
+    renderCanvas()
+
+    // The decomposer's suggestion pre-selects the role; the untyped task
+    // sits on Default.
+    const verifyPick = await screen.findByRole('combobox', { name: 'Agent type for Verify' })
+    expect(verifyPick).toHaveValue('at_rev')
+    const scaffoldPick = screen.getByRole('combobox', { name: 'Agent type for Scaffold' })
+    expect(scaffoldPick).toHaveValue('')
+
+    fireEvent.change(scaffoldPick, { target: { value: 'at_doc' } })
+    expect(s.retype).toHaveBeenCalledWith('pl1', 'ta', 'at_doc')
+
+    // Back to Default sends null; the log's answer moves the pre-selection.
+    fireEvent.change(verifyPick, { target: { value: '' } })
+    expect(s.retype).toHaveBeenCalledWith('pl1', 'tc', null)
+    act(() => {
+      s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'ta', agentTypeId: 'at_doc' }))
+      s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tc', agentTypeId: null }))
+    })
+    expect(screen.getByRole('combobox', { name: 'Agent type for Scaffold' })).toHaveValue('at_doc')
+    expect(screen.getByRole('combobox', { name: 'Agent type for Verify' })).toHaveValue('')
+  })
+
+  it('freezes a dispatched node’s role into a badge (raw id when the type is gone)', async () => {
+    const s = stub([
+      event('plan.created', {
+        planId: 'pl1',
+        title: 'Typed',
+        requirement: 'r',
+        tasks: [
+          { taskId: 'ta', title: 'Scaffold', prompt: 'a', dependsOn: [], agentTypeId: 'at_rev' },
+          { taskId: 'td', title: 'Docs', prompt: 'd', dependsOn: [], agentTypeId: 'at_gone' },
+        ],
+      }),
+    ])
+    window.agentinator = s.bridge
+    renderCanvas()
+    await screen.findByText('Typed')
+
+    act(() => {
+      s.emit(event('plan.task.dispatched', { planId: 'pl1', taskId: 'ta', sessionId: 's0' }))
+      s.emit(event('plan.task.dispatched', { planId: 'pl1', taskId: 'td', sessionId: 's1' }))
+    })
+
+    // Once launched, the role is a fact: no picker, a badge instead. A type
+    // deleted since assignment falls back to its raw id.
+    expect(
+      screen.queryByRole('combobox', { name: 'Agent type for Scaffold' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByTitle('Ran as Reviewer')).toBeInTheDocument()
+    expect(screen.getByTitle('Ran as at_gone')).toBeInTheDocument()
   })
 
   it('shows node status from the log (running, done, failed)', async () => {

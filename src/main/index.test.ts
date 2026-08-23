@@ -1011,18 +1011,22 @@ describe('registerPlannerIpc', () => {
     const remove = vi.fn()
     const addEdge = vi.fn(() => true)
     const removeEdge = vi.fn(() => true)
+    const retype = vi.fn(() => true)
     const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
+    const savedTypes = [{ id: 'at_rev', name: 'Reviewer', instructions: '' }]
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 
     registerPlannerIpc(
-      { create, dispatch, remove, addEdge, removeEdge } as unknown as PlanOrchestrator,
+      { create, dispatch, remove, addEdge, removeEdge, retype } as unknown as PlanOrchestrator,
       decompose,
+      () => savedTypes,
       (channel, listener) => handlers.set(channel, listener),
     )
 
     const id = await handlers.get('planner:create')?.(undefined, 'Add a settings page')
     expect(id).toBe('plan_7')
-    expect(decompose).toHaveBeenCalledWith('Add a settings page')
+    // The saved types ride along so the model can suggest a role per task.
+    expect(decompose).toHaveBeenCalledWith('Add a settings page', savedTypes)
     expect(create).toHaveBeenCalledWith('Add a settings page', 'Add a settings page', [
       { title: 'A', prompt: 'do a', dependsOn: [] },
     ])
@@ -1040,16 +1044,22 @@ describe('registerPlannerIpc', () => {
       true,
     )
     expect(removeEdge).toHaveBeenCalledWith('plan_7', 'task_2', 'task_1')
+
+    expect(handlers.get('planner:retype')?.(undefined, 'plan_7', 'task_2', 'at_rev')).toBe(true)
+    expect(retype).toHaveBeenCalledWith('plan_7', 'task_2', 'at_rev')
+    handlers.get('planner:retype')?.(undefined, 'plan_7', 'task_2', null)
+    expect(retype).toHaveBeenCalledWith('plan_7', 'task_2', null)
   })
 
   it('registers on ipcMain by default', () => {
-    registerPlannerIpc({ create: vi.fn() } as unknown as PlanOrchestrator, vi.fn())
+    registerPlannerIpc({ create: vi.fn() } as unknown as PlanOrchestrator, vi.fn(), () => [])
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
       'planner:create',
       'planner:dispatch',
       'planner:remove',
+      'planner:retype',
       'planner:add-edge',
       'planner:remove-edge',
     ])

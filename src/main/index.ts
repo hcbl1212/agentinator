@@ -263,16 +263,18 @@ export function registerPipelineIpc(
 }
 
 /** The planner: decompose a requirement into a task DAG (the AI call happens
- * here, before the plan exists), then dispatch ready tasks and clear plans. */
+ * here, before the plan exists — with the saved agent types along so the model
+ * can suggest a role per task), then dispatch ready tasks and clear plans. */
 export function registerPlannerIpc(
   plans: PlanOrchestrator,
   decompose: PlanDecomposer,
+  types: () => AgentType[],
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
 ): void {
   handle('planner:create', async (_event, requirement) => {
-    const tasks = await decompose(requirement as string)
+    const tasks = await decompose(requirement as string, types())
     return plans.create(taskTitle(requirement as string), requirement as string, tasks)
   })
   handle('planner:dispatch', (_event, planId, taskId) =>
@@ -281,6 +283,9 @@ export function registerPlannerIpc(
   handle('planner:remove', (_event, planId) => {
     plans.remove(planId as string)
   })
+  handle('planner:retype', (_event, planId, taskId, agentTypeId) =>
+    plans.retype(planId as string, taskId as string, agentTypeId as string | null),
+  )
   handle('planner:add-edge', (_event, planId, taskId, dependsOnTaskId) =>
     plans.addEdge(planId as string, taskId as string, dependsOnTaskId as string),
   )
@@ -820,7 +825,18 @@ export async function bootstrap(
   const plans = new PlanOrchestrator({
     emit: makeEmitStored(store),
     store,
-    startTask: (prompt) => startAgentTask(manager, prompt),
+    // A typed task launches under its role's full posture (instructions +
+    // skills + model + read-only), exactly like a composer launch would.
+    startTask: (prompt, agentTypeId) =>
+      startAgentTask(
+        manager,
+        prompt,
+        agentTaskOptions(
+          agentTypeId,
+          settings.agentTypes.bind(settings),
+          settings.skills.bind(settings),
+        ),
+      ),
   })
   pipelineObservers.push(plans.observe.bind(plans))
   plans.reconcile(store.list())
@@ -833,6 +849,7 @@ export async function bootstrap(
   registerPlannerIpc(
     plans,
     env['AGENTINATOR_MOCK_TASKS'] === '1' ? scriptedDecomposer : decomposePlanWith(claudeQuery),
+    settings.agentTypes.bind(settings),
   )
   const checkpoints = new NodeCheckpoints(runGitSync)
   const emitCheckpoint = makeEmitStored(store, sink)

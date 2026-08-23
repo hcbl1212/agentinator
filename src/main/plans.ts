@@ -36,7 +36,7 @@ function copyTasks(tasks: PlanTaskSpec[]): PlanTaskSpec[] {
 export class PlanOrchestrator {
   readonly #emit: EmitStored
   readonly #store: PlanReader
-  readonly #startTask: (prompt: string) => string
+  readonly #startTask: (prompt: string, agentTypeId?: string) => string
   readonly #plans = new Map<string, PlanState>()
   /** `${planId}:${taskId}` for every task in flight or done, so a double
    * Dispatch can't launch the same task twice. A failed task is removed again
@@ -48,7 +48,8 @@ export class PlanOrchestrator {
   constructor(options: {
     emit: EmitStored
     store: PlanReader
-    startTask: (prompt: string) => string
+    /** Launch a task's agent, under an agent-type preset when one is set. */
+    startTask: (prompt: string, agentTypeId?: string) => string
   }) {
     this.#emit = options.emit
     this.#store = options.store
@@ -66,6 +67,7 @@ export class PlanOrchestrator {
       title: task.title,
       prompt: task.prompt,
       dependsOn: task.dependsOn.map((dep) => ids[dep]),
+      ...(task.agentTypeId === undefined ? {} : { agentTypeId: task.agentTypeId }),
     }))
     this.#plans.set(planId, { requirement, tasks: copyTasks(tasks) })
     this.#emit('plan.created', { planId, title, requirement, tasks })
@@ -151,10 +153,32 @@ export class PlanOrchestrator {
     }
     const sessionId = this.#startTask(
       `${task.prompt}\n\n${PLAN_CONTEXT_HEADER}\n${plan.requirement}`,
+      task.agentTypeId,
     )
     this.#dispatched.add(key)
     this.#emit('plan.task.dispatched', { planId, taskId, sessionId })
     return sessionId
+  }
+
+  /** Reassign which agent-type preset a task will dispatch under (null returns
+   * it to the default agent). Refused (false) for an unknown plan/task or one
+   * whose agent already launched — the type rode along at dispatch. */
+  retype(planId: string, taskId: string, agentTypeId: string | null): boolean {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined) {
+      return false
+    }
+    if (this.#dispatched.has(`${planId}:${taskId}`)) {
+      return false
+    }
+    if (agentTypeId === null) {
+      delete task.agentTypeId
+    } else {
+      task.agentTypeId = agentTypeId
+    }
+    this.#emit('plan.task.retyped', { planId, taskId, agentTypeId })
+    return true
   }
 
   /** Clear a plan from the list. It stops tracking (a still-running task's
@@ -187,6 +211,16 @@ export class PlanOrchestrator {
         const task = this.#plans.get(planId)?.tasks.find((t) => t.taskId === taskId)
         if (task !== undefined) {
           task.dependsOn = task.dependsOn.filter((dep) => dep !== dependsOnTaskId)
+        }
+      } else if (event.type === 'plan.task.retyped') {
+        const { planId, taskId, agentTypeId } = event.payload as EventPayloads['plan.task.retyped']
+        const task = this.#plans.get(planId)?.tasks.find((t) => t.taskId === taskId)
+        if (task !== undefined) {
+          if (agentTypeId === null) {
+            delete task.agentTypeId
+          } else {
+            task.agentTypeId = agentTypeId
+          }
         }
       } else if (event.type === 'plan.removed') {
         this.#plans.delete((event.payload as EventPayloads['plan.removed']).planId)

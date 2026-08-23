@@ -90,7 +90,7 @@ describe('decomposePlanWith', () => {
       ])
     }
 
-    const tasks = await decomposePlanWith(query)('add a settings page')
+    const tasks = await decomposePlanWith(query)('add a settings page', [])
 
     expect(tasks).toEqual([{ title: 'A', prompt: 'do a', dependsOn: [] }])
     expect(seen?.prompt).toContain('add a settings page')
@@ -109,18 +109,66 @@ describe('decomposePlanWith', () => {
     const query: ClaudeQuery = () =>
       streamOf([{ type: 'assistant', message: { content: [{ type: 'text', text: 'sorry?' }] } }])
 
-    await expect(decomposePlanWith(query)('build it')).resolves.toEqual(fallbackTasks('build it'))
+    await expect(decomposePlanWith(query)('build it', [])).resolves.toEqual(
+      fallbackTasks('build it'),
+    )
+  })
+
+  it('hands the model the type roster and resolves suggested types by name', async () => {
+    const types = [
+      { id: 'at_rev', name: 'Reviewer', instructions: 'Review changes carefully.\nMore detail.' },
+      { id: 'at_doc', name: 'Doc writer', instructions: '' },
+    ]
+    let seen: Parameters<ClaudeQuery>[0] | undefined
+    const query: ClaudeQuery = (args) => {
+      seen = args
+      return streamOf([
+        {
+          type: 'assistant',
+          message: {
+            content: [
+              {
+                type: 'text',
+                text:
+                  '[{"title":"A","prompt":"do a","agentType":"reviewer"},' +
+                  '{"title":"B","prompt":"do b","agentType":"Nonexistent"}]',
+              },
+            ],
+          },
+        },
+      ])
+    }
+
+    const tasks = await decomposePlanWith(query)('add a settings page', types)
+
+    // The roster rides in the user prompt (name + instructions first line).
+    expect(seen?.prompt).toContain('Available agent types:')
+    expect(seen?.prompt).toContain('- Reviewer: Review changes carefully.')
+    expect(seen?.prompt).toContain('- Doc writer')
+    // Case-insensitive name → id; an unknown name means the default agent.
+    expect(tasks[0].agentTypeId).toBe('at_rev')
+    expect(tasks[1].agentTypeId).toBeUndefined()
   })
 })
 
 describe('scriptedDecomposer', () => {
   it('is a deterministic Scaffold → Implement → Verify chain carrying the requirement', async () => {
-    const tasks = await scriptedDecomposer('add a settings page')
+    const tasks = await scriptedDecomposer('add a settings page', [])
 
     expect(tasks.map((task) => task.title)).toEqual(['Scaffold', 'Implement', 'Verify'])
     expect(tasks.map((task) => task.dependsOn)).toEqual([[], [0], [1]])
     for (const task of tasks) {
       expect(task.prompt).toContain('add a settings page')
+      expect(task.agentTypeId).toBeUndefined()
     }
+  })
+
+  it('suggests the first saved type for Verify when one exists', async () => {
+    const tasks = await scriptedDecomposer('add a settings page', [
+      { id: 'at_rev', name: 'Reviewer', instructions: '' },
+    ])
+
+    expect(tasks[0].agentTypeId).toBeUndefined()
+    expect(tasks[2].agentTypeId).toBe('at_rev')
   })
 })

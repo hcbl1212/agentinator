@@ -540,3 +540,38 @@ test('the plan canvas fills the idle stream slot and edits dependency edges', as
     await app.close()
   }
 })
+
+test('a plan task carries an agent type: suggested, editable, frozen at dispatch', async () => {
+  const { app, page } = await launchApp()
+  try {
+    // Save a "Reviewer" role via the composer's Manage panel.
+    await page.getByRole('button', { name: 'Manage' }).click()
+    await page.getByRole('textbox', { name: 'Agent type name' }).fill('Reviewer')
+    await page.getByRole('button', { name: 'Add', exact: true }).click()
+    await page.getByRole('button', { name: 'Manage' }).click()
+
+    // Plan — the scripted decomposer suggests the saved role for Verify.
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Harden auth')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await expect(canvas.getByLabel('Agent type for Verify').locator('option:checked')).toHaveText(
+      'Reviewer',
+    )
+
+    // Reassign Scaffold onto the role; the retype lands via the event log.
+    await canvas.getByLabel('Agent type for Scaffold').selectOption({ label: 'Reviewer' })
+    await expect(canvas.getByLabel('Agent type for Scaffold').locator('option:checked')).toHaveText(
+      'Reviewer',
+    )
+
+    // Dispatch freezes the choice — the new agent takes the centre pane, so
+    // reopen the plan from the rail: the picker has given way to a badge.
+    await canvas.getByRole('button', { name: 'Dispatch Scaffold' }).click()
+    await planner.getByRole('button', { name: 'Select plan Harden auth' }).click()
+    await expect(canvas.getByLabel('Agent type for Scaffold')).toHaveCount(0)
+    await expect(canvas.getByTitle('Ran as Reviewer')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})

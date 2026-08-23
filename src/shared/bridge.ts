@@ -217,6 +217,10 @@ export interface AgentinatorBridge {
     /** Erase a dependency edge, which may put the task on the ready frontier.
      * Resolves false when refused (no such edge, or a dispatched task). */
     removeEdge(planId: string, taskId: string, dependsOnTaskId: string): Promise<boolean>
+    /** Reassign which agent-type preset a task dispatches under (null = the
+     * default agent). Resolves false when refused (unknown task, or its agent
+     * already launched). */
+    retype(planId: string, taskId: string, agentTypeId: string | null): Promise<boolean>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

@@ -22,7 +22,7 @@ function harness() {
       log.filter((event) => (event.payload as { sessionId?: string }).sessionId === id),
   }
   let n = 0
-  const startTask = vi.fn<(prompt: string) => string>(() => `sess${n++}`)
+  const startTask = vi.fn<(prompt: string, agentTypeId?: string) => string>(() => `sess${n++}`)
   const orchestrator = new PlanOrchestrator({ emit, store, startTask })
 
   return {
@@ -178,6 +178,79 @@ describe('PlanOrchestrator', () => {
     h.idled('sess0')
     expect(h.types()).not.toContain('plan.task.completed')
     expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBeNull()
+  })
+
+  it('carries a suggested agent type into the plan and hands it to dispatch', () => {
+    const h = harness()
+    const planId = h.orchestrator.create('Typed', 'review the diff', [
+      { title: 'Check', prompt: 'check it', dependsOn: [], agentTypeId: 'at_rev' },
+    ])
+    const created = h.log.find((event) => event.type === 'plan.created')
+      ?.payload as EventPayloads['plan.created']
+
+    expect(created.tasks[0].agentTypeId).toBe('at_rev')
+    h.orchestrator.dispatch(planId, created.tasks[0].taskId)
+    expect(h.startTask).toHaveBeenCalledWith(expect.stringContaining('check it'), 'at_rev')
+  })
+
+  it('retypes an undispatched task, and the new role rides the dispatch', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.retype(planId, tasks[0].taskId, 'at_doc')).toBe(true)
+    expect(h.emit).toHaveBeenCalledWith('plan.task.retyped', {
+      planId,
+      taskId: tasks[0].taskId,
+      agentTypeId: 'at_doc',
+    })
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(h.startTask).toHaveBeenCalledWith(expect.any(String), 'at_doc')
+  })
+
+  it('retypes back to the default agent with null', () => {
+    const h = harness()
+    const planId = h.orchestrator.create('Typed', 'r', [
+      { title: 'X', prompt: 'x', dependsOn: [], agentTypeId: 'at_rev' },
+    ])
+    const taskId = (
+      h.log.find((event) => event.type === 'plan.created')?.payload as EventPayloads['plan.created']
+    ).tasks[0].taskId
+
+    expect(h.orchestrator.retype(planId, taskId, null)).toBe(true)
+    h.orchestrator.dispatch(planId, taskId)
+    expect(h.startTask).toHaveBeenCalledWith(expect.any(String), undefined)
+  })
+
+  it('refuses retyping an unknown task or one whose agent already launched', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.retype('plan_ghost', tasks[0].taskId, 'at_rev')).toBe(false)
+    expect(h.orchestrator.retype(planId, 'task_ghost', 'at_rev')).toBe(false)
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(h.orchestrator.retype(planId, tasks[0].taskId, 'at_rev')).toBe(false)
+    expect(h.types()).not.toContain('plan.task.retyped')
+  })
+
+  it('reconciles retyped tasks across a restart (including clearing to default)', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    first.orchestrator.retype(planId, tasks[0].taskId, 'at_rev')
+    first.orchestrator.retype(planId, tasks[1].taskId, 'at_doc')
+    first.orchestrator.retype(planId, tasks[1].taskId, null)
+    // A retype event for a forgotten plan replays as a no-op.
+    const stray: StoredEvent = {
+      seq: 99,
+      ts: 't',
+      type: 'plan.task.retyped',
+      payload: { planId: 'plan_ghost', taskId: 'task_x', agentTypeId: 'at_rev' },
+    }
+
+    const second = harness()
+    second.orchestrator.reconcile([...first.log, stray])
+
+    second.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(second.startTask).toHaveBeenCalledWith(expect.any(String), 'at_rev')
   })
 
   it('adds a dependency edge that the dispatch guard then honours', () => {

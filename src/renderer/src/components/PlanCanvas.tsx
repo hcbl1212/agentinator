@@ -1,12 +1,14 @@
 import { useState } from 'react'
 
+import { useAgentTypes } from '../state/agentTypes'
 import { usePlans } from '../state/plans'
 import type { Plan, PlanTaskView } from '../state/plans'
 import { useSelection } from '../state/selection'
 import { taskDepth } from './Planner'
 
-/** Node geometry: fixed-size chips laid out in columns by dependency depth. */
-const NODE_W = 148
+/** Node geometry: fixed-size chips laid out in columns by dependency depth.
+ * Wide enough for the title plus the role picker beside the action buttons. */
+const NODE_W = 210
 const NODE_H = 34
 const GAP_X = 48
 const GAP_Y = 14
@@ -83,6 +85,7 @@ const CANVAS_MARK: Record<
  */
 export function PlanCanvas(): React.JSX.Element {
   const { plans } = usePlans()
+  const { types } = useAgentTypes()
   const { selection, select } = useSelection()
   const [traced, setTraced] = useState<string | null>(null)
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
@@ -193,6 +196,13 @@ export function PlanCanvas(): React.JSX.Element {
             const dispatchable = (task.status === 'pending' || task.status === 'failed') && ready
             const shown = task.status === 'pending' ? (ready ? 'ready' : 'blocked') : task.status
             const dimmed = chain !== null && !chain.has(task.id)
+            // Retypeable exactly while the orchestrator would accept it: the
+            // task's agent hasn't launched (pending, or reopened by failure).
+            const retypeable = task.status === 'pending' || task.status === 'failed'
+            const typeName =
+              task.agentTypeId === undefined
+                ? undefined
+                : (types.find((type) => type.id === task.agentTypeId)?.name ?? task.agentTypeId)
             const bodyLabel =
               linkSource === undefined
                 ? `Trace ${task.title}`
@@ -207,7 +217,9 @@ export function PlanCanvas(): React.JSX.Element {
                   type="button"
                   className="plan-node-body"
                   aria-label={bodyLabel}
-                  title={`${task.title} — ${shown}`}
+                  title={
+                    `${task.title} — ${shown}` + (typeName === undefined ? '' : ` · ${typeName}`)
+                  }
                   onClick={() => clickNode(task)}
                 >
                   <span className="pipeline-stage-mark" aria-hidden="true">
@@ -215,6 +227,34 @@ export function PlanCanvas(): React.JSX.Element {
                   </span>
                   <span className="plan-node-title">{task.title}</span>
                 </button>
+                {retypeable ? (
+                  <select
+                    className="plan-node-type"
+                    value={task.agentTypeId ?? ''}
+                    aria-label={`Agent type for ${task.title}`}
+                    title="The role this task dispatches under"
+                    onChange={(event) =>
+                      void window.agentinator?.planner.retype(
+                        plan.id,
+                        task.id,
+                        event.target.value === '' ? null : event.target.value,
+                      )
+                    }
+                  >
+                    <option value="">Default</option>
+                    {types.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  typeName !== undefined && (
+                    <span className="plan-node-type-badge" title={`Ran as ${typeName}`}>
+                      {typeName}
+                    </span>
+                  )
+                )}
                 {dispatchable && (
                   <button
                     type="button"

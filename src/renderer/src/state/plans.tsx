@@ -12,6 +12,9 @@ export interface PlanTaskView {
   dependsOn: string[]
   status: 'pending' | 'running' | 'done' | 'failed'
   sessionId?: string
+  /** The agent-type preset this task will dispatch under (undefined = the
+   * default agent). Editable until dispatch. */
+  agentTypeId?: string
 }
 
 /** A plan reduced from the log: its requirement and task graph. */
@@ -62,6 +65,7 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
                 title: task.title,
                 dependsOn: task.dependsOn,
                 status: 'pending',
+                ...(task.agentTypeId === undefined ? {} : { agentTypeId: task.agentTypeId }),
               })),
             },
           ]
@@ -105,6 +109,27 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
                   ? { ...task, dependsOn: task.dependsOn.filter((d) => d !== dependsOnTaskId) }
                   : task,
               ),
+            }
+          : plan,
+      )
+    }
+    case 'plan.task.retyped': {
+      const { planId, taskId, agentTypeId } = event.payload as EventPayloads['plan.task.retyped']
+      return plans.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              tasks: plan.tasks.map((task) => {
+                if (task.id !== taskId) {
+                  return task
+                }
+                if (agentTypeId === null) {
+                  const cleared = { ...task }
+                  delete cleared.agentTypeId
+                  return cleared
+                }
+                return { ...task, agentTypeId }
+              }),
             }
           : plan,
       )

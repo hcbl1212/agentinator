@@ -44,6 +44,10 @@ export interface PlanTaskSpec {
   prompt: string
   /** taskIds (within the same plan) this task waits on — its "blocked by". */
   dependsOn: string[]
+  /** The agent-type preset this task dispatches under (its role: instructions,
+   * model, read-only posture, skills) — suggested by the decomposer, editable
+   * until dispatch. Undefined runs the default agent. */
+  agentTypeId?: string
 }
 
 export type EntityKind = (typeof ENTITY_KINDS)[number]
@@ -167,6 +171,10 @@ export interface EventPayloads {
   /** The user removed a dependency edge — `taskId` no longer waits on
    * `dependsOnTaskId`, which may put it on the ready frontier. */
   'plan.edge.removed': { planId: string; taskId: string; dependsOnTaskId: string }
+  /** The user reassigned which agent-type preset a task will dispatch under
+   * (null returns it to the default agent). Guarded upstream: only tasks that
+   * haven't dispatched yet can be retyped. */
+  'plan.task.retyped': { planId: string; taskId: string; agentTypeId: string | null }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }
