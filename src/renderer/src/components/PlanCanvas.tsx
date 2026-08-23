@@ -162,7 +162,10 @@ export function PlanCanvas({
   )
 
   return (
-    <section className="plan-canvas" aria-label="Plan canvas">
+    <section
+      className={`plan-canvas${inspected === undefined ? '' : ' has-detail'}`}
+      aria-label="Plan canvas"
+    >
       <div className="plan-canvas-head">
         <span className="pipeline-title" title={plan.requirement}>
           {plan.title}

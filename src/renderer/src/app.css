@@ -1999,16 +1999,21 @@ button.plan-task:focus-visible {
   outline: none;
 }
 
-/* The inspected task's card: brief, notes, and the comment box, docked under
-   the graph. */
+/* The inspected task's card, docked under the graph. With a card open the
+   graph yields: it caps at a band up top and the card takes the rest, so the
+   brief gets the room the empty canvas was wasting. */
+.plan-canvas.has-detail .plan-canvas-scroll {
+  flex: 0 1 auto;
+  max-height: 45%;
+}
+
 .plan-task-detail {
   border-top: 1px solid var(--line);
   display: flex;
-  flex: none;
+  flex: 1;
   flex-direction: column;
   gap: 0.4rem;
-  max-height: 40%;
-  overflow-y: auto;
+  min-height: 0;
   padding-top: 0.5rem;
 }
 
@@ -2024,16 +2029,17 @@ button.plan-task:focus-visible {
   font-size: 0.7rem;
 }
 
-/* The full brief the agent runs with — verbatim, wrapped. */
+/* The full brief the agent runs with — verbatim, wrapped, filling the card. */
 .plan-task-detail-prompt {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--soft);
+  flex: 1;
   font: inherit;
   font-size: 0.72rem;
   margin: 0;
-  max-height: 9rem;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.4rem 0.5rem;
   white-space: pre-wrap;
@@ -2041,11 +2047,13 @@ button.plan-task:focus-visible {
 }
 
 /* The brief's editor (undispatched tasks): same look as the read-only view,
-   but writable, with Save docked beneath. */
+   but writable, stretching to the card's full height with Save beneath. */
 .plan-task-detail-form {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.3rem;
+  min-height: 0;
 }
 
 .plan-task-detail-edit {
@@ -2053,10 +2061,12 @@ button.plan-task:focus-visible {
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--ink);
+  flex: 1;
   font: inherit;
   font-size: 0.72rem;
+  min-height: 0;
   padding: 0.4rem 0.5rem;
-  resize: vertical;
+  resize: none;
 }
 
 .plan-task-detail-edit:focus-visible {

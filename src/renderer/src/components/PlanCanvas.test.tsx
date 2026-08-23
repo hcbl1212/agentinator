@@ -379,8 +379,10 @@ describe('PlanCanvas', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Trace Implement' }))
 
-    // The card shows the exact brief the agent will run with, plus its meta.
+    // The card shows the exact brief the agent will run with, plus its meta —
+    // and the canvas yields it the lion's share of the height.
     const detail = screen.getByRole('region', { name: 'Task details: Implement' })
+    expect(document.querySelector('.plan-canvas')).toHaveClass('has-detail')
     expect(detail).toHaveTextContent('blocked · after Scaffold')
     const brief = screen.getByRole('textbox', { name: 'Brief for Implement' })
     expect(brief).toHaveValue('brief: implement it')
@@ -418,6 +420,7 @@ describe('PlanCanvas', () => {
     expect(
       screen.queryByRole('region', { name: 'Task details: Implement' }),
     ).not.toBeInTheDocument()
+    expect(document.querySelector('.plan-canvas')).not.toHaveClass('has-detail')
     fireEvent.click(screen.getByRole('button', { name: 'Trace Docs' }))
     expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent('ready')
     expect(screen.getByRole('combobox', { name: 'Agent type for Docs' })).toHaveValue('')
