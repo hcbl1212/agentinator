@@ -20,10 +20,11 @@ describe('componentEntryHtml', () => {
     expect(html).toContain('mod["Cart"]')
     expect(html).toContain("import * as ReactDOM from 'react-dom'")
     // React 18 createRoot when present, else React 17 render, else React 19's
-    // dynamic react-dom/client import.
+    // dynamic react-dom/client import — @vite-ignore so Vite's import-analysis
+    // doesn't try (and fail) to resolve it on React 17 apps.
     expect(html).toContain("typeof ReactDOM.createRoot === 'function'")
     expect(html).toContain('ReactDOM.render(element, root)')
-    expect(html).toContain("import('react-dom/client')")
+    expect(html).toContain("import(/* @vite-ignore */ 'react-dom/client')")
     // No wrapper → no wrap import; renders the component directly.
     expect(html).toContain('const Wrapper = null')
     // Shims Node's `global` before the module runs (apps expect it present).

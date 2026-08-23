@@ -20,7 +20,9 @@ export const WRAPPER_FILE = '__agentinator_wrapper.tsx'
  * version-agnostic across React 17/18/19: `react-dom`'s createRoot (18) or
  * render (17) when present, else a dynamic `react-dom/client` import (19, where
  * `react-dom` top-level has neither). No static `react-dom/client` import — it
- * doesn't exist on 17 and would fail Vite's import analysis there. */
+ * doesn't exist on 17 and would fail Vite's import analysis there; the dynamic
+ * fallback carries `@vite-ignore` for the same reason (import-analysis resolves
+ * dynamic string literals too). */
 export interface EntryModule {
   importPath: string
   exportName: string
@@ -70,7 +72,7 @@ export function componentEntryHtml(
         } else if (typeof ReactDOM.render === 'function') {
           ReactDOM.render(element, root)
         } else {
-          import('react-dom/client').then((client) => client.createRoot(root).render(element))
+          import(/* @vite-ignore */ 'react-dom/client').then((client) => client.createRoot(root).render(element))
         }
       } else {
         root.textContent = 'No component export found in ${component.importPath}'
