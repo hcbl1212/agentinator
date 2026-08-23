@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import { useSelection } from '../state/selection'
 import { AgentRail } from './AgentRail'
 import { Inspector } from './Inspector'
 import { PaneGutter } from './PaneGutter'
 import { Pipelines } from './Pipelines'
-import { PlanCanvas } from './PlanCanvas'
 import { Planner } from './Planner'
 import { Stream } from './Stream'
 import { TaskQueue } from './TaskQueue'
@@ -32,12 +30,9 @@ function storedWidth(key: string, fallback: number, min: number, max: number): n
  * The resizable pane grid: a slim agent rail, the unified stream (the flexible
  * middle), and the Diff/Preview inspector, split by draggable gutters. Only the
  * two side columns carry a width; the stream absorbs the rest, so dragging
- * either gutter redistributes space across all three. Selecting a plan swaps
- * the middle to its DAG canvas — the graph gets the width it needs, and
- * selecting an agent brings the stream back.
+ * either gutter redistributes space across all three.
  */
 export function Panes(): React.JSX.Element {
-  const { selection } = useSelection()
   const [railWidth, setRailWidth] = useState(() => storedWidth(RAIL_KEY, 176, RAIL_MIN, RAIL_MAX))
   const [inspectorWidth, setInspectorWidth] = useState(() =>
     storedWidth(INSPECTOR_KEY, 380, INSPECTOR_MIN, INSPECTOR_MAX),
@@ -72,7 +67,7 @@ export function Panes(): React.JSX.Element {
         <AgentRail />
       </div>
       <PaneGutter label="Resize agent rail" onResize={resizeRail} />
-      {selection?.kind === 'plan' ? <PlanCanvas /> : <Stream />}
+      <Stream />
       <PaneGutter label="Resize inspector" onResize={resizeInspector} />
       <Inspector />
     </div>

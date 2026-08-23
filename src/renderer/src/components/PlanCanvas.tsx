@@ -83,7 +83,7 @@ const CANVAS_MARK: Record<
  */
 export function PlanCanvas(): React.JSX.Element {
   const { plans } = usePlans()
-  const { selection, select, clear } = useSelection()
+  const { selection, select } = useSelection()
   const [traced, setTraced] = useState<string | null>(null)
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
 
@@ -92,26 +92,10 @@ export function PlanCanvas(): React.JSX.Element {
   // selected plan was cleared out from under it.
   const plan: Plan | undefined = selected ?? plans[plans.length - 1]
 
-  // Deselecting hands the centre pane back to the stream.
-  const close = (
-    <button
-      type="button"
-      className="queue-action"
-      aria-label="Close plan canvas"
-      title="Back to the stream"
-      onClick={() => clear()}
-    >
-      ✕
-    </button>
-  )
-
   if (plan === undefined) {
     return (
       <section className="plan-canvas" aria-label="Plan canvas">
-        <div className="plan-canvas-head">
-          <p className="rail-empty">No plan yet. Plan a requirement in the Planner pane first.</p>
-          {close}
-        </div>
+        <p className="rail-empty">No plan yet. Plan a requirement in the Planner pane first.</p>
       </section>
     )
   }
@@ -163,7 +147,6 @@ export function PlanCanvas(): React.JSX.Element {
             Linking from {linkSource.title} — click the task that should wait on it
           </span>
         )}
-        {close}
       </div>
       <div className="plan-canvas-scroll">
         <div className="plan-canvas-board" style={{ width: `${width}px`, height: `${height}px` }}>

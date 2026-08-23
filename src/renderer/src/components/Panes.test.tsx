@@ -7,20 +7,11 @@ import { PipelineProvider } from '../state/pipelines'
 import { PlanProvider } from '../state/plans'
 import { QueueProvider } from '../state/queue'
 import { ScrubProvider } from '../state/scrub'
-import { SelectionProvider, useSelection } from '../state/selection'
+import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { Panes } from './Panes'
 
-function Pick({ kind }: { kind: 'plan' | 'session' }): React.JSX.Element {
-  const { select } = useSelection()
-  return (
-    <button type="button" onClick={() => select({ kind, id: `${kind}_1` })}>
-      pick {kind}
-    </button>
-  )
-}
-
-function renderPanes(children?: React.ReactNode): void {
+function renderPanes(): void {
   render(
     <SelectionProvider>
       <SessionsProvider>
@@ -29,7 +20,6 @@ function renderPanes(children?: React.ReactNode): void {
             <PlanProvider>
               <ScrubProvider>
                 <InboxProvider>
-                  {children}
                   <Panes />
                 </InboxProvider>
               </ScrubProvider>
@@ -62,25 +52,6 @@ afterEach(() => {
 })
 
 describe('Panes', () => {
-  it('swaps the centre pane to the plan canvas while a plan is selected', () => {
-    renderPanes(
-      <>
-        <Pick kind="plan" />
-        <Pick kind="session" />
-      </>,
-    )
-    expect(screen.queryByRole('region', { name: 'Plan canvas' })).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'pick plan' }))
-    expect(screen.getByRole('region', { name: 'Plan canvas' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Conversation' })).not.toBeInTheDocument()
-
-    // Selecting an agent hands the centre back to the stream.
-    fireEvent.click(screen.getByRole('button', { name: 'pick session' }))
-    expect(screen.queryByRole('region', { name: 'Plan canvas' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
-  })
-
   it('lays out rail · gutter · stream · gutter · inspector at default widths', () => {
     renderPanes()
 

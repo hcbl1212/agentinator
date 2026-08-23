@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
 import { AgentTypesProvider } from '../state/agentTypes'
+import { PlanProvider } from '../state/plans'
 import { ScrubProvider } from '../state/scrub'
 import { useSelection } from '../state/selection'
 import { SelectionProvider } from '../state/selection'
@@ -13,25 +14,32 @@ import { SessionsProvider } from '../state/sessions'
 import { SkillsProvider } from '../state/skills'
 import { Stream } from './Stream'
 
+function renderStream(children?: React.ReactNode): void {
+  render(
+    <SelectionProvider>
+      <SessionsProvider>
+        <PlanProvider>
+          <ScrubProvider>
+            <AgentTypesProvider>
+              <SkillsProvider>
+                {children}
+                <Stream />
+              </SkillsProvider>
+            </AgentTypesProvider>
+          </ScrubProvider>
+        </PlanProvider>
+      </SessionsProvider>
+    </SelectionProvider>,
+  )
+}
+
 afterEach(() => {
   delete window.agentinator
 })
 
 describe('Stream', () => {
   it('prompts to pick an agent when none is selected, and keeps the composer', () => {
-    render(
-      <SelectionProvider>
-        <SessionsProvider>
-          <ScrubProvider>
-            <AgentTypesProvider>
-              <SkillsProvider>
-                <Stream />
-              </SkillsProvider>
-            </AgentTypesProvider>
-          </ScrubProvider>
-        </SessionsProvider>
-      </SelectionProvider>,
-    )
+    renderStream()
 
     expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
@@ -73,20 +81,7 @@ describe('Stream', () => {
       )
     }
 
-    render(
-      <SelectionProvider>
-        <SessionsProvider>
-          <ScrubProvider>
-            <AgentTypesProvider>
-              <SkillsProvider>
-                <Selector />
-                <Stream />
-              </SkillsProvider>
-            </AgentTypesProvider>
-          </ScrubProvider>
-        </SessionsProvider>
-      </SelectionProvider>,
-    )
+    renderStream(<Selector />)
 
     // No agent selected: the stream is an empty prompt, showing neither line.
     expect(screen.getByText(/Select an agent, or start a task below/)).toBeInTheDocument()
@@ -97,5 +92,45 @@ describe('Stream', () => {
     // Scoped to x: only its line shows.
     expect(await screen.findByText('from X')).toBeInTheDocument()
     expect(screen.queryByText('from Y')).not.toBeInTheDocument()
+  })
+
+  it('fills the idle slot with the plan canvas once a plan exists', async () => {
+    window.agentinator = {
+      events: {
+        count: vi.fn(() => Promise.resolve(1)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
+        diffs: vi.fn(() => Promise.resolve([])),
+        list: vi.fn(() => Promise.resolve([])),
+        tail: vi.fn(() =>
+          Promise.resolve([
+            {
+              seq: 1,
+              ts: 't',
+              type: 'plan.created',
+              payload: {
+                planId: 'pl1',
+                title: 'Settings page',
+                requirement: 'r',
+                tasks: [{ taskId: 'ta', title: 'Scaffold', prompt: 'a', dependsOn: [] }],
+              },
+            },
+          ] as StoredEvent[]),
+        ),
+        search: vi.fn(() => Promise.resolve([])),
+        onAppended: vi.fn(() => () => undefined),
+      },
+      agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
+      agentTypes: { list: vi.fn(() => Promise.resolve([])) },
+      skills: { list: vi.fn(() => Promise.resolve([])) },
+    } as unknown as AgentinatorBridge
+
+    renderStream()
+
+    // The canvas takes the timeline's slot; the composer stays docked below.
+    expect(await screen.findByRole('region', { name: 'Plan canvas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trace Scaffold' })).toBeInTheDocument()
+    expect(screen.queryByText(/Select an agent, or start a task below/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Composer')).toBeInTheDocument()
   })
 })

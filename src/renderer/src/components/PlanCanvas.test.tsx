@@ -104,39 +104,9 @@ describe('chainOf', () => {
 })
 
 describe('PlanCanvas', () => {
-  it('shows the empty state (still closable) when no plan exists', () => {
+  it('shows the empty state when no plan exists', () => {
     renderCanvas() // no bridge — nothing to reduce
     expect(screen.getByText(/No plan yet/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Close plan canvas' })).toBeInTheDocument()
-  })
-
-  it('closes back to the stream by clearing the selection', async () => {
-    window.agentinator = stub([created('pl1')]).bridge
-    let selection: unknown
-    function Probe(): React.JSX.Element {
-      const state = useSelection()
-      selection = state.selection
-      return (
-        <button type="button" onClick={() => state.select({ kind: 'plan', id: 'pl1' })}>
-          pick plan
-        </button>
-      )
-    }
-    render(
-      <SelectionProvider>
-        <PlanProvider>
-          <Probe />
-          <PlanCanvas />
-        </PlanProvider>
-      </SelectionProvider>,
-    )
-    await screen.findByText('Settings page')
-
-    fireEvent.click(screen.getByRole('button', { name: 'pick plan' }))
-    expect(selection).toEqual({ kind: 'plan', id: 'pl1' })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close plan canvas' }))
-    expect(selection).toBeNull()
   })
 
   it('renders the newest plan as nodes and removable edges', async () => {

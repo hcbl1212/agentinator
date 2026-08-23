@@ -509,7 +509,7 @@ test('planning a requirement builds a task tree whose frontier advances as agent
   }
 })
 
-test('the plan canvas opens from the plan title and edits dependency edges', async () => {
+test('the plan canvas fills the idle stream slot and edits dependency edges', async () => {
   const { app, page } = await launchApp()
   try {
     const planner = page.getByRole('region', { name: 'Planner' })
@@ -517,11 +517,10 @@ test('the plan canvas opens from the plan title and edits dependency edges', asy
     await planner.getByRole('button', { name: 'Plan' }).click()
     await expect(planner.getByLabel('Scaffold — ready')).toBeVisible()
 
-    // Clicking the plan title selects the plan → the canvas takes over the
-    // centre pane (where the stream was) and draws the scripted chain.
-    await planner.getByRole('button', { name: 'Select plan Wire up billing' }).click()
+    // With no agent selected, the canvas takes the centre stream slot by
+    // itself — the idle "select an agent" prompt gives way to the graph.
     const canvas = page.getByRole('region', { name: 'Plan canvas' })
-    await expect(page.getByRole('region', { name: 'Conversation' })).toHaveCount(0)
+    await expect(page.getByText(/Select an agent, or start a task below/)).toHaveCount(0)
     await expect(canvas.getByRole('button', { name: 'Trace Verify' })).toBeVisible()
     await expect(
       canvas.getByRole('button', { name: 'Remove dependency Implement → Verify' }),
@@ -537,10 +536,6 @@ test('the plan canvas opens from the plan title and edits dependency edges', asy
     // Erase Implement's own gate instead — it joins the ready frontier.
     await canvas.getByRole('button', { name: 'Remove dependency Scaffold → Implement' }).click()
     await expect(canvas.getByRole('button', { name: 'Dispatch Implement' })).toBeVisible()
-
-    // Closing the canvas hands the centre pane back to the stream.
-    await canvas.getByRole('button', { name: 'Close plan canvas' }).click()
-    await expect(page.getByRole('region', { name: 'Conversation' })).toBeVisible()
   } finally {
     await app.close()
   }

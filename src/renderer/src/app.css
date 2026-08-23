@@ -1865,9 +1865,11 @@ button.plan-task:focus-visible {
   font-size: 0.7rem;
 }
 
-/* The close (back to stream) button sits at the head's far edge. */
-.plan-canvas-head > .queue-action:last-child {
-  margin-left: auto;
+/* Inside the stream column the canvas takes the timeline's slot, the
+   composer staying docked beneath it. */
+.stream > .plan-canvas {
+  flex: 1;
+  min-height: 0;
 }
 
 .plan-canvas-scroll {
