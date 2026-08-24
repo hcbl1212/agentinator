@@ -208,6 +208,10 @@ export interface AgentinatorBridge {
     /** Launch a ready task (every dependency completed) as an agent; resolves
      * to the new session id, or null when the task isn't dispatchable. */
     dispatch(planId: string, taskId: string): Promise<string | null>
+    /** Launch a ready task as a full Plan→Implement→Review pipeline instead
+     * (shared worktree, human gates, review workbench); resolves to the new
+     * pipeline id, or null under the same guards as dispatch. */
+    dispatchPipeline(planId: string, taskId: string): Promise<string | null>
     /** Clear a plan from the list; it stops tracking and drops out of the UI. */
     remove(planId: string): Promise<void>
     /** Draw a dependency edge on the canvas — `taskId` will also wait on

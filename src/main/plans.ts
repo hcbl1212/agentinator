@@ -44,16 +44,23 @@ export class PlanOrchestrator {
   readonly #dispatched = new Set<string>()
   /** `${planId}:${taskId}` for every completed task — the dependency check. */
   readonly #completed = new Set<string>()
+  /** pipelineId → `${planId}:${taskId}` for tasks running AS pipelines, so a
+   * pipeline finishing resolves its task. Entries drop when the task does. */
+  readonly #byPipeline = new Map<string, string>()
+  readonly #startPipeline: (prompt: string) => string
 
   constructor(options: {
     emit: EmitStored
     store: PlanReader
     /** Launch a task's agent, under an agent-type preset when one is set. */
     startTask: (prompt: string, agentTypeId?: string) => string
+    /** Launch a task as a full Plan→Implement→Review pipeline instead. */
+    startPipeline: (prompt: string) => string
   }) {
     this.#emit = options.emit
     this.#store = options.store
     this.#startTask = options.startTask
+    this.#startPipeline = options.startPipeline
   }
 
   /** Record a decomposed requirement as a plan: mint stable task ids, map the
@@ -160,6 +167,32 @@ export class PlanOrchestrator {
     return sessionId
   }
 
+  /** Launch a ready task as a full Plan→Implement→Review pipeline (shared
+   * worktree, human gates, review workbench) instead of a single agent —
+   * returning the new pipeline id, or null under the same guards as
+   * {@link dispatch}. The task completes when the pipeline completes. */
+  dispatchPipeline(planId: string, taskId: string): string | null {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined) {
+      return null
+    }
+    const key = `${planId}:${taskId}`
+    if (this.#dispatched.has(key)) {
+      return null
+    }
+    if (!task.dependsOn.every((dep) => this.#completed.has(`${planId}:${dep}`))) {
+      return null
+    }
+    const pipelineId = this.#startPipeline(
+      `${task.prompt}\n\n${PLAN_CONTEXT_HEADER}\n${plan.requirement}`,
+    )
+    this.#dispatched.add(key)
+    this.#byPipeline.set(pipelineId, key)
+    this.#emit('plan.task.pipelined', { planId, taskId, pipelineId })
+    return pipelineId
+  }
+
   /** Rewrite a task's brief — the prompt its agent will run with. Refused
    * (false) for an unknown plan/task, a blank brief, or a task whose agent
    * already launched (its brief is history; steer the agent instead). */
@@ -251,24 +284,45 @@ export class PlanOrchestrator {
       } else if (event.type === 'plan.task.dispatched') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.dispatched']
         this.#dispatched.add(`${planId}:${taskId}`)
+      } else if (event.type === 'plan.task.pipelined') {
+        const { planId, taskId, pipelineId } = event.payload as EventPayloads['plan.task.pipelined']
+        this.#dispatched.add(`${planId}:${taskId}`)
+        this.#byPipeline.set(pipelineId, `${planId}:${taskId}`)
       } else if (event.type === 'plan.task.completed') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.completed']
         this.#completed.add(`${planId}:${taskId}`)
+        this.#dropPipelineFor(`${planId}:${taskId}`)
       } else if (event.type === 'plan.task.failed') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.failed']
         this.#dispatched.delete(`${planId}:${taskId}`)
+        this.#dropPipelineFor(`${planId}:${taskId}`)
+      }
+    }
+  }
+
+  /** Forget any pipeline↔task link once the task has resolved, so stray later
+   * pipeline events (e.g. a revise loop after failure) change nothing. */
+  #dropPipelineFor(key: string): void {
+    for (const [pipelineId, mapped] of this.#byPipeline) {
+      if (mapped === key) {
+        this.#byPipeline.delete(pipelineId)
       }
     }
   }
 
   /**
-   * React to a task's agent finishing. A task completes when its agent goes
-   * idle (a finished turn — the agent stays alive for follow-ups) or ends
-   * "completed"; completing it may put dependent tasks on the ready frontier.
-   * A session that ends cancelled/failed marks the task failed and reopens it
-   * for dispatch (a retry with a fresh agent).
+   * React to a task's work finishing. A single-agent task completes when its
+   * agent goes idle (a finished turn — the agent stays alive for follow-ups)
+   * or ends "completed"; a pipelined task completes when its pipeline
+   * completes (every stage done, gates and all). Completing may put dependent
+   * tasks on the ready frontier. A cancelled/failed agent — or a failed
+   * pipeline — marks the task failed and reopens it for dispatch (a retry).
    */
   observe(event: StoredEvent): void {
+    if (event.type === 'pipeline.completed' || event.type === 'pipeline.failed') {
+      this.#observePipeline(event)
+      return
+    }
     if (event.type !== 'session.idle' && event.type !== 'session.ended') {
       return
     }
@@ -301,5 +355,29 @@ export class PlanOrchestrator {
     }
     this.#completed.add(key)
     this.#emit('plan.task.completed', { planId, taskId, sessionId })
+  }
+
+  /** Resolve a pipelined task from its pipeline's outcome. Unknown pipelines
+   * (not launched from a plan, or already resolved) change nothing; a removed
+   * plan's stray pipelines likewise. */
+  #observePipeline(event: StoredEvent): void {
+    const { pipelineId } = event.payload as { pipelineId: string }
+    const key = this.#byPipeline.get(pipelineId)
+    if (key === undefined) {
+      return
+    }
+    const [planId, taskId] = key.split(':')
+    if (!this.#plans.has(planId)) {
+      return // plan was removed — its stray pipelines resolve nothing
+    }
+    this.#byPipeline.delete(pipelineId)
+    if (event.type === 'pipeline.failed') {
+      // Reopen the task so it can be dispatched again (either way).
+      this.#dispatched.delete(key)
+      this.#emit('plan.task.failed', { planId, taskId })
+      return
+    }
+    this.#completed.add(key)
+    this.#emit('plan.task.completed', { planId, taskId })
   }
 }

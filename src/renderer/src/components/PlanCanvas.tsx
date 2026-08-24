@@ -265,6 +265,19 @@ export function PlanCanvas({
                     ▶
                   </button>
                 )}
+                {dispatchable && (
+                  <button
+                    type="button"
+                    className="queue-action"
+                    aria-label={`Pipeline ${task.title}`}
+                    title="Run as a Plan → Implement → Review pipeline"
+                    onClick={() =>
+                      void window.agentinator?.planner.dispatchPipeline(plan.id, task.id)
+                    }
+                  >
+                    ⋔
+                  </button>
+                )}
                 <button
                   type="button"
                   className={`queue-action plan-node-link${linkFrom === task.id ? ' is-armed' : ''}`}
@@ -334,6 +347,7 @@ function TaskDetail({
         </span>
         <span className="plan-task-detail-meta">
           {shown}
+          {task.pipelineId === undefined ? '' : ' · via pipeline'}
           {editable ? '' : ` · ${typeName}`}
           {blockers.length === 0 ? '' : ` · after ${blockers.join(', ')}`}
         </span>

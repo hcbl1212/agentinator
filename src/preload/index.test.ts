@@ -289,6 +289,7 @@ describe('preload bridge', () => {
   it('routes planner create, dispatch, remove, and edge edits over IPC', async () => {
     await bridge.planner.create('add a settings page')
     await bridge.planner.dispatch('plan_1', 'task_1')
+    await bridge.planner.dispatchPipeline('plan_1', 'task_1')
     await bridge.planner.remove('plan_1')
     await bridge.planner.addEdge('plan_1', 'task_2', 'task_1')
     await bridge.planner.removeEdge('plan_1', 'task_2', 'task_1')
@@ -297,6 +298,11 @@ describe('preload bridge', () => {
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:create', 'add a settings page')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:dispatch', 'plan_1', 'task_1')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'planner:dispatch-pipeline',
+      'plan_1',
+      'task_1',
+    )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:remove', 'plan_1')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
       'planner:add-edge',

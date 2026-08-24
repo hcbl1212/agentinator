@@ -23,13 +23,16 @@ function harness() {
   }
   let n = 0
   const startTask = vi.fn<(prompt: string, agentTypeId?: string) => string>(() => `sess${n++}`)
-  const orchestrator = new PlanOrchestrator({ emit, store, startTask })
+  let p = 0
+  const startPipeline = vi.fn<(prompt: string) => string>(() => `pipe${p++}`)
+  const orchestrator = new PlanOrchestrator({ emit, store, startTask, startPipeline })
 
   return {
     orchestrator,
     log,
     emit,
     startTask,
+    startPipeline,
     types: (): string[] => log.map((event) => event.type),
     // A finished turn — how a task normally completes (the agent stays alive).
     idled: (sessionId: string): void => {
@@ -41,6 +44,23 @@ function harness() {
         ts: 't',
         type: 'session.ended',
         payload: { sessionId, outcome },
+      })
+    },
+    // A pipeline resolving — how a pipelined task completes or fails.
+    pipelineDone: (pipelineId: string): void => {
+      orchestrator.observe({
+        seq: ++seq,
+        ts: 't',
+        type: 'pipeline.completed',
+        payload: { pipelineId },
+      })
+    },
+    pipelineFailed: (pipelineId: string): void => {
+      orchestrator.observe({
+        seq: ++seq,
+        ts: 't',
+        type: 'pipeline.failed',
+        payload: { pipelineId, stageIndex: 1, sessionId: 'stage_sess' },
       })
     },
     createChain: (): { planId: string; tasks: EventPayloads['plan.created']['tasks'] } => {
@@ -251,6 +271,128 @@ describe('PlanOrchestrator', () => {
 
     second.orchestrator.dispatch(planId, tasks[0].taskId)
     expect(second.startTask).toHaveBeenCalledWith(expect.any(String), 'at_rev')
+  })
+
+  it('dispatches a ready task as a pipeline carrying the same brief', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    const pipelineId = h.orchestrator.dispatchPipeline(planId, tasks[0].taskId)
+
+    expect(pipelineId).toBe('pipe0')
+    const prompt = h.startPipeline.mock.calls[0][0]
+    expect(prompt).toContain('do a')
+    expect(prompt).toContain(PLAN_CONTEXT_HEADER)
+    expect(prompt).toContain('build the thing')
+    expect(h.emit).toHaveBeenCalledWith('plan.task.pipelined', {
+      planId,
+      taskId: tasks[0].taskId,
+      pipelineId: 'pipe0',
+    })
+    // Either dispatch mode counts as launched — no twin runs.
+    expect(h.orchestrator.dispatch(planId, tasks[0].taskId)).toBeNull()
+    expect(h.orchestrator.dispatchPipeline(planId, tasks[0].taskId)).toBeNull()
+    // And the guards mirror dispatch: blocked and unknown refuse.
+    expect(h.orchestrator.dispatchPipeline(planId, tasks[1].taskId)).toBeNull()
+    expect(h.orchestrator.dispatchPipeline('plan_ghost', tasks[0].taskId)).toBeNull()
+    expect(h.orchestrator.dispatchPipeline(planId, 'task_ghost')).toBeNull()
+    expect(h.startPipeline).toHaveBeenCalledOnce()
+  })
+
+  it('completes a pipelined task when its pipeline completes, unlocking dependents', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+    h.orchestrator.dispatchPipeline(planId, tasks[0].taskId)
+
+    h.pipelineDone('pipe0')
+
+    expect(h.emit).toHaveBeenCalledWith('plan.task.completed', {
+      planId,
+      taskId: tasks[0].taskId,
+    })
+    expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBe('sess0')
+    // The link is spent: a stray second completion changes nothing.
+    h.pipelineDone('pipe0')
+    expect(h.types().filter((type) => type === 'plan.task.completed')).toHaveLength(1)
+  })
+
+  it('fails a pipelined task when its pipeline fails, reopening it for a retry', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+    h.orchestrator.dispatchPipeline(planId, tasks[0].taskId)
+
+    h.pipelineFailed('pipe0')
+
+    expect(h.emit).toHaveBeenCalledWith('plan.task.failed', {
+      planId,
+      taskId: tasks[0].taskId,
+    })
+    // The retry may pick either mode; a later revive of the DEAD pipeline
+    // (its link was dropped at failure) resolves nothing.
+    expect(h.orchestrator.dispatch(planId, tasks[0].taskId)).toBe('sess0')
+    h.pipelineDone('pipe0')
+    expect(h.types()).not.toContain('plan.task.completed')
+  })
+
+  it('ignores pipelines that are not plan tasks, and stray ones from removed plans', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    // A composer-launched pipeline — no plan task attached.
+    h.pipelineDone('pipe_foreign')
+    expect(h.types()).toEqual(['plan.created'])
+
+    h.orchestrator.dispatchPipeline(planId, tasks[0].taskId)
+    h.orchestrator.remove(planId)
+    h.pipelineDone('pipe0')
+    expect(h.types()).not.toContain('plan.task.completed')
+  })
+
+  it('reconciles a pipelined task across a restart: guarded, then resolved late', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    first.orchestrator.dispatchPipeline(planId, tasks[0].taskId)
+
+    // Restart mid-pipeline: the task is still in flight (no double launch),
+    // and the surviving link resolves it when the pipeline finally completes.
+    const second = harness()
+    second.orchestrator.reconcile(first.log)
+    expect(second.orchestrator.dispatchPipeline(planId, tasks[0].taskId)).toBeNull()
+    second.pipelineDone('pipe0')
+    expect(second.types()).toContain('plan.task.completed')
+
+    // A restart AFTER resolution forgets the link — the stray completion of a
+    // spent pipeline changes nothing more.
+    const third = harness()
+    third.orchestrator.reconcile([...first.log, ...second.log])
+    third.pipelineDone('pipe0')
+    expect(third.types()).not.toContain('plan.task.completed')
+  })
+
+  it('reconciles a failed pipelined task as reopened, its link dropped, siblings kept', () => {
+    const first = harness()
+    const planId = first.orchestrator.create('Wide', 'two independent tasks', [
+      { title: 'X', prompt: 'x', dependsOn: [] },
+      { title: 'Y', prompt: 'y', dependsOn: [] },
+    ])
+    const tasks = (
+      first.log.find((event) => event.type === 'plan.created')
+        ?.payload as EventPayloads['plan.created']
+    ).tasks
+    first.orchestrator.dispatchPipeline(planId, tasks[0].taskId) // pipe0
+    first.orchestrator.dispatchPipeline(planId, tasks[1].taskId) // pipe1
+    first.pipelineFailed('pipe0')
+
+    const second = harness()
+    second.orchestrator.reconcile(first.log)
+
+    // X's dead pipeline resolves nothing and X is dispatchable again…
+    second.pipelineDone('pipe0')
+    expect(second.types()).not.toContain('plan.task.completed')
+    expect(second.orchestrator.dispatchPipeline(planId, tasks[0].taskId)).toBe('pipe0')
+    // …while Y's surviving link still resolves it.
+    second.pipelineDone('pipe1')
+    expect(second.types()).toContain('plan.task.completed')
   })
 
   it('reprompts an undispatched task, and the edited brief rides the dispatch', () => {

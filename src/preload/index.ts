@@ -158,6 +158,8 @@ export const bridge: AgentinatorBridge = {
     create: (requirement) => ipcRenderer.invoke('planner:create', requirement) as Promise<string>,
     dispatch: (planId, taskId) =>
       ipcRenderer.invoke('planner:dispatch', planId, taskId) as Promise<string | null>,
+    dispatchPipeline: (planId, taskId) =>
+      ipcRenderer.invoke('planner:dispatch-pipeline', planId, taskId) as Promise<string | null>,
     remove: (planId) => ipcRenderer.invoke('planner:remove', planId) as Promise<void>,
     addEdge: (planId, taskId, dependsOnTaskId) =>
       ipcRenderer.invoke('planner:add-edge', planId, taskId, dependsOnTaskId) as Promise<boolean>,

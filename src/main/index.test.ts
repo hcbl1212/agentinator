@@ -1008,6 +1008,7 @@ describe('registerPlannerIpc', () => {
   it('decomposes a requirement into a plan, then dispatches and removes', async () => {
     const create = vi.fn(() => 'plan_7')
     const dispatch = vi.fn(() => 'session_3')
+    const dispatchPipeline = vi.fn(() => 'pipeline_9')
     const remove = vi.fn()
     const addEdge = vi.fn(() => true)
     const removeEdge = vi.fn(() => true)
@@ -1021,6 +1022,7 @@ describe('registerPlannerIpc', () => {
       {
         create,
         dispatch,
+        dispatchPipeline,
         remove,
         addEdge,
         removeEdge,
@@ -1043,6 +1045,10 @@ describe('registerPlannerIpc', () => {
     const sessionId = handlers.get('planner:dispatch')?.(undefined, 'plan_7', 'task_1')
     expect(sessionId).toBe('session_3')
     expect(dispatch).toHaveBeenCalledWith('plan_7', 'task_1')
+
+    const pipelineId = handlers.get('planner:dispatch-pipeline')?.(undefined, 'plan_7', 'task_1')
+    expect(pipelineId).toBe('pipeline_9')
+    expect(dispatchPipeline).toHaveBeenCalledWith('plan_7', 'task_1')
 
     handlers.get('planner:remove')?.(undefined, 'plan_7')
     expect(remove).toHaveBeenCalledWith('plan_7')
@@ -1072,6 +1078,7 @@ describe('registerPlannerIpc', () => {
     expect(channels).toEqual([
       'planner:create',
       'planner:dispatch',
+      'planner:dispatch-pipeline',
       'planner:remove',
       'planner:retype',
       'planner:reprompt',
@@ -1691,6 +1698,70 @@ describe('bootstrap', () => {
       call('planner:reprompt')(undefined, planId, created.tasks[2].taskId, 'verify with vitest'),
     ).toBe(true)
     expect(store.list().some((event) => event.type === 'plan.task.reprompted')).toBe(true)
+    store.close()
+  })
+
+  it('runs a plan task as a pipeline; the task completes when the pipeline does', async () => {
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const store = new EventStore(':memory:')
+
+    await bootstrap(
+      mockApp as never,
+      () => store,
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+    )
+
+    const call = (channel: string): ((...args: unknown[]) => unknown) =>
+      mockIpcMain.handle.mock.calls.find(([c]: string[]) => c === channel)?.[1] as (
+        ...args: unknown[]
+      ) => unknown
+    const planId = (await call('planner:create')(undefined, 'Ship dark mode')) as string
+    const created = store.list().find((event) => event.type === 'plan.created')?.payload as {
+      tasks: { taskId: string }[]
+    }
+    // A blocked task refuses pipeline mode exactly like agent mode.
+    expect(call('planner:dispatch-pipeline')(undefined, planId, created.tasks[1].taskId)).toBeNull()
+
+    // Run the frontier task as a pipeline: stage 0 finishes and the pipeline
+    // pauses at the gate — the task is linked but NOT complete yet.
+    const pipelineId = call('planner:dispatch-pipeline')(undefined, planId, created.tasks[0].taskId)
+    expect(typeof pipelineId).toBe('string')
+    const stageSession = (index: number): string =>
+      (
+        store.list().filter((event) => event.type === 'pipeline.stage.started')[index]?.payload as {
+          sessionId: string
+        }
+      ).sessionId
+    await vi.waitFor(() =>
+      expect(
+        store.list().filter((event) => event.type === 'pipeline.stage.completed'),
+      ).toHaveLength(1),
+    )
+    expect(store.list().some((event) => event.type === 'plan.task.pipelined')).toBe(true)
+    expect(store.list().some((event) => event.type === 'plan.task.completed')).toBe(false)
+
+    // Walk the gates: Continue → Implement, Continue → Review. When the last
+    // stage completes the pipeline completes — and with it, the plan task.
+    call('pipelines:continue')(undefined, pipelineId, stageSession(0))
+    await vi.waitFor(() =>
+      expect(
+        store.list().filter((event) => event.type === 'pipeline.stage.completed'),
+      ).toHaveLength(2),
+    )
+    call('pipelines:continue')(undefined, pipelineId, stageSession(1))
+    await vi.waitFor(() =>
+      expect(store.list().some((event) => event.type === 'plan.task.completed')).toBe(true),
+    )
+    // The completed task freed its dependent onto the frontier.
+    expect(typeof call('planner:dispatch')(undefined, planId, created.tasks[1].taskId)).toBe(
+      'string',
+    )
+    await vi.waitFor(() =>
+      expect(store.list().filter((event) => event.type === 'plan.task.completed')).toHaveLength(2),
+    )
     store.close()
   })
 

@@ -15,6 +15,9 @@ export interface PlanTaskView {
   dependsOn: string[]
   status: 'pending' | 'running' | 'done' | 'failed'
   sessionId?: string
+  /** Set when the task runs as a Plan→Implement→Review pipeline rather than a
+   * single agent — the Pipelines rail carries its live stage chips. */
+  pipelineId?: string
   /** The agent-type preset this task will dispatch under (undefined = the
    * default agent). Editable until dispatch. */
   agentTypeId?: string
@@ -76,7 +79,21 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
     }
     case 'plan.task.dispatched': {
       const { planId, taskId, sessionId } = event.payload as EventPayloads['plan.task.dispatched']
-      return patchTask(plans, planId, taskId, { status: 'running', sessionId })
+      // A retry may switch mode — a fresh single-agent run clears any stale
+      // pipeline link, and vice versa below.
+      return patchTask(plans, planId, taskId, {
+        status: 'running',
+        sessionId,
+        pipelineId: undefined,
+      })
+    }
+    case 'plan.task.pipelined': {
+      const { planId, taskId, pipelineId } = event.payload as EventPayloads['plan.task.pipelined']
+      return patchTask(plans, planId, taskId, {
+        status: 'running',
+        pipelineId,
+        sessionId: undefined,
+      })
     }
     case 'plan.task.completed': {
       const { planId, taskId } = event.payload as EventPayloads['plan.task.completed']

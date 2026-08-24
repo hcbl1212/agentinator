@@ -156,12 +156,17 @@ export interface EventPayloads {
   /** A ready plan task was launched as an agent — links the task to its
    * session so live plan status can follow it. */
   'plan.task.dispatched': { planId: string; taskId: string; sessionId: string }
-  /** A dispatched task's agent finished cleanly — tasks depending on it may
-   * now join the ready frontier. */
-  'plan.task.completed': { planId: string; taskId: string; sessionId: string }
-  /** A dispatched task's agent was cancelled or failed; the task may be
-   * dispatched again (a retry with a fresh agent). */
-  'plan.task.failed': { planId: string; taskId: string; sessionId: string }
+  /** A ready plan task was launched as a full Plan→Implement→Review pipeline
+   * instead of a single agent — links the task to its pipeline. The plan
+   * decides WHEN work is ready; the pipeline decides HOW carefully it runs. */
+  'plan.task.pipelined': { planId: string; taskId: string; pipelineId: string }
+  /** A dispatched task finished cleanly — tasks depending on it may now join
+   * the ready frontier. sessionId is absent when a pipeline (not a single
+   * agent) completed it — an added-optional keeps old logs replaying. */
+  'plan.task.completed': { planId: string; taskId: string; sessionId?: string }
+  /** A dispatched task was cancelled or failed; the task may be dispatched
+   * again (a retry). sessionId is absent when a pipeline failed it. */
+  'plan.task.failed': { planId: string; taskId: string; sessionId?: string }
   /** The user cleared a plan; it stops tracking and drops out of the UI. */
   'plan.removed': { planId: string }
   /** The user drew a dependency edge on the plan canvas: `taskId` now also

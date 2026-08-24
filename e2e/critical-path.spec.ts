@@ -612,3 +612,31 @@ test('clicking a task opens its editable brief, and the edit rides the dispatch'
     await app.close()
   }
 })
+
+test('a plan task can run as a full pipeline from the canvas', async () => {
+  const { app, page } = await launchApp()
+  try {
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Encrypt PHI at rest')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+
+    // Run the frontier task as a Plan → Implement → Review pipeline.
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await canvas.getByRole('button', { name: 'Pipeline Scaffold' }).click()
+
+    // The pipeline appears in the rail under the task's brief-derived title…
+    const pipelines = page.getByRole('region', { name: 'Pipelines' })
+    await expect(
+      pipelines.getByText(/Set up the groundwork for: Encrypt PHI at rest/),
+    ).toBeVisible()
+
+    // …and the node rides it: running, with its card naming the mode.
+    await expect(canvas.getByTitle('Scaffold — running')).toBeVisible()
+    await canvas.getByRole('button', { name: 'Trace Scaffold' }).click()
+    await expect(page.getByRole('region', { name: 'Task details: Scaffold' })).toContainText(
+      'via pipeline',
+    )
+  } finally {
+    await app.close()
+  }
+})

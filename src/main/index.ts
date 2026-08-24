@@ -280,6 +280,9 @@ export function registerPlannerIpc(
   handle('planner:dispatch', (_event, planId, taskId) =>
     plans.dispatch(planId as string, taskId as string),
   )
+  handle('planner:dispatch-pipeline', (_event, planId, taskId) =>
+    plans.dispatchPipeline(planId as string, taskId as string),
+  )
   handle('planner:remove', (_event, planId) => {
     plans.remove(planId as string)
   })
@@ -809,10 +812,12 @@ export async function bootstrap(
 
   // The orchestrator dispatches stages through the manager (now built) and
   // advances on each stage's session.ended, which reaches it via the sink's
-  // observer list. Rebuild any in-flight pipeline from the log so it keeps
-  // advancing across a restart.
+  // observer list. Its own pipeline.* events also flow through the sink so the
+  // PLANNER hears pipeline.completed/failed (a pipelined task resolves on
+  // them); the other sink consumers ignore pipeline events. Rebuild any
+  // in-flight pipeline from the log so it keeps advancing across a restart.
   const pipelines = new PipelineOrchestrator({
-    emit: makeEmitStored(store),
+    emit: makeEmitStored(store, sink),
     store,
     startStage: (prompt, worktree, readOnly, model) =>
       startAgentTask(manager, prompt, { worktree, readOnly, model }),
@@ -840,6 +845,9 @@ export async function bootstrap(
           settings.skills.bind(settings),
         ),
       ),
+    // A pipelined task runs the same built-in Plan→Implement→Review chain a
+    // composer Pipeline launch would.
+    startPipeline: (prompt) => pipelines.create(taskTitle(prompt), defaultPipelineStages(prompt)),
   })
   pipelineObservers.push(plans.observe.bind(plans))
   plans.reconcile(store.list())

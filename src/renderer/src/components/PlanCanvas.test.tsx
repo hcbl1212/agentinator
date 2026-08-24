@@ -23,6 +23,7 @@ function stub(
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
   dispatch: ReturnType<typeof vi.fn>
+  dispatchPipeline: ReturnType<typeof vi.fn>
   addEdge: ReturnType<typeof vi.fn>
   removeEdge: ReturnType<typeof vi.fn>
   retype: ReturnType<typeof vi.fn>
@@ -30,6 +31,7 @@ function stub(
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const dispatch = vi.fn(() => Promise.resolve('sess_new'))
+  const dispatchPipeline = vi.fn(() => Promise.resolve('pipe_new'))
   const addEdge = vi.fn(() => Promise.resolve(true))
   const removeEdge = vi.fn(() => Promise.resolve(true))
   const retype = vi.fn(() => Promise.resolve(true))
@@ -37,6 +39,7 @@ function stub(
   return {
     emit: (event) => appended(event),
     dispatch,
+    dispatchPipeline,
     addEdge,
     removeEdge,
     retype,
@@ -53,6 +56,7 @@ function stub(
       planner: {
         create: vi.fn(),
         dispatch,
+        dispatchPipeline,
         remove: vi.fn(),
         addEdge,
         removeEdge,
@@ -192,6 +196,35 @@ describe('PlanCanvas', () => {
       await Promise.resolve()
     })
     expect(selection).toEqual({ kind: 'session', id: 'sess_new' })
+  })
+
+  it('runs a ready node as a pipeline, the node then riding its progress', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    renderCanvas()
+
+    // Only the frontier offers pipeline mode, right beside agent dispatch.
+    fireEvent.click(await screen.findByRole('button', { name: 'Pipeline Scaffold' }))
+    expect(s.dispatchPipeline).toHaveBeenCalledWith('pl1', 'ta')
+    expect(screen.queryByRole('button', { name: 'Pipeline Implement' })).not.toBeInTheDocument()
+
+    // The log's answer marks it running (both dispatch buttons fold away) and
+    // its detail card says how it's running.
+    act(() => {
+      s.emit(event('plan.task.pipelined', { planId: 'pl1', taskId: 'ta', pipelineId: 'pipe1' }))
+    })
+    expect(screen.queryByRole('button', { name: 'Pipeline Scaffold' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Dispatch Scaffold' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trace Scaffold' }))
+    expect(screen.getByRole('region', { name: 'Task details: Scaffold' })).toHaveTextContent(
+      'running · via pipeline',
+    )
+
+    // Completion arrives from the pipeline — the dependent's frontier opens.
+    act(() => {
+      s.emit(event('plan.task.completed', { planId: 'pl1', taskId: 'ta' }))
+    })
+    expect(screen.getByRole('button', { name: 'Pipeline Implement' })).toBeInTheDocument()
   })
 
   it('keeps the selection when a canvas dispatch is refused', async () => {
