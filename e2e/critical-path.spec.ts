@@ -504,6 +504,18 @@ test('planning a requirement builds a task tree whose frontier advances as agent
       planner.getByRole('button', { name: 'Scaffold — done — select its agent' }),
     ).toBeVisible()
     await expect(planner.getByRole('button', { name: 'Dispatch Implement' })).toBeVisible()
+
+    // The dispatch selected the agent (timeline showing) — the stream toggle
+    // flips back to the DAG and returns to the same agent's timeline.
+    await expect(page.getByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await page.getByRole('tab', { name: 'Plan' }).click()
+    await expect(page.getByRole('region', { name: 'Plan canvas' })).toBeVisible()
+    await page.getByRole('tab', { name: 'Timeline' }).click()
+    await expect(page.getByRole('region', { name: 'Plan canvas' })).toHaveCount(0)
+    await expect(page.getByText(/session started · Set up the groundwork/)).toBeVisible()
   } finally {
     await app.close()
   }

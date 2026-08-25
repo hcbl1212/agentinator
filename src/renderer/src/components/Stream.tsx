@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { usePlans } from '../state/plans'
 import { useScrub } from '../state/scrub'
@@ -16,15 +16,49 @@ import { Timeline } from './Timeline'
  * plain empty state only remains when there's no plan either.
  */
 export function Stream(): React.JSX.Element {
-  const { selection } = useSelection()
+  const { selection, select, clear } = useSelection()
   const { plans } = usePlans()
   const { seq } = useScrub()
   const [inspecting, setInspecting] = useState<string | null>(null)
+  const [lastSession, setLastSession] = useState<string | null>(null)
   const sessionId = selection?.kind === 'session' ? selection.id : null
   const showCanvas = sessionId === null && plans.length > 0
 
+  // Remember the agent last watched, so the Timeline half of the toggle has
+  // somewhere to go after Plan clears the selection.
+  useEffect(() => {
+    if (sessionId !== null) {
+      setLastSession(sessionId)
+    }
+  }, [sessionId])
+  const timelineTarget = sessionId ?? lastSession
+
   return (
     <section className="stream" aria-label="Conversation">
+      {/* Both views exist → an explicit toggle, so the DAG is never a dead
+          end you can't get back to (or away from). */}
+      {plans.length > 0 && timelineTarget !== null && (
+        <div className="workspace-tabs stream-view-toggle" role="tablist" aria-label="Stream view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sessionId !== null}
+            className={`workspace-tab${sessionId !== null ? ' is-active' : ''}`}
+            onClick={() => select({ kind: 'session', id: timelineTarget })}
+          >
+            Timeline
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sessionId === null}
+            className={`workspace-tab${sessionId === null ? ' is-active' : ''}`}
+            onClick={() => clear()}
+          >
+            Plan
+          </button>
+        </div>
+      )}
       {sessionId !== null ? (
         <Timeline sessionId={sessionId} scrubSeq={seq} />
       ) : plans.length > 0 ? (

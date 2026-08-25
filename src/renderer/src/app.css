@@ -1872,6 +1872,12 @@ button.plan-task:focus-visible {
   min-height: 0;
 }
 
+/* The Timeline | Plan toggle at the stream's head — tighter than the
+   inspector's tabs, since it sits above a busy pane. */
+.stream-view-toggle {
+  padding: 0.25rem 0.6rem 0;
+}
+
 .plan-canvas-scroll {
   flex: 1;
   overflow: auto;
