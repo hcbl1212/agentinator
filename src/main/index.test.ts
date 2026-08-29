@@ -254,6 +254,8 @@ describe('registerEventIpc', () => {
     expect(store.list).toHaveBeenCalledWith(5)
     handlers.get('events:tail')?.(undefined, 100, 7)
     expect(store.tail).toHaveBeenCalledWith(100, 7)
+    handlers.get('events:by-session')?.(undefined, 'session_1')
+    expect(store.listBySession).toHaveBeenCalledWith('session_1')
     handlers.get('events:search')?.(undefined, 'greet', 100)
     expect(store.search).toHaveBeenCalledWith('greet', 100)
   })
@@ -268,6 +270,7 @@ describe('registerEventIpc', () => {
       'events:diffs',
       'events:list',
       'events:tail',
+      'events:by-session',
       'events:search',
     ])
   })

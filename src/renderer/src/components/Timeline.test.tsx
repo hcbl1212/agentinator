@@ -42,6 +42,7 @@ function stubBridge(
         totalCost: vi.fn(() => Promise.resolve(0)),
         diffs: vi.fn(() => Promise.resolve([])),
         list: vi.fn(() => Promise.resolve([])),
+        bySession: vi.fn(() => Promise.resolve([])),
         tail: tail,
         search: search,
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {

@@ -22,6 +22,8 @@ export const bridge: AgentinatorBridge = {
     list: (afterSeq = 0) => ipcRenderer.invoke('events:list', afterSeq) as Promise<StoredEvent[]>,
     tail: (limit, beforeSeq) =>
       ipcRenderer.invoke('events:tail', limit, beforeSeq) as Promise<StoredEvent[]>,
+    bySession: (sessionId) =>
+      ipcRenderer.invoke('events:by-session', sessionId) as Promise<StoredEvent[]>,
     search: (query, limit) =>
       ipcRenderer.invoke('events:search', query, limit) as Promise<StoredEvent[]>,
     onAppended: (listener) => {

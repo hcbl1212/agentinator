@@ -340,6 +340,10 @@ describe('Pipelines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plan — running — select its agent' }))
 
     expect(selection).toEqual({ kind: 'session', id: 's0' })
+
+    // The title opens the review workbench by selecting the pipeline itself.
+    fireEvent.click(screen.getByRole('button', { name: 'Review pipeline Add logout' }))
+    expect(selection).toEqual({ kind: 'pipeline', id: 'pl1' })
   })
 
   it('ignores a backfill that resolves after unmount', async () => {

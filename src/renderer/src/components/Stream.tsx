@@ -5,6 +5,7 @@ import { useScrub } from '../state/scrub'
 import { useSelection } from '../state/selection'
 import { ComposerDock } from './ComposerDock'
 import { PlanCanvas } from './PlanCanvas'
+import { ReviewWorkbench } from './ReviewWorkbench'
 import { Timeline } from './Timeline'
 
 /**
@@ -12,8 +13,8 @@ import { Timeline } from './Timeline'
  * messages and the agent's events are the same log, so the Timeline renders
  * the whole stream and the composer docks at its foot. With no agent selected
  * the slot shows the plan DAG canvas instead (the newest plan, or the one
- * picked in the Planner rail) — the graph gets the width it needs, and the
- * plain empty state only remains when there's no plan either.
+ * picked in the Planner rail); selecting a pipeline swaps in its review
+ * workbench. The plain empty state only remains when there's no plan either.
  */
 export function Stream(): React.JSX.Element {
   const { selection, select, clear } = useSelection()
@@ -22,7 +23,8 @@ export function Stream(): React.JSX.Element {
   const [inspecting, setInspecting] = useState<string | null>(null)
   const [lastSession, setLastSession] = useState<string | null>(null)
   const sessionId = selection?.kind === 'session' ? selection.id : null
-  const showCanvas = sessionId === null && plans.length > 0
+  const reviewingId = selection?.kind === 'pipeline' ? selection.id : null
+  const showCanvas = sessionId === null && reviewingId === null && plans.length > 0
 
   // Remember the agent last watched, so the Timeline half of the toggle has
   // somewhere to go after Plan clears the selection.
@@ -61,6 +63,8 @@ export function Stream(): React.JSX.Element {
       )}
       {sessionId !== null ? (
         <Timeline sessionId={sessionId} scrubSeq={seq} />
+      ) : reviewingId !== null ? (
+        <ReviewWorkbench pipelineId={reviewingId} />
       ) : plans.length > 0 ? (
         <PlanCanvas onInspect={setInspecting} />
       ) : (
@@ -68,9 +72,10 @@ export function Stream(): React.JSX.Element {
           <p className="empty-state">Select an agent, or start a task below.</p>
         </section>
       )}
-      {/* One text surface at a time: while a task's detail card (its editable
-          brief) is open on the canvas, the composer stands down. */}
-      {!(showCanvas && inspecting !== null) && <ComposerDock />}
+      {/* One text surface at a time: the composer stands down while a task's
+          detail card (its editable brief) or the review workbench — which
+          carries its own revise input — has the floor. */}
+      {!(showCanvas && inspecting !== null) && reviewingId === null && <ComposerDock />}
     </section>
   )
 }

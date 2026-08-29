@@ -90,6 +90,7 @@ export function registerEventIpc(
   handle('events:tail', (_event, limit, beforeSeq) =>
     store.tail(limit as number, beforeSeq as number | undefined),
   )
+  handle('events:by-session', (_event, sessionId) => store.listBySession(sessionId as string))
   handle('events:search', (_event, query, limit) => store.search(query as string, limit as number))
 }
 

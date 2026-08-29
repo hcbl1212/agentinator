@@ -38,6 +38,9 @@ export interface AgentinatorBridge {
     list(afterSeq?: number): Promise<StoredEvent[]>
     /** Newest `limit` events oldest-first; with beforeSeq, the page before it. */
     tail(limit: number, beforeSeq?: number): Promise<StoredEvent[]>
+    /** Every event carrying this sessionId, oldest-first — one agent's whole
+     * recorded life (the review workbench reads stage transcripts from it). */
+    bySession(sessionId: string): Promise<StoredEvent[]>
     /** Whole-log substring search over type + payload, newest matches first. */
     search(query: string, limit: number): Promise<StoredEvent[]>
     /** Subscribe to live appends; returns an unsubscribe function. */

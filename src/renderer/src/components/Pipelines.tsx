@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { usePipelines } from '../state/pipelines'
+import { pipelineBoundary, usePipelines } from '../state/pipelines'
 import type { Pipeline, PipelineStageView } from '../state/pipelines'
 import { useSelection } from '../state/selection'
 
@@ -46,29 +46,7 @@ export function Pipelines(): React.JSX.Element {
 function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
   const { select } = useSelection()
   const [feedback, setFeedback] = useState('')
-
-  // Two boundaries the user acts on, both carrying the just-finished stage:
-  //  · gate — a stage finished with more to come: Continue or Revise it.
-  //  · review — every stage finished and it isn't signed off yet: Approve, or
-  //    Request changes (re-run the final stage). These are mutually exclusive.
-  const running = pipeline.stages.some((stage) => stage.status === 'running')
-  const failed = pipeline.stages.some((stage) => stage.status === 'failed')
-  const doneStages = pipeline.stages.filter((stage) => stage.status === 'done')
-  const lastDone = doneStages[doneStages.length - 1]
-  const nextStage = pipeline.stages.find((stage) => stage.status === 'pending')
-  const allDone = pipeline.stages.every((stage) => stage.status === 'done')
-  const gate =
-    !pipeline.done &&
-    !running &&
-    !failed &&
-    lastDone?.sessionId !== undefined &&
-    nextStage !== undefined
-      ? { from: lastDone.sessionId, stageName: lastDone.name, nextName: nextStage.name }
-      : undefined
-  const review =
-    lastDone?.sessionId !== undefined && allDone && !pipeline.approved
-      ? { from: lastDone.sessionId, stageName: lastDone.name }
-      : undefined
+  const { gate, review } = pipelineBoundary(pipeline)
 
   const revise = (from: string): void => {
     const trimmed = feedback.trim()
@@ -82,9 +60,15 @@ function PipelineRow({ pipeline }: { pipeline: Pipeline }): React.JSX.Element {
   return (
     <li className="pipeline-row">
       <div className="pipeline-head">
-        <span className="pipeline-title" title={pipeline.title}>
+        <button
+          type="button"
+          className="pipeline-title plan-title-button"
+          title={`${pipeline.title} — open the review workbench`}
+          aria-label={`Review pipeline ${pipeline.title}`}
+          onClick={() => select({ kind: 'pipeline', id: pipeline.id })}
+        >
           {pipeline.title}
-        </span>
+        </button>
         <button
           type="button"
           className="queue-action"

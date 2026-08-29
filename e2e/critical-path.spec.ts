@@ -648,6 +648,19 @@ test('a plan task can run as a full pipeline from the canvas', async () => {
     await expect(page.getByRole('region', { name: 'Task details: Scaffold' })).toContainText(
       'via pipeline',
     )
+
+    // The pipeline's title opens the review workbench in the centre: stage
+    // reasoning + the gate, with a Continue that advances it right there.
+    await pipelines.getByRole('button', { name: /Review pipeline Set up the groundwork/ }).click()
+    const bench = page.getByRole('region', { name: 'Review workbench' })
+    await expect(bench.getByRole('region', { name: 'Stage: Plan' })).toBeVisible()
+    await bench.getByRole('button', { name: 'Continue → Implement' }).click()
+    // The mock stage may already have finished by the time we look.
+    await expect(pipelines.getByLabel(/Implement — (running|done)/)).toBeVisible()
+
+    // Close returns the centre pane to the plan canvas.
+    await bench.getByRole('button', { name: 'Close review' }).click()
+    await expect(page.getByRole('region', { name: 'Plan canvas' })).toBeVisible()
   } finally {
     await app.close()
   }

@@ -32,6 +32,7 @@ function stubBridge(diffs: StoredEvent[]): BridgeStub {
         diffs: vi.fn(() => Promise.resolve(diffs)),
         list: vi.fn(() => Promise.resolve([])),
         tail: vi.fn(() => Promise.resolve([])),
+        bySession: vi.fn(() => Promise.resolve([])),
         search: vi.fn(() => Promise.resolve([])),
         onAppended: vi.fn((listener: (event: StoredEvent) => void) => {
           appended = listener

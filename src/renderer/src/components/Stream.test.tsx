@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { StoredEvent } from '../../../shared/events'
 import { AgentTypesProvider } from '../state/agentTypes'
+import { PipelineProvider } from '../state/pipelines'
 import { PlanProvider } from '../state/plans'
 import { ScrubProvider } from '../state/scrub'
 import { useSelection } from '../state/selection'
@@ -19,14 +20,16 @@ function renderStream(children?: React.ReactNode): void {
     <SelectionProvider>
       <SessionsProvider>
         <PlanProvider>
-          <ScrubProvider>
-            <AgentTypesProvider>
-              <SkillsProvider>
-                {children}
-                <Stream />
-              </SkillsProvider>
-            </AgentTypesProvider>
-          </ScrubProvider>
+          <PipelineProvider>
+            <ScrubProvider>
+              <AgentTypesProvider>
+                <SkillsProvider>
+                  {children}
+                  <Stream />
+                </SkillsProvider>
+              </AgentTypesProvider>
+            </ScrubProvider>
+          </PipelineProvider>
         </PlanProvider>
       </SessionsProvider>
     </SelectionProvider>,
@@ -198,6 +201,56 @@ describe('Stream', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }))
     expect(screen.queryByRole('region', { name: 'Plan canvas' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Activity timeline' })).toBeInTheDocument()
+  })
+
+  it('swaps in the review workbench for a selected pipeline, composer standing down', async () => {
+    window.agentinator = {
+      events: {
+        count: vi.fn(() => Promise.resolve(1)),
+        totalCost: vi.fn(() => Promise.resolve(0)),
+        diffs: vi.fn(() => Promise.resolve([])),
+        list: vi.fn(() => Promise.resolve([])),
+        tail: vi.fn(() =>
+          Promise.resolve([
+            {
+              seq: 1,
+              ts: 't',
+              type: 'pipeline.created',
+              payload: {
+                pipelineId: 'pl1',
+                title: 'Ship it',
+                stages: [{ name: 'Plan', prompt: 'p' }],
+              },
+            },
+          ] as StoredEvent[]),
+        ),
+        bySession: vi.fn(() => Promise.resolve([])),
+        search: vi.fn(() => Promise.resolve([])),
+        onAppended: vi.fn(() => () => undefined),
+      },
+      agent: { current: vi.fn(() => Promise.resolve({ providerId: 'claude', label: 'Claude' })) },
+      approvals: { pending: vi.fn(() => Promise.resolve([])) },
+      agentTypes: { list: vi.fn(() => Promise.resolve([])) },
+      skills: { list: vi.fn(() => Promise.resolve([])) },
+    } as unknown as AgentinatorBridge
+    function PickPipeline(): React.JSX.Element {
+      const { select } = useSelection()
+      return (
+        <button type="button" onClick={() => select({ kind: 'pipeline', id: 'pl1' })}>
+          pick pipeline
+        </button>
+      )
+    }
+
+    renderStream(<PickPipeline />)
+
+    expect(screen.getByLabelText('Composer')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'pick pipeline' }))
+
+    // The workbench takes the centre; its own revise input is the one text
+    // surface, so the composer stands down.
+    expect(await screen.findByRole('region', { name: 'Review workbench' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Composer')).not.toBeInTheDocument()
   })
 
   it('restores the composer when an agent is selected while a card is open', async () => {

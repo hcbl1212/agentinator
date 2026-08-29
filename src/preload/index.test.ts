@@ -98,6 +98,11 @@ describe('preload bridge', () => {
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:tail', 50, undefined)
   })
 
+  it('routes events.bySession over IPC', async () => {
+    await bridge.events.bySession('session_1')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('events:by-session', 'session_1')
+  })
+
   it('routes events.search over IPC', async () => {
     await bridge.events.search('greet', 100)
 

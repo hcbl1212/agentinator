@@ -99,6 +99,39 @@ export function reducePipelines(pipelines: Pipeline[], event: StoredEvent): Pipe
   }
 }
 
+/** The human decision a pipeline is waiting on, if any. Both boundaries carry
+ * the just-finished stage's session (its output is what you're judging):
+ *  · gate — a stage finished with more to come: Continue or Revise it.
+ *  · review — every stage finished, not yet signed off: Approve, or Request
+ *    changes (re-runs the final stage). Mutually exclusive. */
+export interface PipelineBoundary {
+  gate?: { from: string; stageName: string; nextName: string }
+  review?: { from: string; stageName: string }
+}
+
+export function pipelineBoundary(pipeline: Pipeline): PipelineBoundary {
+  const running = pipeline.stages.some((stage) => stage.status === 'running')
+  const failed = pipeline.stages.some((stage) => stage.status === 'failed')
+  const doneStages = pipeline.stages.filter((stage) => stage.status === 'done')
+  const lastDone = doneStages[doneStages.length - 1]
+  const nextStage = pipeline.stages.find((stage) => stage.status === 'pending')
+  const allDone = pipeline.stages.every((stage) => stage.status === 'done')
+  return {
+    gate:
+      !pipeline.done &&
+      !running &&
+      !failed &&
+      lastDone?.sessionId !== undefined &&
+      nextStage !== undefined
+        ? { from: lastDone.sessionId, stageName: lastDone.name, nextName: nextStage.name }
+        : undefined,
+    review:
+      lastDone?.sessionId !== undefined && allDone && !pipeline.approved
+        ? { from: lastDone.sessionId, stageName: lastDone.name }
+        : undefined,
+  }
+}
+
 interface PipelineState {
   pipelines: Pipeline[]
 }
