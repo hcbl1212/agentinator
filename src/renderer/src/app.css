@@ -1878,6 +1878,18 @@ button.plan-task:focus-visible {
   padding: 0.25rem 0.6rem 0;
 }
 
+/* The DAG weight on an inbox item — how much waits on this decision. */
+.inbox-blocks {
+  border: 1px solid var(--working);
+  border-radius: 999px;
+  color: var(--working);
+  flex: none;
+  font-size: 0.62rem;
+  margin-left: auto;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
+
 .plan-canvas-scroll {
   flex: 1;
   overflow: auto;

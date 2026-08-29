@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
 import { InboxProvider, useInbox } from '../state/inbox'
+import { PipelineProvider } from '../state/pipelines'
+import { PlanProvider } from '../state/plans'
 import { SelectionProvider } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { InboxChip } from './InboxChip'
@@ -39,9 +41,13 @@ function renderChip(): { emit: (event: StoredEvent) => void } {
   render(
     <SelectionProvider>
       <SessionsProvider>
-        <InboxProvider>
-          <InboxChip />
-        </InboxProvider>
+        <PlanProvider>
+          <PipelineProvider>
+            <InboxProvider>
+              <InboxChip />
+            </InboxProvider>
+          </PipelineProvider>
+        </PlanProvider>
       </SessionsProvider>
     </SelectionProvider>,
   )

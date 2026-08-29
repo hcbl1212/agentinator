@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
 import { InboxProvider } from '../state/inbox'
+import { PipelineProvider } from '../state/pipelines'
+import { PlanProvider } from '../state/plans'
 import { SelectionProvider, useSelection } from '../state/selection'
 import { SessionsProvider } from '../state/sessions'
 import { InboxPanel } from './InboxPanel'
@@ -59,10 +61,14 @@ function renderPanel(
   render(
     <SelectionProvider>
       <SessionsProvider>
-        <InboxProvider>
-          <Probe />
-          <InboxPanel onClose={onClose} />
-        </InboxProvider>
+        <PlanProvider>
+          <PipelineProvider>
+            <InboxProvider>
+              <Probe />
+              <InboxPanel onClose={onClose} />
+            </InboxProvider>
+          </PipelineProvider>
+        </PlanProvider>
       </SessionsProvider>
     </SelectionProvider>,
   )
@@ -78,6 +84,37 @@ describe('InboxPanel', () => {
   it('shows the empty state when nothing needs you', () => {
     renderPanel([])
     expect(screen.getByText(/Nothing needs you/)).toBeInTheDocument()
+  })
+
+  it('ranks items by DAG blockage — critical-path decisions above leaf noise', async () => {
+    renderPanel([
+      started('s_leaf', 'Polish docs'),
+      started('s_root', 'Design schema'),
+      // The plan: the root task gates two dependents; the leaf gates none.
+      // s_leaf's question arrives FIRST — weight must beat arrival order.
+      event('plan.created', {
+        planId: 'pl1',
+        title: 'Data layer',
+        requirement: 'r',
+        tasks: [
+          { taskId: 'root', title: 'Root', prompt: 'p', dependsOn: [] },
+          { taskId: 'mid', title: 'Mid', prompt: 'p', dependsOn: ['root'] },
+          { taskId: 'tip', title: 'Tip', prompt: 'p', dependsOn: ['mid'] },
+          { taskId: 'leaf', title: 'Leaf', prompt: 'p', dependsOn: [] },
+        ],
+      }),
+      event('plan.task.dispatched', { planId: 'pl1', taskId: 'leaf', sessionId: 's_leaf' }),
+      event('plan.task.dispatched', { planId: 'pl1', taskId: 'root', sessionId: 's_root' }),
+      question('s_leaf', 'r1', 'Oxford commas?'),
+      question('s_root', 'r2', 'UUID or serial keys?'),
+    ])
+
+    const items = await screen.findAllByRole('button', { name: /Go to/ })
+    expect(items[0]).toHaveAccessibleName('Go to Design schema')
+    expect(items[1]).toHaveAccessibleName('Go to Polish docs')
+    // The weight is visible, and only where it exists.
+    expect(items[0]).toHaveTextContent('blocks 2')
+    expect(items[1]).not.toHaveTextContent(/blocks/)
   })
 
   it('lists pending approvals (from the broker) and questions (from the log)', async () => {
@@ -172,9 +209,13 @@ describe('InboxPanel', () => {
     render(
       <SelectionProvider>
         <SessionsProvider>
-          <InboxProvider>
-            <InboxPanel onClose={vi.fn()} />
-          </InboxProvider>
+          <PlanProvider>
+            <PipelineProvider>
+              <InboxProvider>
+                <InboxPanel onClose={vi.fn()} />
+              </InboxProvider>
+            </PipelineProvider>
+          </PlanProvider>
         </SessionsProvider>
       </SelectionProvider>,
     )
