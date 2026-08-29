@@ -6,6 +6,7 @@ import { pipelineBoundary, usePipelines } from '../state/pipelines'
 import type { PipelineStageView } from '../state/pipelines'
 import { useSelection } from '../state/selection'
 import { DiffFiles } from './DiffView'
+import { FormattedText } from './FormattedText'
 
 /** What the workbench gathers per launched stage: its final words (the
  * reasoning handed forward) and its share of the diff. */
@@ -144,11 +145,15 @@ export function ReviewWorkbench({ pipelineId }: { pipelineId: string }): React.J
               </button>
             </header>
             {reports.get(stage.sessionId) !== undefined && (
-              <pre className="review-reasoning">
-                {reports.get(stage.sessionId)?.reasoning === ''
-                  ? '(no written output)'
-                  : reports.get(stage.sessionId)?.reasoning}
-              </pre>
+              <div className="review-reasoning">
+                <FormattedText
+                  text={
+                    reports.get(stage.sessionId)?.reasoning === ''
+                      ? '(no written output)'
+                      : (reports.get(stage.sessionId)?.reasoning as string)
+                  }
+                />
+              </div>
             )}
           </section>
         ))}

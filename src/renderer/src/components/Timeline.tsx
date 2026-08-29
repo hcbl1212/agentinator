@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { StoredEvent } from '../../../shared/events'
 import { describeEvent, matchesQuery, mergeBySeq } from '../timeline/timelineFormat'
+import { FormattedText } from './FormattedText'
 
 /** Internal state the log records but the conversation view doesn't show: idle
  * turns and the model colour the rail; the resume token is pure plumbing. */
@@ -199,7 +200,9 @@ export function Timeline({
                 <span className="timeline-marker" aria-hidden="true">
                   {line.marker}
                 </span>
-                <span className="timeline-text">{line.text}</span>
+                <span className="timeline-text">
+                  <FormattedText text={line.text} />
+                </span>
               </li>
             )
           })}

@@ -878,6 +878,26 @@ textarea.preview-props-input {
   overflow-wrap: anywhere;
 }
 
+/* Agent prose keeps its line breaks — a written plan reads as written. */
+.timeline-text {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A ``` fence rendered as a distinct block, inside the timeline or the
+   review workbench's reasoning. */
+.code-block {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: block;
+  margin: 0.35rem 0;
+  overflow-x: auto;
+  padding: 0.4rem 0.5rem;
+  white-space: pre;
+}
+
 .timeline-marker {
   flex: none;
   text-align: center;
