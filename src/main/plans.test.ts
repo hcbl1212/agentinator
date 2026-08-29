@@ -395,6 +395,127 @@ describe('PlanOrchestrator', () => {
     expect(second.types()).toContain('plan.task.completed')
   })
 
+  it('expands a task in place: roots inherit its deps, dependents wait on the leaves', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain() // A ← B ← C (C also waits on A)
+
+    // B becomes X → Y (Y waits on X). X stands where B stood (inherits A);
+    // C's wait on B becomes a wait on Y, the sub-graph's leaf.
+    expect(
+      h.orchestrator.expand(planId, tasks[1].taskId, [
+        { title: 'X', prompt: 'do x', dependsOn: [] },
+        { title: 'Y', prompt: 'do y', dependsOn: [0] },
+      ]),
+    ).toBe(true)
+    const expanded = h.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+    expect(expanded.tasks.map((task) => task.title)).toEqual(['X', 'Y'])
+    expect(expanded.tasks[0].dependsOn).toEqual([tasks[0].taskId]) // root inherits A
+    expect(expanded.tasks[1].dependsOn).toEqual([expanded.tasks[0].taskId])
+
+    // The graph behaves as spliced: finish A → X is ready, C still is not.
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    h.idled('sess0')
+    expect(h.orchestrator.dispatch(planId, tasks[2].taskId)).toBeNull()
+    expect(h.orchestrator.dispatch(planId, expanded.tasks[0].taskId)).toBe('sess1')
+    h.idled('sess1')
+    expect(h.orchestrator.dispatch(planId, expanded.tasks[1].taskId)).toBe('sess2')
+    h.idled('sess2')
+    // Every sub-task done → C's rewired frontier finally opens.
+    expect(h.orchestrator.dispatch(planId, tasks[2].taskId)).toBe('sess3')
+  })
+
+  it('expansion sub-tasks inherit the parent role unless they name their own', () => {
+    const h = harness()
+    const planId = h.orchestrator.create('Typed', 'r', [
+      { title: 'T', prompt: 't', dependsOn: [], agentTypeId: 'at_parent' },
+    ])
+    const parent = (
+      h.log.find((event) => event.type === 'plan.created')?.payload as EventPayloads['plan.created']
+    ).tasks[0]
+
+    h.orchestrator.expand(planId, parent.taskId, [
+      { title: 'Inherits', prompt: 'a', dependsOn: [] },
+      { title: 'Own', prompt: 'b', dependsOn: [], agentTypeId: 'at_own' },
+    ])
+
+    const expanded = h.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+    expect(expanded.tasks[0].agentTypeId).toBe('at_parent')
+    expect(expanded.tasks[1].agentTypeId).toBe('at_own')
+  })
+
+  it('two parallel sub-leaves BOTH gate the parent’s dependents', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    h.orchestrator.expand(planId, tasks[1].taskId, [
+      { title: 'P', prompt: 'p', dependsOn: [] },
+      { title: 'Q', prompt: 'q', dependsOn: [] },
+    ])
+    const expanded = h.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    h.idled('sess0')
+    h.orchestrator.dispatch(planId, expanded.tasks[0].taskId)
+    h.idled('sess1')
+
+    // P done, Q untouched — C must still wait.
+    expect(h.orchestrator.dispatch(planId, tasks[2].taskId)).toBeNull()
+  })
+
+  it('refuses expanding unknown, launched, or emptily-decomposed tasks', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+    const sub = [{ title: 'X', prompt: 'x', dependsOn: [] }]
+
+    expect(h.orchestrator.expand('plan_ghost', tasks[0].taskId, sub)).toBe(false)
+    expect(h.orchestrator.expand(planId, 'task_ghost', sub)).toBe(false)
+    expect(h.orchestrator.expand(planId, tasks[0].taskId, [])).toBe(false)
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(h.orchestrator.expand(planId, tasks[0].taskId, sub)).toBe(false)
+    expect(h.types()).not.toContain('plan.task.expanded')
+  })
+
+  it('serves a brief for the decomposer only while the task is unlaunched', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+
+    expect(h.orchestrator.taskBrief(planId, tasks[0].taskId)).toBe('do a')
+    expect(h.orchestrator.taskBrief(planId, 'task_ghost')).toBeNull()
+    h.orchestrator.dispatch(planId, tasks[0].taskId)
+    expect(h.orchestrator.taskBrief(planId, tasks[0].taskId)).toBeNull()
+  })
+
+  it('reconciles an expansion (and shrugs off one aimed at a ghost)', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    first.orchestrator.expand(planId, tasks[1].taskId, [{ title: 'X', prompt: 'x', dependsOn: [] }])
+    const expanded = first.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+    const stray: StoredEvent = {
+      seq: 99,
+      ts: 't',
+      type: 'plan.task.expanded',
+      payload: { planId, taskId: 'task_ghost', tasks: [] },
+    }
+    const strayPlan: StoredEvent = {
+      seq: 100,
+      ts: 't',
+      type: 'plan.task.expanded',
+      payload: { planId: 'plan_ghost', taskId: 'task_x', tasks: [] },
+    }
+
+    const second = harness()
+    second.orchestrator.reconcile([...first.log, stray, strayPlan])
+
+    // The spliced graph survived the restart: B is gone, X stands in for it.
+    expect(second.orchestrator.dispatch(planId, tasks[1].taskId)).toBeNull()
+    second.orchestrator.dispatch(planId, tasks[0].taskId)
+    second.idled('sess0')
+    expect(second.orchestrator.dispatch(planId, expanded.tasks[0].taskId)).toBe('sess1')
+  })
+
   it('reprompts an undispatched task, and the edited brief rides the dispatch', () => {
     const h = harness()
     const { planId, tasks } = h.createChain()

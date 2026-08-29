@@ -1017,6 +1017,10 @@ describe('registerPlannerIpc', () => {
     const removeEdge = vi.fn(() => true)
     const retype = vi.fn(() => true)
     const reprompt = vi.fn(() => true)
+    const expand = vi.fn(() => true)
+    const taskBrief = vi.fn((_planId: string, taskId: string) =>
+      taskId === 'task_launched' ? null : 'the brief',
+    )
     const decompose = vi.fn(() => Promise.resolve([{ title: 'A', prompt: 'do a', dependsOn: [] }]))
     const savedTypes = [{ id: 'at_rev', name: 'Reviewer', instructions: '' }]
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -1031,6 +1035,8 @@ describe('registerPlannerIpc', () => {
         removeEdge,
         retype,
         reprompt,
+        expand,
+        taskBrief,
       } as unknown as PlanOrchestrator,
       decompose,
       () => savedTypes,
@@ -1072,6 +1078,21 @@ describe('registerPlannerIpc', () => {
       handlers.get('planner:reprompt')?.(undefined, 'plan_7', 'task_2', 'a sharper brief'),
     ).toBe(true)
     expect(reprompt).toHaveBeenCalledWith('plan_7', 'task_2', 'a sharper brief')
+
+    // Expand: the task's brief goes back through the decomposer, then the
+    // splice; a launched task (no brief) refuses before any AI call.
+    await expect(handlers.get('planner:expand')?.(undefined, 'plan_7', 'task_2')).resolves.toBe(
+      true,
+    )
+    expect(decompose).toHaveBeenLastCalledWith('the brief', savedTypes)
+    expect(expand).toHaveBeenCalledWith('plan_7', 'task_2', [
+      { title: 'A', prompt: 'do a', dependsOn: [] },
+    ])
+    decompose.mockClear()
+    await expect(
+      handlers.get('planner:expand')?.(undefined, 'plan_7', 'task_launched'),
+    ).resolves.toBe(false)
+    expect(decompose).not.toHaveBeenCalled()
   })
 
   it('registers on ipcMain by default', () => {
@@ -1085,6 +1106,7 @@ describe('registerPlannerIpc', () => {
       'planner:remove',
       'planner:retype',
       'planner:reprompt',
+      'planner:expand',
       'planner:add-edge',
       'planner:remove-edge',
     ])

@@ -166,6 +166,43 @@ export function reducePlans(plans: Plan[], event: StoredEvent): Plan[] {
           : plan,
       )
     }
+    case 'plan.task.expanded': {
+      const { planId, taskId, tasks } = event.payload as EventPayloads['plan.task.expanded']
+      return plans.map((plan) => {
+        if (plan.id !== planId) {
+          return plan
+        }
+        const index = plan.tasks.findIndex((task) => task.id === taskId)
+        if (index === -1) {
+          return plan
+        }
+        // The sub-graph's leaves (no sub-task waits on them) — dependents of
+        // the expanded task rewire onto these, so the whole sub-plan gates
+        // them. Derived the same way the orchestrator derives it.
+        const ids = new Set(tasks.map((task) => task.taskId))
+        const depended = new Set(
+          tasks.flatMap((task) => task.dependsOn.filter((dep) => ids.has(dep))),
+        )
+        const leaves = tasks.filter((task) => !depended.has(task.taskId)).map((task) => task.taskId)
+        const views: PlanTaskView[] = tasks.map((task) => ({
+          id: task.taskId,
+          title: task.title,
+          prompt: task.prompt,
+          dependsOn: task.dependsOn,
+          status: 'pending',
+          ...(task.agentTypeId === undefined ? {} : { agentTypeId: task.agentTypeId }),
+        }))
+        const rewired = plan.tasks.map((task) =>
+          task.dependsOn.includes(taskId)
+            ? { ...task, dependsOn: [...task.dependsOn.filter((dep) => dep !== taskId), ...leaves] }
+            : task,
+        )
+        return {
+          ...plan,
+          tasks: [...rewired.slice(0, index), ...views, ...rewired.slice(index + 1)],
+        }
+      })
+    }
     case 'plan.removed': {
       const { planId } = event.payload as EventPayloads['plan.removed']
       return plans.filter((plan) => plan.id !== planId)

@@ -316,6 +316,17 @@ function TaskDetail({
   types: { id: string; name: string }[]
 }): React.JSX.Element {
   const [draft, setDraft] = useState(task.prompt)
+  const [expanding, setExpanding] = useState(false)
+
+  const expand = (): void => {
+    setExpanding(true)
+    // On success the sub-tasks replace this task and the card closes itself
+    // (the inspected id is gone); on refusal the button simply frees up.
+    void window.agentinator?.planner
+      .expand(plan.id, task.id)
+      .catch(() => undefined)
+      .then(() => setExpanding(false))
+  }
   const byId = new Map(plan.tasks.map((t) => [t.id, t]))
   const blockers = task.dependsOn
     .map((dep) => byId.get(dep)?.title)
@@ -389,13 +400,25 @@ function TaskDetail({
             rows={5}
             aria-label={`Brief for ${task.title}`}
           />
-          <button
-            type="submit"
-            className="plan-form-send"
-            disabled={draft.trim() === '' || draft.trim() === task.prompt}
-          >
-            Save brief
-          </button>
+          <div className="plan-task-detail-actions">
+            <button
+              type="button"
+              className="plan-form-send"
+              disabled={expanding}
+              title="Decompose this brief into sub-tasks that take its place in the graph"
+              aria-label={`Expand ${task.title} into sub-tasks`}
+              onClick={expand}
+            >
+              {expanding ? 'Expanding…' : 'Expand into sub-tasks'}
+            </button>
+            <button
+              type="submit"
+              className="plan-form-send"
+              disabled={draft.trim() === '' || draft.trim() === task.prompt}
+            >
+              Save brief
+            </button>
+          </div>
         </form>
       ) : (
         // A launched agent's brief is history — read-only; steer the running

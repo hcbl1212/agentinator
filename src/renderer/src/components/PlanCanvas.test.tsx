@@ -28,6 +28,7 @@ function stub(
   removeEdge: ReturnType<typeof vi.fn>
   retype: ReturnType<typeof vi.fn>
   reprompt: ReturnType<typeof vi.fn>
+  expand: ReturnType<typeof vi.fn>
 } {
   let appended: (event: StoredEvent) => void = () => undefined
   const dispatch = vi.fn(() => Promise.resolve('sess_new'))
@@ -36,6 +37,7 @@ function stub(
   const removeEdge = vi.fn(() => Promise.resolve(true))
   const retype = vi.fn(() => Promise.resolve(true))
   const reprompt = vi.fn(() => Promise.resolve(true))
+  const expand = vi.fn(() => Promise.resolve(true))
   return {
     emit: (event) => appended(event),
     dispatch,
@@ -44,6 +46,7 @@ function stub(
     removeEdge,
     retype,
     reprompt,
+    expand,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -62,6 +65,7 @@ function stub(
         removeEdge,
         retype,
         reprompt,
+        expand,
       },
     } as unknown as AgentinatorBridge,
   }
@@ -385,9 +389,24 @@ describe('PlanCanvas', () => {
       // Aimed at pl1 only — pl2 (the shown, newest plan) must keep its edge.
       s.emit(event('plan.edge.removed', { planId: 'pl1', taskId: 'tb', dependsOnTaskId: 'ta' }))
       s.emit(event('plan.edge.added', { planId: 'pl1', taskId: 'td', dependsOnTaskId: 'tc' }))
-      // Same for a retype and a reprompt: pl2's Implement stays untouched.
+      // Same for a retype, a reprompt, and an expansion: pl2 stays untouched,
+      // and expanding a task pl2 never carried is a no-op.
       s.emit(event('plan.task.retyped', { planId: 'pl1', taskId: 'tb', agentTypeId: 'at_rev' }))
       s.emit(event('plan.task.reprompted', { planId: 'pl1', taskId: 'tb', prompt: 'pl1 only' }))
+      s.emit(
+        event('plan.task.expanded', {
+          planId: 'pl1',
+          taskId: 'td',
+          tasks: [{ taskId: 'tz', title: 'Z', prompt: 'z', dependsOn: [] }],
+        }),
+      )
+      s.emit(
+        event('plan.task.expanded', {
+          planId: 'pl2',
+          taskId: 'ghost',
+          tasks: [{ taskId: 'tg', title: 'G', prompt: 'g', dependsOn: [] }],
+        }),
+      )
     })
 
     // The canvas shows pl2 (newest): its Scaffold→Implement edge survived the
@@ -403,6 +422,10 @@ describe('PlanCanvas', () => {
     expect(screen.getByRole('textbox', { name: 'Brief for Implement' })).toHaveValue(
       'brief: implement it',
     )
+    // pl2 kept its own graph: Docs intact, no strays from either expansion.
+    expect(screen.getByRole('button', { name: 'Trace Docs' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Trace Z' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Trace G' })).not.toBeInTheDocument()
   })
 
   it('opens a task’s detail card on click: meta and an editable brief', async () => {
@@ -457,6 +480,70 @@ describe('PlanCanvas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Trace Docs' }))
     expect(screen.getByRole('region', { name: 'Task details: Docs' })).toHaveTextContent('ready')
     expect(screen.getByRole('combobox', { name: 'Agent type for Docs' })).toHaveValue('')
+  })
+
+  it('expands a task in place: sub-tasks take its spot, dependents rewire', async () => {
+    const s = stub([created('pl1')])
+    window.agentinator = s.bridge
+    renderCanvas()
+
+    // Kick the expansion from Implement's card; the bridge is asked once.
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace Implement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Implement into sub-tasks' }))
+    expect(s.expand).toHaveBeenCalledWith('pl1', 'tb')
+    expect(screen.getByRole('button', { name: 'Expand Implement into sub-tasks' })).toBeDisabled()
+
+    // The log answers: X → Y replace Implement at its position; Verify (which
+    // waited on Implement) now waits on Y, the sub-graph's leaf. The card for
+    // the vanished task closes itself.
+    act(() => {
+      s.emit(
+        event('plan.task.expanded', {
+          planId: 'pl1',
+          taskId: 'tb',
+          tasks: [
+            { taskId: 'tx', title: 'X', prompt: 'do x', dependsOn: ['ta'], agentTypeId: 'at_doc' },
+            { taskId: 'ty', title: 'Y', prompt: 'do y', dependsOn: ['tx'] },
+          ],
+        }),
+      )
+    })
+    expect(screen.queryByRole('button', { name: 'Trace Implement' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Task details: Implement' }),
+    ).not.toBeInTheDocument()
+    // The spliced edges: Scaffold → X → Y → Verify, the old edge gone; a
+    // sub-task's own role rides in as a badge.
+    expect(screen.getByRole('button', { name: 'Trace X' })).toBeInTheDocument()
+    expect(screen.getByTitle('Role: Doc writer')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove dependency Scaffold → X' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove dependency X → Y' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove dependency Y → Verify' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Remove dependency Scaffold → Implement' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('frees the Expand button again when the decomposition fails', async () => {
+    const s = stub([created('pl1')])
+    // Pre-handled so the eager rejection can't trip the unhandled tracker
+    // before the component's own catch attaches.
+    const failure = Promise.reject(new Error('provider down'))
+    failure.catch(() => undefined)
+    s.expand.mockReturnValueOnce(failure)
+    window.agentinator = s.bridge
+    renderCanvas()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace Implement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Implement into sub-tasks' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('button', { name: 'Expand Implement into sub-tasks' })).toBeEnabled()
   })
 
   it('freezes a dispatched task’s brief read-only (steer the agent instead)', async () => {

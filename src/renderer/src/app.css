@@ -2168,6 +2168,12 @@ button.plan-task:focus-visible {
   outline: none;
 }
 
+.plan-task-detail-actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+
 .plan-task-detail-form .plan-form-send {
   align-self: flex-end;
 }

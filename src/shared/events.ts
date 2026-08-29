@@ -188,6 +188,12 @@ export interface EventPayloads {
    * Guarded upstream: only tasks that haven't dispatched can be reprompted —
    * a launched agent's brief is history. */
   'plan.task.reprompted': { planId: string; taskId: string; prompt: string }
+  /** A task was expanded into a sub-plan IN PLACE: the recorded tasks replace
+   * it at its position in the graph. Their roots already carry the parent's
+   * dependencies; tasks that waited on the parent are rewired (on replay too)
+   * to wait on the sub-graph's leaves, so the expansion keeps the task's
+   * place in the plan. Guarded upstream: undispatched tasks only. */
+  'plan.task.expanded': { planId: string; taskId: string; tasks: PlanTaskSpec[] }
   /** A snapshot of an isolated agent's worktree (a dangling git commit), so it
    * can be rewound to this point later. */
   'checkpoint.created': { sessionId: string; checkpointId: string; label: string; sha: string }

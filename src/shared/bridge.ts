@@ -232,6 +232,11 @@ export interface AgentinatorBridge {
      * false when refused (unknown task, blank brief, or an agent already
      * launched — a running task is steered via its reply box instead). */
     reprompt(planId: string, taskId: string, prompt: string): Promise<boolean>
+    /** Expand an undispatched task into a sub-plan IN PLACE (the AI decomposes
+     * its brief): sub-tasks take its spot, inherit its dependencies, and its
+     * dependents wait on the sub-graph's leaves. Resolves false when refused
+     * (unknown/launched task, or nothing usable came back). */
+    expand(planId: string, taskId: string): Promise<boolean>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

@@ -23,6 +23,39 @@ function copyTasks(tasks: PlanTaskSpec[]): PlanTaskSpec[] {
   return tasks.map((task) => ({ ...task, dependsOn: [...task.dependsOn] }))
 }
 
+/** The sub-graph's leaves: expansion tasks no OTHER expansion task waits on.
+ * Downstream work rewires onto these, so the whole sub-plan gates it. */
+export function expansionLeaves(tasks: PlanTaskSpec[]): string[] {
+  const ids = new Set(tasks.map((task) => task.taskId))
+  const depended = new Set(tasks.flatMap((task) => task.dependsOn.filter((dep) => ids.has(dep))))
+  return tasks.filter((task) => !depended.has(task.taskId)).map((task) => task.taskId)
+}
+
+/** Splice an expansion into a task list: the sub-tasks take the parent's
+ * position, and every task that waited on the parent now waits on the
+ * sub-graph's leaves. Deterministic from the event payload alone, so the
+ * orchestrator's reconcile and the renderer's reducer replay it identically. */
+export function spliceExpansion(
+  tasks: PlanTaskSpec[],
+  taskId: string,
+  expansion: PlanTaskSpec[],
+): PlanTaskSpec[] {
+  const index = tasks.findIndex((task) => task.taskId === taskId)
+  if (index === -1) {
+    return tasks // a hand-built log expanding a ghost — nothing to splice
+  }
+  const leaves = expansionLeaves(expansion)
+  const rewired = tasks.map((task) =>
+    task.dependsOn.includes(taskId)
+      ? {
+          ...task,
+          dependsOn: [...task.dependsOn.filter((dep) => dep !== taskId), ...leaves],
+        }
+      : task,
+  )
+  return [...rewired.slice(0, index), ...copyTasks(expansion), ...rewired.slice(index + 1)]
+}
+
 /**
  * Runs plans: a requirement decomposed into a task DAG, dispatched task by task
  * as the user fires the ready frontier. {@link dispatch} launches one ready
@@ -193,6 +226,49 @@ export class PlanOrchestrator {
     return pipelineId
   }
 
+  /** A task's brief, for feeding back through the decomposer — or null when
+   * the task is unknown or already launched (too late to restructure). */
+  taskBrief(planId: string, taskId: string): string | null {
+    const task = this.#plans.get(planId)?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (task === undefined || this.#dispatched.has(`${planId}:${taskId}`)) {
+      return null
+    }
+    return task.prompt
+  }
+
+  /** Expand an undispatched task into a sub-plan IN PLACE: the decomposition's
+   * tasks replace it at its position — their roots inherit the task's
+   * dependencies, and everything that waited on the task is rewired to wait
+   * on the sub-graph's leaves. Refused (false) for an unknown/launched task
+   * or an empty decomposition. */
+  expand(planId: string, taskId: string, decomposed: DecomposedTask[]): boolean {
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined || decomposed.length === 0) {
+      return false
+    }
+    if (this.#dispatched.has(`${planId}:${taskId}`)) {
+      return false
+    }
+    const ids = decomposed.map(() => createEntityId('task'))
+    const expansion: PlanTaskSpec[] = decomposed.map((sub, index) => {
+      const internal = sub.dependsOn.map((dep) => ids[dep])
+      const agentTypeId = sub.agentTypeId ?? task.agentTypeId
+      return {
+        taskId: ids[index],
+        title: sub.title,
+        prompt: sub.prompt,
+        // Roots of the sub-graph stand where the parent stood — they inherit
+        // its dependencies; deeper sub-tasks reach them transitively.
+        dependsOn: internal.length === 0 ? [...task.dependsOn] : internal,
+        ...(agentTypeId === undefined ? {} : { agentTypeId }),
+      }
+    })
+    plan.tasks = spliceExpansion(plan.tasks, taskId, expansion)
+    this.#emit('plan.task.expanded', { planId, taskId, tasks: expansion })
+    return true
+  }
+
   /** Rewrite a task's brief — the prompt its agent will run with. Refused
    * (false) for an unknown plan/task, a blank brief, or a task whose agent
    * already launched (its brief is history; steer the agent instead). */
@@ -280,6 +356,12 @@ export class PlanOrchestrator {
         const task = this.#plans.get(planId)?.tasks.find((t) => t.taskId === taskId)
         if (task !== undefined) {
           task.prompt = prompt
+        }
+      } else if (event.type === 'plan.task.expanded') {
+        const { planId, taskId, tasks } = event.payload as EventPayloads['plan.task.expanded']
+        const plan = this.#plans.get(planId)
+        if (plan !== undefined) {
+          plan.tasks = spliceExpansion(plan.tasks, taskId, tasks)
         }
       } else if (event.type === 'plan.task.dispatched') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.dispatched']

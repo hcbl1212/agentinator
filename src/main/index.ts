@@ -293,6 +293,16 @@ export function registerPlannerIpc(
   handle('planner:reprompt', (_event, planId, taskId, prompt) =>
     plans.reprompt(planId as string, taskId as string, prompt as string),
   )
+  handle('planner:expand', async (_event, planId, taskId) => {
+    // Feed the task's own brief back through the decomposer; the guard runs
+    // again inside expand, so a task dispatched mid-decomposition refuses.
+    const brief = plans.taskBrief(planId as string, taskId as string)
+    if (brief === null) {
+      return false
+    }
+    const sub = await decompose(brief, types())
+    return plans.expand(planId as string, taskId as string, sub)
+  })
   handle('planner:add-edge', (_event, planId, taskId, dependsOnTaskId) =>
     plans.addEdge(planId as string, taskId as string, dependsOnTaskId as string),
   )

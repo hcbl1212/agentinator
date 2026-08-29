@@ -665,3 +665,29 @@ test('a plan task can run as a full pipeline from the canvas', async () => {
     await app.close()
   }
 })
+
+test('expanding a task splices its sub-plan into place on the canvas', async () => {
+  const { app, page } = await launchApp()
+  try {
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Build the data layer')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+
+    // Expand the middle task from its card: the scripted decomposer turns its
+    // brief into a Scaffold → Implement → Verify sub-chain in place.
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await canvas.getByRole('button', { name: 'Trace Implement' }).click()
+    await page.getByRole('button', { name: 'Expand Implement into sub-tasks' }).click()
+
+    // Five nodes now: two Scaffolds and two Verifys (parent + sub), the card
+    // for the vanished task closed, and the tail rewired through the leaf.
+    await expect(canvas.getByRole('button', { name: 'Trace Scaffold' })).toHaveCount(2)
+    await expect(canvas.getByRole('button', { name: 'Trace Verify' })).toHaveCount(2)
+    await expect(page.getByRole('region', { name: 'Task details: Implement' })).toHaveCount(0)
+    await expect(
+      canvas.getByRole('button', { name: 'Remove dependency Verify → Verify' }),
+    ).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})
