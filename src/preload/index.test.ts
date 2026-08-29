@@ -301,6 +301,7 @@ describe('preload bridge', () => {
     await bridge.planner.retype('plan_1', 'task_2', 'at_rev')
     await bridge.planner.reprompt('plan_1', 'task_2', 'a sharper brief')
     await bridge.planner.expand('plan_1', 'task_2')
+    await bridge.planner.promote('pipeline_1', 'the written plan')
 
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:create', 'add a settings page')
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:dispatch', 'plan_1', 'task_1')
@@ -335,6 +336,11 @@ describe('preload bridge', () => {
       'a sharper brief',
     )
     expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('planner:expand', 'plan_1', 'task_2')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'planner:promote',
+      'pipeline_1',
+      'the written plan',
+    )
   })
 
   it('routes checkpoints over IPC', async () => {

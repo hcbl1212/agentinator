@@ -464,6 +464,61 @@ describe('PlanOrchestrator', () => {
     expect(h.orchestrator.dispatch(planId, tasks[2].taskId)).toBeNull()
   })
 
+  it('promotes a pipelined task’s plan into its place, retiring the link', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+    h.orchestrator.dispatchPipeline(planId, tasks[0].taskId) // pipe0 runs A
+
+    expect(
+      h.orchestrator.promote('pipe0', [
+        { title: 'A1', prompt: 'first half', dependsOn: [] },
+        { title: 'A2', prompt: 'second half', dependsOn: [0] },
+      ]),
+    ).toBe(true)
+
+    const expanded = h.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+    expect(expanded.taskId).toBe(tasks[0].taskId)
+    // The graph took the sub-plan: A1 is on the frontier, B waits on A2.
+    expect(h.orchestrator.dispatch(planId, expanded.tasks[0].taskId)).toBe('sess0')
+    h.idled('sess0')
+    expect(h.orchestrator.dispatch(planId, tasks[1].taskId)).toBeNull()
+    expect(h.orchestrator.dispatch(planId, expanded.tasks[1].taskId)).toBe('sess1')
+    // The dead pipeline resolving later changes nothing.
+    h.pipelineDone('pipe0')
+    expect(h.types().filter((type) => type === 'plan.task.completed')).toHaveLength(1)
+  })
+
+  it('refuses promoting unknown pipelines, cleared plans, or empty plans', () => {
+    const h = harness()
+    const { planId, tasks } = h.createChain()
+    const sub = [{ title: 'X', prompt: 'x', dependsOn: [] }]
+
+    expect(h.orchestrator.promote('pipe_foreign', sub)).toBe(false)
+    h.orchestrator.dispatchPipeline(planId, tasks[0].taskId) // pipe0
+    expect(h.orchestrator.promote('pipe0', [])).toBe(false)
+    // The plan cleared out from under the link — a stale mapping promotes nothing.
+    h.orchestrator.remove(planId)
+    expect(h.orchestrator.promote('pipe0', sub)).toBe(false)
+    expect(h.types()).not.toContain('plan.task.expanded')
+  })
+
+  it('reconciles a promotion: guards freed, dead pipeline stays dead', () => {
+    const first = harness()
+    const { planId, tasks } = first.createChain()
+    first.orchestrator.dispatchPipeline(planId, tasks[0].taskId) // pipe0
+    first.orchestrator.promote('pipe0', [{ title: 'A1', prompt: 'a1', dependsOn: [] }])
+    const expanded = first.log.find((event) => event.type === 'plan.task.expanded')
+      ?.payload as EventPayloads['plan.task.expanded']
+
+    const second = harness()
+    second.orchestrator.reconcile(first.log)
+
+    second.pipelineDone('pipe0')
+    expect(second.types()).not.toContain('plan.task.completed')
+    expect(second.orchestrator.dispatch(planId, expanded.tasks[0].taskId)).toBe('sess0')
+  })
+
   it('refuses expanding unknown, launched, or emptily-decomposed tasks', () => {
     const h = harness()
     const { planId, tasks } = h.createChain()

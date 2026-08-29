@@ -4,6 +4,7 @@ import type { EventPayloads, StoredEvent } from '../../../shared/events'
 import { toFileDiffs } from '../diff/diffFormat'
 import { pipelineBoundary, usePipelines } from '../state/pipelines'
 import type { PipelineStageView } from '../state/pipelines'
+import { usePlans } from '../state/plans'
 import { useSelection } from '../state/selection'
 import { DiffFiles } from './DiffView'
 import { FormattedText } from './FormattedText'
@@ -35,11 +36,30 @@ export function finalText(events: StoredEvent[]): string {
  */
 export function ReviewWorkbench({ pipelineId }: { pipelineId: string }): React.JSX.Element {
   const { pipelines } = usePipelines()
+  const { plans } = usePlans()
   const { select, clear } = useSelection()
   const [feedback, setFeedback] = useState('')
+  const [promoting, setPromoting] = useState(false)
   const [reports, setReports] = useState<Map<string, StageReport>>(new Map())
 
   const pipeline = pipelines.find((candidate) => candidate.id === pipelineId)
+  // Promotion only makes sense when a plan task launched this pipeline —
+  // the written plan then takes that task's place in the DAG.
+  const promotable = plans.some((plan) => plan.tasks.some((task) => task.pipelineId === pipelineId))
+
+  const promoteFrom = (reasoning: string): void => {
+    setPromoting(true)
+    void window.agentinator?.planner
+      .promote(pipelineId, reasoning)
+      .catch(() => false)
+      .then((promoted) => {
+        setPromoting(false)
+        if (promoted === true) {
+          // The pipeline is gone and the DAG changed — show the canvas.
+          clear()
+        }
+      })
+  }
   const stageSessions = (pipeline?.stages ?? [])
     .map((stage) => stage.sessionId)
     .filter((sessionId): sessionId is string => sessionId !== undefined)
@@ -143,6 +163,18 @@ export function ReviewWorkbench({ pipelineId }: { pipelineId: string }): React.J
               >
                 ▤
               </button>
+              {promotable && (reports.get(stage.sessionId)?.reasoning ?? '') !== '' && (
+                <button
+                  type="button"
+                  className="plan-form-send review-promote"
+                  disabled={promoting}
+                  aria-label={`Promote ${stage.name} output to plan tasks`}
+                  title="Turn this stage's written plan into DAG tasks, in the pipelined task's place"
+                  onClick={() => promoteFrom(reports.get(stage.sessionId)?.reasoning as string)}
+                >
+                  {promoting ? 'Promoting…' : 'Promote to plan tasks'}
+                </button>
+              )}
             </header>
             {reports.get(stage.sessionId) !== undefined && (
               <div className="review-reasoning">

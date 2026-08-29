@@ -237,6 +237,11 @@ export interface AgentinatorBridge {
      * dependents wait on the sub-graph's leaves. Resolves false when refused
      * (unknown/launched task, or nothing usable came back). */
     expand(planId: string, taskId: string): Promise<boolean>
+    /** Promote a stage's written plan into the DAG: `text` is decomposed and
+     * spliced IN PLACE of the plan task this pipeline runs, and the
+     * superseded pipeline is cleared. Resolves false when refused (the
+     * pipeline wasn't launched from a plan task, or the task completed). */
+    promote(pipelineId: string, text: string): Promise<boolean>
   }
   /** Snapshot and rewind an isolated agent's worktree. */
   checkpoints: {

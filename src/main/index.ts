@@ -270,6 +270,7 @@ export function registerPlannerIpc(
   plans: PlanOrchestrator,
   decompose: PlanDecomposer,
   types: () => AgentType[],
+  removePipeline: (pipelineId: string) => void,
   handle: (channel: string, listener: IpcHandler) => void = (channel, listener) => {
     ipcMain.handle(channel, listener)
   },
@@ -302,6 +303,16 @@ export function registerPlannerIpc(
     }
     const sub = await decompose(brief, types())
     return plans.expand(planId as string, taskId as string, sub)
+  })
+  handle('planner:promote', async (_event, pipelineId, text) => {
+    // A stage's written plan becomes DAG tasks in the pipelined task's place;
+    // the superseded pipeline leaves the rail.
+    const sub = await decompose(text as string, types())
+    const promoted = plans.promote(pipelineId as string, sub)
+    if (promoted) {
+      removePipeline(pipelineId as string)
+    }
+    return promoted
   })
   handle('planner:add-edge', (_event, planId, taskId, dependsOnTaskId) =>
     plans.addEdge(planId as string, taskId as string, dependsOnTaskId as string),
@@ -872,6 +883,7 @@ export async function bootstrap(
     plans,
     env['AGENTINATOR_MOCK_TASKS'] === '1' ? scriptedDecomposer : decomposePlanWith(claudeQuery),
     settings.agentTypes.bind(settings),
+    (pipelineId) => pipelines.remove(pipelineId),
   )
   const checkpoints = new NodeCheckpoints(runGitSync)
   const emitCheckpoint = makeEmitStored(store, sink)

@@ -691,3 +691,28 @@ test('expanding a task splices its sub-plan into place on the canvas', async () 
     await app.close()
   }
 })
+
+test('promoting a stage’s plan replaces the pipelined task with its sub-plan', async () => {
+  const { app, page } = await launchApp()
+  try {
+    const planner = page.getByRole('region', { name: 'Planner' })
+    await planner.getByRole('textbox', { name: 'Requirement to plan' }).fill('Promote me')
+    await planner.getByRole('button', { name: 'Plan' }).click()
+
+    // Run Scaffold as a pipeline, open its workbench, and promote the Plan
+    // stage's written output instead of continuing.
+    const canvas = page.getByRole('region', { name: 'Plan canvas' })
+    await canvas.getByRole('button', { name: 'Pipeline Scaffold' }).click()
+    const pipelines = page.getByRole('region', { name: 'Pipelines' })
+    await pipelines.getByRole('button', { name: /Review pipeline Set up the groundwork/ }).click()
+    await page.getByRole('button', { name: 'Promote Plan output to plan tasks' }).click()
+
+    // Back on the canvas: Scaffold is gone, its scripted sub-chain stands in
+    // its place, and the superseded pipeline left the rail.
+    await expect(canvas.getByRole('button', { name: 'Trace Implement' })).toHaveCount(2)
+    await expect(canvas.getByRole('button', { name: 'Trace Verify' })).toHaveCount(2)
+    await expect(pipelines.getByText(/No pipelines yet/)).toBeVisible()
+  } finally {
+    await app.close()
+  }
+})

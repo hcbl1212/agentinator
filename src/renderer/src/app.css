@@ -1949,6 +1949,11 @@ button.plan-task:focus-visible {
   margin-left: auto;
 }
 
+/* Prose → DAG: docked at the stage header's far edge. */
+.review-promote {
+  margin-left: auto;
+}
+
 .review-actions {
   border-top: 1px solid var(--line);
   padding-top: 0.5rem;

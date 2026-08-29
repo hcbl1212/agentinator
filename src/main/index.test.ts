@@ -1018,6 +1018,8 @@ describe('registerPlannerIpc', () => {
     const retype = vi.fn(() => true)
     const reprompt = vi.fn(() => true)
     const expand = vi.fn(() => true)
+    const promote = vi.fn((pipelineId: string) => pipelineId !== 'pipeline_stray')
+    const removePipeline = vi.fn()
     const taskBrief = vi.fn((_planId: string, taskId: string) =>
       taskId === 'task_launched' ? null : 'the brief',
     )
@@ -1036,10 +1038,12 @@ describe('registerPlannerIpc', () => {
         retype,
         reprompt,
         expand,
+        promote,
         taskBrief,
       } as unknown as PlanOrchestrator,
       decompose,
       () => savedTypes,
+      removePipeline,
       (channel, listener) => handlers.set(channel, listener),
     )
 
@@ -1093,10 +1097,31 @@ describe('registerPlannerIpc', () => {
       handlers.get('planner:expand')?.(undefined, 'plan_7', 'task_launched'),
     ).resolves.toBe(false)
     expect(decompose).not.toHaveBeenCalled()
+
+    // Promote: the stage's document is decomposed and spliced; only a
+    // successful promotion retires the superseded pipeline.
+    await expect(
+      handlers.get('planner:promote')?.(undefined, 'pipeline_1', 'the written plan'),
+    ).resolves.toBe(true)
+    expect(decompose).toHaveBeenLastCalledWith('the written plan', savedTypes)
+    expect(promote).toHaveBeenCalledWith('pipeline_1', [
+      { title: 'A', prompt: 'do a', dependsOn: [] },
+    ])
+    expect(removePipeline).toHaveBeenCalledWith('pipeline_1')
+    removePipeline.mockClear()
+    await expect(
+      handlers.get('planner:promote')?.(undefined, 'pipeline_stray', 'orphan doc'),
+    ).resolves.toBe(false)
+    expect(removePipeline).not.toHaveBeenCalled()
   })
 
   it('registers on ipcMain by default', () => {
-    registerPlannerIpc({ create: vi.fn() } as unknown as PlanOrchestrator, vi.fn(), () => [])
+    registerPlannerIpc(
+      { create: vi.fn() } as unknown as PlanOrchestrator,
+      vi.fn(),
+      () => [],
+      vi.fn(),
+    )
 
     const channels = mockIpcMain.handle.mock.calls.map((call: string[]) => call[0])
     expect(channels).toEqual([
@@ -1107,6 +1132,7 @@ describe('registerPlannerIpc', () => {
       'planner:retype',
       'planner:reprompt',
       'planner:expand',
+      'planner:promote',
       'planner:add-edge',
       'planner:remove-edge',
     ])
@@ -1786,6 +1812,49 @@ describe('bootstrap', () => {
     )
     await vi.waitFor(() =>
       expect(store.list().filter((event) => event.type === 'plan.task.completed')).toHaveLength(2),
+    )
+    store.close()
+  })
+
+  it('promotes a pipelined task through the wired decomposer, retiring its pipeline', async () => {
+    vi.stubEnv('AGENTINATOR_MOCK_TASKS', '1')
+    const store = new EventStore(':memory:')
+
+    await bootstrap(
+      mockApp as never,
+      () => store,
+      undefined,
+      undefined,
+      undefined,
+      () => fakeSettings(),
+    )
+
+    const call = (channel: string): ((...args: unknown[]) => unknown) =>
+      mockIpcMain.handle.mock.calls.find(([c]: string[]) => c === channel)?.[1] as (
+        ...args: unknown[]
+      ) => unknown
+    const planId = (await call('planner:create')(undefined, 'Promote flow')) as string
+    const created = store.list().find((event) => event.type === 'plan.created')?.payload as {
+      tasks: { taskId: string }[]
+    }
+    const pipelineId = call('planner:dispatch-pipeline')(
+      undefined,
+      planId,
+      created.tasks[0].taskId,
+    ) as string
+
+    // Promote the (still-running) pipelined task from a stage document: the
+    // scripted decomposer splices its sub-chain in, and the superseded
+    // pipeline is cleared through the wired remove.
+    await expect(call('planner:promote')(undefined, pipelineId, 'The written plan')).resolves.toBe(
+      true,
+    )
+    expect(store.list().some((event) => event.type === 'plan.task.expanded')).toBe(true)
+    expect(store.list().some((event) => event.type === 'pipeline.removed')).toBe(true)
+
+    // Let the orphaned stage agent go idle before the store closes.
+    await vi.waitFor(() =>
+      expect(store.list().some((event) => event.type === 'session.idle')).toBe(true),
     )
     store.close()
   })

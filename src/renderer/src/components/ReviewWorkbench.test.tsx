@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentinatorBridge } from '../../../shared/bridge'
 import type { EventPayloads, EventType, StoredEvent } from '../../../shared/events'
 import { PipelineProvider } from '../state/pipelines'
+import { PlanProvider } from '../state/plans'
 import { SelectionProvider, useSelection } from '../state/selection'
 import { finalText, ReviewWorkbench } from './ReviewWorkbench'
 
@@ -42,7 +43,9 @@ const GATED: StoredEvent[] = [
 function stub(backfill: StoredEvent[] = FINISHED): {
   bridge: AgentinatorBridge
   emit: (event: StoredEvent) => void
+  promote: ReturnType<typeof vi.fn>
 } {
+  const promote = vi.fn(() => Promise.resolve(true))
   let appended: (event: StoredEvent) => void = () => undefined
   const bySession = new Map<string, StoredEvent[]>([
     [
@@ -63,6 +66,7 @@ function stub(backfill: StoredEvent[] = FINISHED): {
   ])
   return {
     emit: (e) => appended(e),
+    promote,
     bridge: {
       events: {
         tail: vi.fn(() => Promise.resolve(backfill)),
@@ -78,6 +82,7 @@ function stub(backfill: StoredEvent[] = FINISHED): {
         revise: vi.fn(() => Promise.resolve()),
         approve: vi.fn(() => Promise.resolve()),
       },
+      planner: { promote },
     } as unknown as AgentinatorBridge,
   }
 }
@@ -92,8 +97,10 @@ function renderBench(pipelineId = 'pl1'): void {
   render(
     <SelectionProvider>
       <PipelineProvider>
-        <Probe />
-        <ReviewWorkbench pipelineId={pipelineId} />
+        <PlanProvider>
+          <Probe />
+          <ReviewWorkbench pipelineId={pipelineId} />
+        </PlanProvider>
       </PipelineProvider>
     </SelectionProvider>,
   )
@@ -211,12 +218,80 @@ describe('ReviewWorkbench', () => {
     const { unmount } = render(
       <SelectionProvider>
         <PipelineProvider>
-          <ReviewWorkbench pipelineId="pl1" />
+          <PlanProvider>
+            <ReviewWorkbench pipelineId="pl1" />
+          </PlanProvider>
         </PipelineProvider>
       </SelectionProvider>,
     )
     unmount()
     await new Promise((resolve) => setTimeout(resolve))
+  })
+
+  it('promotes a stage’s written plan into the pipelined task’s place', async () => {
+    // The pipeline was launched from plan task tt — promotion applies.
+    const s = stub([
+      ...FINISHED,
+      event('plan.created', {
+        planId: 'plx',
+        title: 'Parent plan',
+        requirement: 'r',
+        tasks: [{ taskId: 'tt', title: 'Big task', prompt: 'big', dependsOn: [] }],
+      }),
+      event('plan.task.pipelined', { planId: 'plx', taskId: 'tt', pipelineId: 'pl1' }),
+    ])
+    window.agentinator = s.bridge
+    renderBench()
+    await screen.findByText(/The plan:/)
+
+    // Only stages with written output offer promotion (Implement wrote none).
+    expect(
+      screen.queryByRole('button', { name: 'Promote Implement output to plan tasks' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Promote Plan output to plan tasks' }))
+    expect(s.promote).toHaveBeenCalledWith('pl1', 'The plan:\n1. schema')
+
+    // Success clears the selection — the canvas shows the new sub-graph.
+    await screen.findByText(/The plan:/) // still mounted until state settles
+    expect(selection).toBeNull()
+  })
+
+  it('keeps the workbench up when promotion is refused or fails', async () => {
+    const s = stub([
+      ...FINISHED,
+      event('plan.created', {
+        planId: 'plx',
+        title: 'Parent plan',
+        requirement: 'r',
+        tasks: [{ taskId: 'tt', title: 'Big task', prompt: 'big', dependsOn: [] }],
+      }),
+      event('plan.task.pipelined', { planId: 'plx', taskId: 'tt', pipelineId: 'pl1' }),
+    ])
+    s.promote.mockReturnValueOnce(Promise.resolve(false))
+    window.agentinator = s.bridge
+    renderBench()
+    await screen.findByText(/The plan:/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Promote Plan output to plan tasks' }))
+    await screen.findByRole('button', { name: 'Promote Plan output to plan tasks' })
+
+    // Refused: nothing cleared, the button is usable again — and a rejecting
+    // bridge behaves the same way.
+    const failure = Promise.reject(new Error('provider down'))
+    failure.catch(() => undefined)
+    s.promote.mockReturnValueOnce(failure)
+    fireEvent.click(screen.getByRole('button', { name: 'Promote Plan output to plan tasks' }))
+    await screen.findByRole('button', { name: 'Promote Plan output to plan tasks' })
+    expect(screen.getByRole('button', { name: 'Promote Plan output to plan tasks' })).toBeEnabled()
+  })
+
+  it('offers no promotion on a pipeline no plan task launched', async () => {
+    const s = stub()
+    window.agentinator = s.bridge
+    renderBench()
+    await screen.findByText(/The plan:/)
+
+    expect(screen.queryByRole('button', { name: /Promote/ })).not.toBeInTheDocument()
   })
 
   it('jumps to a stage transcript, and close clears the selection', async () => {

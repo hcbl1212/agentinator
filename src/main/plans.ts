@@ -250,6 +250,48 @@ export class PlanOrchestrator {
     if (this.#dispatched.has(`${planId}:${taskId}`)) {
       return false
     }
+    this.#applyExpansion(planId, plan, task, decomposed)
+    return true
+  }
+
+  /** Promote a pipelined task's written plan into the DAG: the decomposition
+   * replaces the task IN PLACE (same splice as {@link expand}) and the task's
+   * pipeline is unlinked — the caller retires the pipeline itself. This is
+   * how a Plan stage's document stops being prose: reviewed at the gate,
+   * promoted instead of continued. Refused (false) when the pipeline wasn't
+   * launched from a plan task, the task already completed, or the
+   * decomposition is empty. */
+  promote(pipelineId: string, decomposed: DecomposedTask[]): boolean {
+    const key = this.#byPipeline.get(pipelineId)
+    if (key === undefined || decomposed.length === 0) {
+      return false
+    }
+    const [planId, taskId] = key.split(':')
+    // A live mapping implies an unresolved task (completion/failure drops it),
+    // but the plan itself may have been cleared with the link left behind.
+    const plan = this.#plans.get(planId)
+    const task = plan?.tasks.find((candidate) => candidate.taskId === taskId)
+    if (plan === undefined || task === undefined) {
+      return false
+    }
+    // The sub-plan supersedes the running task: unlink its pipeline so a
+    // late pipeline event resolves nothing, and free the launch guard.
+    this.#byPipeline.delete(pipelineId)
+    this.#dispatched.delete(key)
+    this.#applyExpansion(planId, plan, task, decomposed)
+    return true
+  }
+
+  /** Mint ids for a decomposition, splice it in at the task's position, and
+   * record it. Roots of the sub-graph stand where the parent stood — they
+   * inherit its dependencies (and its role, unless a sub-task names one);
+   * deeper sub-tasks reach them transitively. */
+  #applyExpansion(
+    planId: string,
+    plan: PlanState,
+    task: PlanTaskSpec,
+    decomposed: DecomposedTask[],
+  ): void {
     const ids = decomposed.map(() => createEntityId('task'))
     const expansion: PlanTaskSpec[] = decomposed.map((sub, index) => {
       const internal = sub.dependsOn.map((dep) => ids[dep])
@@ -258,15 +300,12 @@ export class PlanOrchestrator {
         taskId: ids[index],
         title: sub.title,
         prompt: sub.prompt,
-        // Roots of the sub-graph stand where the parent stood — they inherit
-        // its dependencies; deeper sub-tasks reach them transitively.
         dependsOn: internal.length === 0 ? [...task.dependsOn] : internal,
         ...(agentTypeId === undefined ? {} : { agentTypeId }),
       }
     })
-    plan.tasks = spliceExpansion(plan.tasks, taskId, expansion)
-    this.#emit('plan.task.expanded', { planId, taskId, tasks: expansion })
-    return true
+    plan.tasks = spliceExpansion(plan.tasks, task.taskId, expansion)
+    this.#emit('plan.task.expanded', { planId, taskId: task.taskId, tasks: expansion })
   }
 
   /** Rewrite a task's brief — the prompt its agent will run with. Refused
@@ -363,6 +402,10 @@ export class PlanOrchestrator {
         if (plan !== undefined) {
           plan.tasks = spliceExpansion(plan.tasks, taskId, tasks)
         }
+        // A promoted task was replaced mid-flight: its launch guard and any
+        // pipeline link die with it, so late pipeline events resolve nothing.
+        this.#dispatched.delete(`${planId}:${taskId}`)
+        this.#dropPipelineFor(`${planId}:${taskId}`)
       } else if (event.type === 'plan.task.dispatched') {
         const { planId, taskId } = event.payload as EventPayloads['plan.task.dispatched']
         this.#dispatched.add(`${planId}:${taskId}`)
