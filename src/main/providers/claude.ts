@@ -585,7 +585,10 @@ export function createClaudeProvider(
         cancel: async () => {
           input.end()
           if (typeof stream.interrupt === 'function') {
-            await stream.interrupt()
+            // The SDK subprocess may already be gone (the turn finished and
+            // the query wound down) — interrupting a terminated process
+            // rejects, and there is nothing left to interrupt anyway.
+            await stream.interrupt().catch(() => undefined)
           }
           endOnce('cancelled')
         },

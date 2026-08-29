@@ -475,6 +475,30 @@ describe('SessionManager', () => {
     store.close()
   })
 
+  it('retires cleanly even when the provider cancel rejects (dead SDK process)', async () => {
+    const store = new EventStore()
+    const provider = instantProvider('claude')
+    const base = provider.startSession.bind(provider)
+    provider.startSession = (context, emit) => {
+      const handle = base(context, emit)
+      return {
+        ...handle,
+        cancel: () => Promise.reject(new Error('Cannot write to terminated process')),
+      }
+    }
+    const manager = new SessionManager(store, () => undefined, {})
+    manager.register(provider)
+    const id = manager.start({ providerId: 'claude', title: 'T', prompt: 'P', cwd: '/repo' })
+
+    await expect(manager.retire(id)).resolves.toBeUndefined()
+
+    // The rejection is swallowed and the clean completion still lands.
+    const ended = store.listBySession(id).filter((e) => e.type === 'session.ended')
+    expect(ended).toHaveLength(1)
+    expect(ended[0].payload).toMatchObject({ outcome: 'completed' })
+    store.close()
+  })
+
   it('retiring a session with no live handle is a no-op', async () => {
     const store = new EventStore()
     const manager = new SessionManager(store)

@@ -710,6 +710,24 @@ describe('createClaudeProvider', () => {
       expect(events.at(-1)?.type).toBe('session.ended')
     })
   })
+
+  it('cancel survives an interrupt whose SDK process already terminated', async () => {
+    // Retiring a finished pipeline stage interrupts a query whose subprocess
+    // is gone — the SDK rejects ("Cannot write to terminated process"); cancel
+    // must swallow that, not surface an unhandled rejection.
+    const interrupt = vi.fn(() => Promise.reject(new Error('Cannot write to terminated process')))
+    const query: ClaudeQuery = () => streamOf([successResult], interrupt)
+    const provider = createClaudeProvider(query)
+    const events: Recorded[] = []
+
+    const handle = provider.startSession(context, (type, payload) => events.push({ type, payload }))
+    await expect(handle.cancel()).resolves.toBeUndefined()
+
+    expect(interrupt).toHaveBeenCalledOnce()
+    await vi.waitFor(() => {
+      expect(events.at(-1)?.type).toBe('session.ended')
+    })
+  })
 })
 
 describe('createClaudeProvider — parity contract', () => {

@@ -427,7 +427,12 @@ export class SessionManager {
       return
     }
     this.#retiring.add(sessionId)
-    await handle.cancel()
+    try {
+      await handle.cancel()
+    } catch {
+      // A provider whose process already died can't be cancelled — the agent
+      // is done either way, so retire must still record that.
+    }
     this.#retiring.delete(sessionId)
     this.#emit(this.#store.append('session.ended', { sessionId, outcome: 'completed' }))
   }
